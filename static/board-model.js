@@ -99,6 +99,7 @@ function arrowHead(pts, r, roughness) {
 
 // atributos "d" do traço; duas passadas quando há desleixo (efeito de esboço)
 export function elementPaths(el) {
+  if (el.type === 'text') return [];  // texto é desenhado como <text>
   if (el.type === 'freedraw') return [freedrawPath(el)];
   const passes = el.roughness ? 2 : 1, out = [];
   const abs = el.points?.map(([x, y]) => [el.x + x, el.y + y]);
@@ -187,8 +188,15 @@ export function resizeElement(el, handle, [px, py], start) {
   if (handle.includes('e')) x2 = px;
   if (handle.includes('n')) y1 = py;
   if (handle.includes('s')) y2 = py;
+  const nb = { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) };
+  if (start.type === 'text') {
+    // texto cresce/encolhe por inteiro: a fonte acompanha a altura
+    const scale = sb.h ? Math.max(0.1, nb.h / sb.h) : 1;
+    Object.assign(el, { x: nb.x, y: nb.y, w: f(start.w * scale), h: nb.h, fontSize: Math.max(4, Math.round(start.fontSize * scale)) });
+    return el;
+  }
   if (!start.points) {
-    Object.assign(el, { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) });
+    Object.assign(el, nb);
     return el;
   }
   // linhas e traços: escala (com sinal, para espelhar ao passar do lado oposto) os pontos
@@ -208,3 +216,10 @@ export const sendToBack = (elements, ids) =>
 // cópias deslocadas, com ids novos (mesma semente: a cópia tem o mesmo traço)
 export const duplicateElements = (elements, ids, offset = 10) =>
   elements.filter(el => ids.includes(el.id)).map(el => ({ ...structuredClone(el), id: uid(), x: el.x + offset, y: el.y + offset }));
+
+// borracha: o que o trecho do ponteiro de a até b atravessa (amostras a cada 2 px)
+export function elementsHitBy(elements, [ax, ay], [bx, by], tol = 4) {
+  const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 2));
+  const samples = Array.from({ length: n + 1 }, (_, i) => [ax + (bx - ax) * i / n, ay + (by - ay) * i / n]);
+  return elements.filter(el => samples.some(p => hitTest(el, p, tol))).map(el => el.id);
+}

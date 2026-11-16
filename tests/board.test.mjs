@@ -115,3 +115,24 @@ test('layer order and duplicate', () => {
   assert.notEqual(copies[0].id, b.id);
   assert.deepEqual([copies[0].x, copies[0].y, copies[0].type], [b.x + 10, b.y + 10, 'ellipse']);
 });
+
+// ---- Entrega 4: texto e borracha ----
+import { elementsHitBy } from '../static/board-model.js';
+
+test('text elements: no stroke paths, hit by their box, resize scales the font', () => {
+  const t = { ...createElement('text', [10, 10], { text: 'Olá', fontSize: 20 }), w: 40, h: 25 };
+  assert.deepEqual(elementPaths(t), []);
+  assert.equal(hitTest(t, [30, 20], 0), true);
+  assert.equal(hitTest(t, [80, 20], 0), false);
+  const start = structuredClone(t);
+  resizeElement(t, 'se', [90, 60], start);
+  assert.deepEqual([t.x, t.y, t.w, t.h, t.fontSize], [10, 10, 80, 50, 40], 'escala proporcional pela altura');
+});
+
+test('elementsHitBy finds what an eraser stroke crosses', () => {
+  const ln = createElement('line', [0, 50]); resizeTo(ln, [100, 50]);
+  const r = { ...createElement('rectangle', [200, 0]), w: 50, h: 50 };
+  assert.deepEqual(elementsHitBy([ln, r], [50, 0], [50, 100], 4), [ln.id], 'cruza a linha');
+  assert.deepEqual(elementsHitBy([ln, r], [150, 0], [150, 100], 4), [], 'não toca em nada');
+  assert.deepEqual(elementsHitBy([ln, r], [190, 25], [260, 25], 4), [r.id], 'cruza a borda do retângulo');
+});

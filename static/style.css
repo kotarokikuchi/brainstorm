@@ -1,3 +1,11 @@
+/* Fonte manuscrita da lousa: Kalam (SIL OFL 1.1, licença em fonts/LICENSE-kalam.txt) */
+@font-face { font-family: "Kalam"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url(fonts/kalam-latin-400-normal.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Kalam"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url(fonts/kalam-latin-ext-400-normal.woff2) format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+
 :root {
   --bg: #f6f5fb;
   --ink: #1d1d2b;
@@ -24,7 +32,8 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 
 body:not([data-view="editor"]) #editor-view, body:not([data-view="list"]) #list-view, body:not([data-view="board"]) #board-view { display: none; }
 /* no quadro, os controles do mapa mental não se aplicam */
-body[data-view="board"] #present-btn, body[data-view="board"] #history-btn, body[data-view="board"] #export-btn,
+body[data-view="board"] #present-btn, body[data-view="board"] #history-btn,
+body[data-view="board"] #export-menu [data-export="md"], body[data-view="board"] #export-menu [data-export="pdf"],
 body[data-view="board"] #undo, body[data-view="board"] #redo { display: none; }
 body[data-view="list"] #title, body[data-view="list"] #status, body[data-view="list"] .history-btns, body[data-view="list"] #map-menu-btn { display: none; }
 
@@ -279,3 +288,13 @@ body[data-view="board"] #title { cursor: text; }
 .handle[data-handle="n"], .handle[data-handle="s"] { cursor: ns-resize; }
 .handle[data-handle="e"], .handle[data-handle="w"] { cursor: ew-resize; }
 .marquee { fill: #6965db14; stroke: #6965db; pointer-events: none; }
+
+#board-text { position: absolute; margin: 0; padding: 0; border: none; outline: 1px dashed #6965db; background: transparent; resize: none; overflow: hidden; line-height: 1.25; white-space: pre; }
+#board-text[hidden], #board-help[hidden], #board-font-row[hidden] { display: none; }
+#canvas.erasing, #board-canvas[data-tool="eraser"] { cursor: cell; }
+#board-canvas[data-tool="text"] { cursor: text; }
+.el.erasing { opacity: .25; }
+#board-help { left: 50%; top: 50%; transform: translate(-50%, -50%); flex-direction: column; align-items: stretch; padding: 16px 20px; width: 420px; z-index: 5; }
+#board-help dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 12px 0 0; font-size: 14px; }
+#board-help dt { font-weight: 600; white-space: nowrap; }
+#board-help dd { margin: 0; color: var(--muted); }

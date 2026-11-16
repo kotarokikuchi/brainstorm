@@ -2,7 +2,7 @@ import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
   History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, toMarkdown, slides, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
 } from './model.js';
-import { initBoard, openBoard, closeBoard, currentBoard, newBoard } from './board.js';
+import { initBoard, openBoard, closeBoard, currentBoard, newBoard, boardSvg } from './board.js';
 
 const $ = (s) => document.querySelector(s);
 const SVG = 'http://www.w3.org/2000/svg';
@@ -1634,7 +1634,7 @@ $('#outline-btn').onclick = () => setOutline(!outlineOn);
 
 // ---------- Exportar: PNG, PDF (impressão) e Markdown ----------
 const exportMenu = $('#export-menu');
-const fileBase = () => (map.root.text.replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'mapa').slice(0, 60);
+const fileBase = () => ((map ? map.root.text : currentBoard().title).replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'mapa').slice(0, 60);
 
 function download(blob, name) {
   const a = document.createElement('a');
@@ -1676,7 +1676,8 @@ async function standaloneSvg() {
 }
 
 async function exportPng() {
-  const { xml, w, h } = await standaloneSvg(), scale = 2;
+  const board = currentBoard();
+  const { xml, w, h } = board ? await boardSvg() : await standaloneSvg(), scale = 2;
   const img = new Image();
   img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
   await img.decode();
@@ -1684,7 +1685,7 @@ async function exportPng() {
   c.width = Math.ceil(w * scale);
   c.height = Math.ceil(h * scale);
   const g = c.getContext('2d');
-  g.fillStyle = '#f6f5fb';
+  g.fillStyle = board ? '#ffffff' : '#f6f5fb';
   g.fillRect(0, 0, c.width, c.height);
   g.drawImage(img, 0, 0, c.width, c.height);
   download(await new Promise((r) => c.toBlob(r, 'image/png')), `${fileBase()}.png`);
@@ -1692,6 +1693,10 @@ async function exportPng() {
 
 const EXPORTS = {
   png: exportPng,
+  svg: async () => {
+    const { xml } = currentBoard() ? await boardSvg() : await standaloneSvg();
+    download(new Blob([xml], { type: 'image/svg+xml' }), `${fileBase()}.svg`);
+  },
   md: () => download(new Blob([toMarkdown(map)], { type: 'text/markdown' }), `${fileBase()}.md`),
   pdf: () => {
     if (outlineOn) setOutline(false);

@@ -941,6 +941,61 @@ assert.equal(await selCount(), 6, 'Ctrl+A seleciona tudo');
 await key('Escape');
 assert.equal(await selCount(), 0, 'Esc solta a seleção');
 
+// lousa: texto, borracha, exportar SVG/PNG, atalhos
+const dbl = async (x, y) => { for (const clickCount of [1, 2]) { await cmd('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount }); await cmd('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount }); } };
+const nEls = (await boardEls()).length;
+await key('8');
+await click(cv.x + 900, cv.y + 300);
+assert.equal(await ev(`!document.querySelector('#board-text').hidden`), true, 'tecla 8 + clique abre o texto');
+assert.equal(await ev(`document.activeElement?.id`), 'board-text');
+await typeText('Olá quadro');
+await key('Escape');
+await sleep(900);
+let txEl = (await boardEls()).at(-1);
+assert.deepEqual([txEl.type, txEl.text], ['text', 'Olá quadro'], 'texto criado');
+assert.ok(txEl.w > 20 && txEl.h > 10, 'texto medido');
+assert.equal(await ev(`[...document.querySelectorAll('#board-root text')].some(t => t.textContent === 'Olá quadro')`), true, 'texto desenhado');
+const tb = await elBox(txEl.id);
+await dbl(tb.x + tb.w / 2, tb.y + tb.h / 2);
+assert.equal(await ev(`document.querySelector('#board-text').value`), 'Olá quadro', 'duplo clique edita');
+await ev(`document.querySelector('#board-text').setSelectionRange(99, 99)`);
+await typeText('!');
+await key('Escape');
+await sleep(900);
+assert.equal((await boardEls()).at(-1).text, 'Olá quadro!', 'edição salva');
+await dbl(cv.x + 1000, cv.y + 500);  // vazio: novo texto
+assert.equal(await ev(`!document.querySelector('#board-text').hidden`), true);
+await key('Escape');  // vazio: descarta
+await sleep(500);
+assert.equal((await boardEls()).length, nEls + 1, 'texto vazio não é criado');
+const lineId = (await boardEls()).find(e => e.type === 'line').id;
+await key('e');
+const lb = await elBox(lineId);
+await dragScreen(lb.x + lb.w / 2, lb.y - 25, lb.x + lb.w / 2, lb.y + lb.h + 25);  // atravessa a linha  // atravessa a linha horizontal em y = 330
+await sleep(900);
+assert.ok(!(await boardEls()).some(e => e.id === lineId), 'borracha apaga o que atravessa');
+assert.equal((await boardEls()).length, nEls, 'só a linha saiu');
+await ev(`(() => { window.__downloads = []; HTMLAnchorElement.prototype.click = function () { if (this.download) window.__downloads.push([this.download, this.href]); }; })()`);
+await ev(`document.querySelector('#export-btn').click()`);
+assert.equal(await ev(`getComputedStyle(document.querySelector('#export-menu [data-export="md"]')).display`), 'none', 'quadro não exporta Markdown');
+await ev(`document.querySelector('#export-menu [data-export="svg"]').click()`);
+await sleep(800);
+let bdl = await ev(`window.__downloads.at(-1)`);
+assert.match(bdl[0], /\.svg$/);
+const svgText = await ev(`fetch('${bdl[1]}').then(r => r.text())`);
+assert.match(svgText, /^<svg/, 'SVG válido');
+assert.ok(svgText.includes('Olá quadro!') && !svgText.includes('sel-item'), 'SVG com o texto e sem a seleção');
+await ev(`document.querySelector('#export-btn').click()`);
+await ev(`document.querySelector('#export-menu [data-export="png"]').click()`);
+await sleep(2000);
+bdl = await ev(`window.__downloads.at(-1)`);
+assert.match(bdl[0], /\.png$/);
+assert.deepEqual(await ev(`fetch('${bdl[1]}').then(r => r.arrayBuffer()).then(b => [...new Uint8Array(b.slice(0, 4))])`), [137, 80, 78, 71], 'PNG do quadro');
+await key('?');
+assert.equal(await ev(`!document.querySelector('#board-help').hidden`), true, '? mostra os atalhos');
+await key('Escape');
+assert.equal(await ev(`document.querySelector('#board-help').hidden`), true);
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);
