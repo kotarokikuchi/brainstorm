@@ -202,6 +202,44 @@ class ApiTest(unittest.TestCase):
         self.req("DELETE", "/api/maps/abc")
         self.assertFalse((self.data / "history" / "abc").exists())
 
+    def test_delete_goes_to_trash_and_restores_everything(self):
+        self.make_map()
+        _, info = self.upload("abc", "foto.png", b"x")
+        self.assertEqual(self.req("DELETE", "/api/maps/abc")[0], 204)
+        self.assertEqual(self.req("GET", "/api/maps/abc")[0], 404)
+        status, trash = self.req("GET", "/api/trash")
+        self.assertEqual(status, 200)
+        self.assertEqual([(t["id"], t["title"]) for t in trash], [("abc", "a")])
+        self.assertIn("deleted", trash[0])
+        self.assertEqual(self.req("POST", "/api/trash/abc/restore", raw=b""), (200, {"id": "abc"}))
+        self.assertEqual(self.req("GET", "/api/maps/abc")[0], 200)
+        self.assertEqual(self.raw_get(f"/api/maps/abc/files/{info['id']}")[0], 200, "arquivos voltam junto")
+        self.assertEqual(self.req("GET", "/api/trash")[1], [])
+
+    def test_restore_conflict_and_permanent_delete(self):
+        self.make_map()
+        self.req("DELETE", "/api/maps/abc")
+        self.make_map()  # outro mapa com o mesmo id
+        self.assertEqual(self.req("POST", "/api/trash/abc/restore", raw=b"")[0], 409)
+        self.assertEqual(self.req("DELETE", "/api/trash/abc")[0], 204)
+        self.assertEqual(self.req("GET", "/api/trash")[1], [])
+        self.assertFalse((self.data / "trash" / "abc").exists())
+        self.assertEqual(self.req("DELETE", "/api/trash/abc")[0], 404)
+        self.assertEqual(self.req("DELETE", "/api/trash/..%2Fx")[0], 400)
+
+    def test_duplicate_copies_map_and_files(self):
+        self.make_map()
+        _, info = self.upload("abc", "foto.png", b"x")
+        status, body = self.req("POST", "/api/maps/abc/duplicate", raw=b"")
+        self.assertEqual(status, 201)
+        new = body["id"]
+        self.assertRegex(new, r"^[a-z0-9-]{1,64}$")
+        self.assertNotEqual(new, "abc")
+        status, m = self.req("GET", f"/api/maps/{new}")
+        self.assertEqual((status, m["root"]["text"], m["version"], m["id"]), (200, "a (cópia)", 1, new))
+        self.assertEqual(self.raw_get(f"/api/maps/{new}/files/{info['id']}")[0], 200, "arquivos copiados")
+        self.assertEqual(self.req("POST", "/api/maps/zzz/duplicate", raw=b"")[0], 404)
+
     def test_deleting_map_removes_its_files(self):
         self.req("PUT", "/api/maps/abc", {"version": 0, "root": {"text": "a", "children": []}})
         _, info = self.upload("abc", "foto.png", b"x")

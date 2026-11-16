@@ -36,6 +36,7 @@
   <header class="topbar">
     <a href="#/" class="brand"><span class="logo"></span>Galho</a>
     <span id="title"></span>
+    <button id="map-menu-btn" class="icon" title="Opções do mapa"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
     <span id="status"></span>
     <span class="history-btns">
       <button id="undo" class="icon" title="Desfazer (Ctrl+Z)"><svg viewBox="0 0 24 24"><use href="#i-arrow-back-up"/></svg></button>
@@ -49,6 +50,11 @@
     <p class="muted">Uma cópia a cada 2 min de edição · últimas 50</p>
     <ul id="history-list"></ul>
   </aside>
+  <div id="map-menu" class="card menu" hidden>
+    <button data-map-action="duplicate">Duplicar mapa</button>
+    <hr>
+    <button data-map-action="trash" class="danger">Mover para a lixeira</button>
+  </div>
   <div id="export-menu" class="card menu" hidden>
     <button data-export="png">Imagem (PNG)</button>
     <button data-export="pdf">PDF (imprimir / salvar)</button>
@@ -62,6 +68,10 @@
     </div>
     <ul id="maps"></ul>
     <p id="empty" hidden>Nenhum mapa ainda. Crie o primeiro.</p>
+    <details id="trash" hidden>
+      <summary>Lixeira</summary>
+      <ul id="trash-list"></ul>
+    </details>
   </main>
 
   <section id="editor-view">
