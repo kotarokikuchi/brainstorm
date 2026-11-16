@@ -298,3 +298,8 @@ body[data-view="board"] #title { cursor: text; }
 #board-help dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 12px 0 0; font-size: 14px; }
 #board-help dt { font-weight: 600; white-space: nowrap; }
 #board-help dd { margin: 0; color: var(--muted); }
+
+/* letra do atalho no canto do botão da ferramenta */
+#board-tools button[data-key] { position: relative; }
+#board-tools button[data-key]::after { content: attr(data-key); position: absolute; right: 3px; bottom: 1px; font: 600 9px var(--font); color: #9a98ab; pointer-events: none; }
+#board-tools button.active[data-key]::after { color: #4338ca; }

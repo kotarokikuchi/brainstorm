@@ -275,18 +275,18 @@
   <section id="board-view">
     <svg id="board-canvas"><g id="board-root"></g></svg>
     <div id="board-tools" class="card">
-      <button data-tool="hand" class="icon" title="Mover a tela (H ou Espaço)"><svg viewBox="0 0 24 24"><use href="#i-hand-stop"/></svg></button>
-      <button data-tool="select" class="icon" title="Selecionar (V ou 1)"><svg viewBox="0 0 24 24"><use href="#i-pointer"/></svg></button>
+      <button data-tool="hand" data-key="H" class="icon" title="Mover a tela (H ou Espaço)"><svg viewBox="0 0 24 24"><use href="#i-hand-stop"/></svg></button>
+      <button data-tool="select" data-key="V" class="icon" title="Selecionar (V ou 1)"><svg viewBox="0 0 24 24"><use href="#i-pointer"/></svg></button>
       <span class="sep"></span>
-      <button data-tool="rectangle" class="icon" title="Retângulo (R ou 2)"><svg viewBox="0 0 24 24"><use href="#i-square"/></svg></button>
-      <button data-tool="diamond" class="icon" title="Losango (D ou 3)"><svg viewBox="0 0 24 24"><use href="#i-square-rotated"/></svg></button>
-      <button data-tool="ellipse" class="icon" title="Elipse (O ou 4)"><svg viewBox="0 0 24 24"><use href="#i-circle"/></svg></button>
-      <button data-tool="arrow" class="icon" title="Seta (A ou 5)"><svg viewBox="0 0 24 24"><use href="#i-arrow-narrow-right"/></svg></button>
-      <button data-tool="line" class="icon" title="Linha (L ou 6)"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
-      <button data-tool="freedraw" class="icon" title="Lápis (P ou 7)"><svg viewBox="0 0 24 24"><use href="#i-pencil"/></svg></button>
-      <button data-tool="text" class="icon" title="Texto (T ou 8)"><svg viewBox="0 0 24 24"><use href="#i-letter-t"/></svg></button>
+      <button data-tool="rectangle" data-key="R" class="icon" title="Retângulo (R ou 2)"><svg viewBox="0 0 24 24"><use href="#i-square"/></svg></button>
+      <button data-tool="diamond" data-key="D" class="icon" title="Losango (D ou 3)"><svg viewBox="0 0 24 24"><use href="#i-square-rotated"/></svg></button>
+      <button data-tool="ellipse" data-key="O" class="icon" title="Elipse (O ou 4)"><svg viewBox="0 0 24 24"><use href="#i-circle"/></svg></button>
+      <button data-tool="arrow" data-key="A" class="icon" title="Seta (A ou 5)"><svg viewBox="0 0 24 24"><use href="#i-arrow-narrow-right"/></svg></button>
+      <button data-tool="line" data-key="L" class="icon" title="Linha (L ou 6)"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
+      <button data-tool="freedraw" data-key="P" class="icon" title="Lápis (P ou 7)"><svg viewBox="0 0 24 24"><use href="#i-pencil"/></svg></button>
+      <button data-tool="text" data-key="T" class="icon" title="Texto (T ou 8)"><svg viewBox="0 0 24 24"><use href="#i-letter-t"/></svg></button>
       <span class="sep"></span>
-      <button data-tool="eraser" class="icon" title="Borracha (E ou 0)"><svg viewBox="0 0 24 24"><use href="#i-eraser"/></svg></button>
+      <button data-tool="eraser" data-key="E" class="icon" title="Borracha (E ou 0)"><svg viewBox="0 0 24 24"><use href="#i-eraser"/></svg></button>
     </div>
     <div id="board-props" class="card" hidden>
       <p>Traço</p><div class="swatches" data-prop="strokeColor"></div>
