@@ -240,6 +240,22 @@ export const bringToFront = (elements, ids) =>
 export const sendToBack = (elements, ids) =>
   [...elements.filter(el => ids.includes(el.id)), ...elements.filter(el => !ids.includes(el.id))];
 
+// uma camada: cada selecionado troca de lugar com o vizinho não selecionado de cima (ou de baixo)
+export function forwardOne(elements, ids) {
+  const out = [...elements];
+  for (let i = out.length - 2; i >= 0; i--) {
+    if (ids.includes(out[i].id) && !ids.includes(out[i + 1].id)) [out[i], out[i + 1]] = [out[i + 1], out[i]];
+  }
+  return out;
+}
+export function backwardOne(elements, ids) {
+  const out = [...elements];
+  for (let i = 1; i < out.length; i++) {
+    if (ids.includes(out[i].id) && !ids.includes(out[i - 1].id)) [out[i], out[i - 1]] = [out[i - 1], out[i]];
+  }
+  return out;
+}
+
 // cópias deslocadas, com ids novos (mesma semente: a cópia tem o mesmo traço)
 export const duplicateElements = (elements, ids, offset = 10) =>
   elements.filter(el => ids.includes(el.id)).map(el => ({ ...structuredClone(el), id: uid(), x: el.x + offset, y: el.y + offset }));
