@@ -245,11 +245,12 @@ export function dropTarget(map, boxes, dragId, px, py) {
     return { parentId: root.id, index: root.children.length, side };
   }
   const hit = findNode(root, best.id);
-  const outer = map.layout === 'org' ? py > best.y + best.h * 0.75
-    : best.side === 'left' && map.layout === 'map' ? px < best.x + best.w * 0.25
+  const lay = best.kind ?? map.layout;
+  const outer = lay === 'org' ? py > best.y + best.h * 0.75
+    : best.side === 'left' && lay === 'map' ? px < best.x + best.w * 0.25
       : px > best.x + best.w * 0.75;
   if (outer) return { parentId: best.id, index: hit.node.children.length, side: null };
-  const after = map.layout === 'org' ? px > best.x + best.w / 2 : py > best.y + best.h / 2;
+  const after = lay === 'org' ? px > best.x + best.w / 2 : py > best.y + best.h / 2;
   return {
     parentId: hit.parent.id,
     index: hit.parent.children.indexOf(hit.node) + (after ? 1 : 0),
@@ -319,25 +320,43 @@ const visible = (n) => (n.collapsed ? [] : n.children);
 // focusId: desenha só aquele ramo, como centro do mapa (modo foco), mantendo a cor do ramo
 export function layout(map, measure, focusId = null) {
   const nodes = [], edges = [];
-  const box = (n, depth, color, side) => {
-    const { w, h } = measure(n, depth);
-    const b = { id: n.id, x: 0, y: 0, w, h, depth, color, shape: effectiveShape(n, depth), side };
-    nodes.push(b);
+  // fábrica de caixas: sink recebe as caixas; offset/kind/fixedSide servem aos sub-layouts de ramo
+  const makeBox = (sink, offset = 0, kind, fixedSide) => (n, depth, color, side) => {
+    const d = depth + offset, { w, h } = measure(n, d);
+    const b = { id: n.id, x: 0, y: 0, w, h, depth: d, color, shape: effectiveShape(n, d), side: fixedSide ?? side, kind };
+    sink.push(b);
     return b;
   };
+  const box = makeBox(nodes);
   const colorOf = (n, parentColor, depth) => (depth > 0 && n.color) || parentColor;
   const fn = { map: layoutMap, org: layoutOrg, list: layoutList }[map.layout] || layoutMap;
   const focus = focusId && focusId !== map.root.id ? findNode(map.root, focusId)?.node : null;
   const root = focus ?? map.root;
   const rootColor = focus ? branchColor(map.root, focus.id) : map.root.color || '#222';
-  fn(root, measure, box, colorOf, edges, rootColor);
+  fn(root, measure, box, colorOf, edges, rootColor, { makeBox, nodes });
   return { nodes, edges };
 }
 
-function layoutMap(root, measure, box, colorOf, edges, rootColor) {
+function layoutMap(root, measure, box, colorOf, edges, rootColor, { makeBox, nodes }) {
   const GAP_Y = 12;
   const heights = new Map();
+  // "mostrar este ramo como": ramo (não raiz) com filhos visíveis desenhado como organograma/lista
+  const hasSub = (n, depth) => depth > 0 && (n.branchLayout === 'org' || n.branchLayout === 'list') && visible(n).length > 0;
+  const subLayout = (n, depth, color, side) => {
+    const local = [], localEdges = [];
+    const fn = n.branchLayout === 'org' ? layoutOrg : layoutList;
+    fn(n, (m, d) => measure(m, d + depth), makeBox(local, depth, n.branchLayout, side), colorOf, localEdges, color);
+    for (const e of localEdges) { e.depth += depth; e.kind = n.branchLayout; }
+    const minX = Math.min(...local.map(b => b.x)), minY = Math.min(...local.map(b => b.y));
+    const w = Math.max(...local.map(b => b.x + b.w)) - minX, h = Math.max(...local.map(b => b.y + b.h)) - minY;
+    return { local, localEdges, minX, minY, w, h };
+  };
   const subH = (n, depth) => {
+    if (hasSub(n, depth)) {
+      const h = subLayout(n, depth, '#000', 'right').h;
+      heights.set(n.id, h);
+      return h;
+    }
     const kids = visible(n);
     const own = measure(n, depth).h;
     const sum = kids.reduce((s, c) => s + subH(c, depth + 1), 0) + GAP_Y * Math.max(0, kids.length - 1);
@@ -357,6 +376,15 @@ function layoutMap(root, measure, box, colorOf, edges, rootColor) {
   };
   const place = (parentBox, n, depth, side, xEdge, centerY, parentColor) => {
     const color = colorOf(n, parentColor, depth);
+    if (hasSub(n, depth)) {
+      // calcula o sub-layout à parte e encaixa o bloco: encostado na borda e centrado verticalmente
+      const s = subLayout(n, depth, color, side);
+      const dx = side === 'right' ? xEdge - s.minX : xEdge - (s.minX + s.w), dy = centerY - (s.minY + s.h / 2);
+      for (const bx of s.local) { bx.x += dx; bx.y += dy; }
+      nodes.push(...s.local);
+      edges.push({ from: parentBox, to: s.local.find(bx => bx.id === n.id), color, depth }, ...s.localEdges);
+      return;
+    }
     const b = box(n, depth, color, side);
     b.x = side === 'right' ? xEdge : xEdge - b.w;
     b.y = centerY - b.h / 2;

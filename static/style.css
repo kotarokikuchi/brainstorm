@@ -236,3 +236,10 @@ body.presenting #editor-view { height: 100vh; }
 body.presenting #canvas { cursor: default; }
 #present-bar { left: 50%; bottom: 18px; transform: translateX(-50%); }
 #present-count { min-width: 64px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Mostrar ramo como */
+.menu-seg { display: grid; gap: 6px; padding: 8px 10px; }
+.menu-seg[hidden] { display: none; }
+.menu-seg span { font-size: 13px; color: var(--muted); }
+.menu-seg .seg button { padding: 5px 6px; font-size: 12px; }
+.menu-seg .seg button.active { background: #e8eefe; border-color: var(--accent); color: var(--accent); }
