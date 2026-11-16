@@ -454,3 +454,17 @@ test('layout tells measure how many inline icons the node shows', () => {
   assert.equal(b[g1.id].w, 76);
   assert.equal(b[g2.id].w, 50);
 });
+
+// ---- Link (URL) no nó ----
+import { safeUrl } from '../static/model.js';
+
+test('safeUrl accepts only http(s) and adds https:// when missing', () => {
+  assert.equal(safeUrl('https://exemplo.com/a?b=1'), 'https://exemplo.com/a?b=1');
+  assert.equal(safeUrl('http://localhost:3000'), 'http://localhost:3000/');
+  assert.equal(safeUrl('  exemplo.com/docs '), 'https://exemplo.com/docs');
+  assert.equal(safeUrl('javascript:alert(1)'), null);
+  assert.equal(safeUrl('data:text/html,<b>x</b>'), null);
+  assert.equal(safeUrl('ftp://arquivos.com'), null);
+  assert.equal(safeUrl(''), null);
+  assert.equal(safeUrl('não é url'), null);
+});
