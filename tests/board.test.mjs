@@ -190,3 +190,8 @@ test('forwardOne / backwardOne move the selection one layer', () => {
   assert.equal(ids(backwardOne(els, ['a', 'b'])), 'abcd', 'bloco no fundo não se embaralha');
   assert.equal(ids(els), 'abcd', 'não altera a lista original');
 });
+
+test('paint recolors sticky notes like closed shapes', () => {
+  const n = paint({ ...createElement('note', [0, 0]), w: 200, h: 200 }, { backgroundColor: '#b2f2bb', fillStyle: 'solid', strokeColor: '#e03131' });
+  assert.deepEqual([n.backgroundColor, n.strokeColor], ['#b2f2bb', '#1e1e1e']);
+});

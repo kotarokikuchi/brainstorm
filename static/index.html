@@ -48,6 +48,7 @@
     <symbol id="i-text-color" viewBox="0 0 24 24"><path d="M9 15v-7a3 3 0 0 1 6 0v7" /> <path d="M9 11h6" /> <path d="M5 19h14" /></symbol>
     <symbol id="i-lasso" viewBox="0 0 24 24"><path d="M4.028 13.252c-.657 -.972 -1.028 -2.078 -1.028 -3.252c0 -3.866 4.03 -7 9 -7s9 3.134 9 7s-4.03 7 -9 7c-1.913 0 -3.686 -.464 -5.144 -1.255" /><path d="M5 15m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M5 17c0 1.42 .316 2.805 1 4" /></symbol>
     <symbol id="i-laser" viewBox="0 0 24 24"><path d="M4 20l9 -9" /><path d="M15 3v2" /><path d="M19.5 5.5l-1.5 1.5" /><path d="M21 9h-2" /><path d="M10.5 5.5l1.5 1.5" /><path d="M15 9h.01" /></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M13 20l7 -7" /><path d="M13 20v-6a1 1 0 0 1 1 -1h6v-7a2 2 0 0 0 -2 -2h-12a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7" /></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7l16 0" /> <path d="M10 11l0 6" /> <path d="M14 11l0 6" /> <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /> <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></symbol>
   </svg>
   <header class="topbar">
@@ -287,6 +288,7 @@
       <button data-tool="line" data-key="L" class="icon" title="Linha (L ou 6)"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
       <button data-tool="freedraw" data-key="P" class="icon" title="Lápis (P ou 7)"><svg viewBox="0 0 24 24"><use href="#i-pencil"/></svg></button>
       <button data-tool="text" data-key="T" class="icon" title="Texto (T ou 8)"><svg viewBox="0 0 24 24"><use href="#i-letter-t"/></svg></button>
+      <button data-tool="note" data-key="N" class="icon" title="Nota adesiva (N)"><svg viewBox="0 0 24 24"><use href="#i-note"/></svg></button>
       <span class="sep"></span>
       <button data-tool="eraser" data-key="E" class="icon" title="Borracha (E ou 0)"><svg viewBox="0 0 24 24"><use href="#i-eraser"/></svg></button>
       <span class="sep"></span>
@@ -332,7 +334,7 @@
         <dt>H / Espaço</dt><dd>Mover a tela</dd><dt>V ou 1</dt><dd>Selecionar</dd>
         <dt>R ou 2</dt><dd>Retângulo</dd><dt>D ou 3</dt><dd>Losango</dd><dt>O ou 4</dt><dd>Elipse</dd>
         <dt>A ou 5</dt><dd>Seta</dd><dt>L ou 6</dt><dd>Linha</dd><dt>P ou 7</dt><dd>Lápis</dd>
-        <dt>9</dt><dd>Inserir imagem (ou colar com Ctrl+V, ou arrastar o arquivo para a lousa)</dd><dt>K</dt><dd>Ponteiro laser: rastro que some sozinho (não é salvo)</dd><dt>Q</dt><dd>Seleção de laço: contorno livre (Shift soma à seleção)</dd><dt>B</dt><dd>Balde de tinta: pinta o fundo da forma (ou a cor da linha/texto)</dd><dt>T ou 8</dt><dd>Texto (ou duplo clique); Enter quebra a linha, Esc ou clicar fora conclui</dd><dt>E ou 0</dt><dd>Borracha</dd>
+        <dt>9</dt><dd>Inserir imagem (ou colar com Ctrl+V, ou arrastar o arquivo para a lousa)</dd><dt>K</dt><dd>Ponteiro laser: rastro que some sozinho (não é salvo)</dd><dt>Q</dt><dd>Seleção de laço: contorno livre (Shift soma à seleção)</dd><dt>B</dt><dd>Balde de tinta: pinta o fundo da forma (ou a cor da linha/texto)</dd><dt>T ou 8</dt><dd>Texto (ou duplo clique); Enter quebra a linha, Esc ou clicar fora conclui</dd><dt>N</dt><dd>Nota adesiva: clique cria e já edita; o texto quebra dentro dela</dd><dt>E ou 0</dt><dd>Borracha</dd>
         <dt>Ctrl+Z / Ctrl+Shift+Z</dt><dd>Desfazer / refazer</dd><dt>Ctrl+D</dt><dd>Duplicar</dd>
         <dt>Ctrl+C / Ctrl+V</dt><dd>Copiar / colar</dd><dt>Ctrl+A</dt><dd>Selecionar tudo</dd>
         <dt>Ctrl+K</dt><dd>Link no elemento (clique no ícone abre)</dd><dt>Delete</dt><dd>Apagar</dd><dt>Setas</dt><dd>Mover 1 px (Shift: 10)</dd>

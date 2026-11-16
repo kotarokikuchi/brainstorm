@@ -228,7 +228,7 @@ export function resizeElement(el, handle, [px, py], start) {
 }
 
 // balde de tinta: forma fechada recebe o fundo atual; linha, traço e texto recebem a cor do traço
-const CLOSED = new Set(['rectangle', 'diamond', 'ellipse']);
+const CLOSED = new Set(['rectangle', 'diamond', 'ellipse', 'note']);
 export function paint(el, { backgroundColor, fillStyle, strokeColor }) {
   if (CLOSED.has(el.type)) Object.assign(el, { backgroundColor, fillStyle });
   else el.strokeColor = strokeColor;

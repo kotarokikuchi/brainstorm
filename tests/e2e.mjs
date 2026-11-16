@@ -1151,6 +1151,24 @@ await sleep(800);
 const imgSvg = await ev(`fetch(window.__downloads.at(-1)[1]).then(r => r.text())`);
 assert.ok(imgSvg.includes('href="data:image/png') && !imgSvg.includes('/api/maps/'), 'SVG exportado com a imagem embutida');
 
+// quadro: nota adesiva (N) — clique cria já editando, texto quebra na largura, duplo clique reedita
+const nBeforeNote = (await boardEls()).length;
+await key('n');
+await click(cv.x + 500, cv.y + 300);
+assert.equal(await ev(`document.activeElement?.id`), 'board-text', 'nota já abre para digitar');
+assert.equal(await ev(`document.querySelectorAll('#board-root .note-bg').length`), 1, 'nota aparece durante a digitação');
+await typeText('Uma nota adesiva com um texto comprido que precisa quebrar sozinho dentro dela');
+assert.equal(await ev(`getComputedStyle(document.querySelector('#board-text')).whiteSpace`), 'pre-wrap', 'caixa quebra na largura da nota');
+await key('Escape');
+await sleep(900);
+const note = (await boardEls()).at(-1);
+assert.deepEqual([note.type, note.w, (await boardEls()).length], ['note', 200, nBeforeNote + 1], 'nota salva');
+assert.ok(await ev(`document.querySelectorAll('#board-root .el[data-id="${note.id}"] tspan').length`) > 1, 'texto quebrado em várias linhas');
+const nb = await elBox(note.id);
+await dbl(nb.x + nb.w / 2, nb.y + nb.h / 2);
+assert.equal(await ev(`document.querySelector('#board-text').value`), note.text, 'duplo clique reedita a nota');
+await key('Escape');
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);

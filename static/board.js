@@ -5,7 +5,7 @@ import {
   createElement, resizeTo, elementPaths, fillPath, elementBounds, DEFAULTS, elementAt, elementsInBox,
   moveElements, resizeElement, bringToFront, sendToBack, duplicateElements, elementsHitBy, paint, elementsInPolygon, forwardOne, backwardOne,
 } from './board-model.js';
-import { History, safeUrl } from './model.js';
+import { History, safeUrl, wrapLines } from './model.js';
 
 const $ = (s) => document.querySelector(s);
 const SVG = 'http://www.w3.org/2000/svg';
@@ -28,7 +28,9 @@ const lineH = (fs) => fs * 1.25;
 const mctx = document.createElement('canvas').getContext('2d');
 const view = { x: 0, y: 0, k: 1 };
 const SHAPES = new Set(['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw']);
-const STYLED = new Set([...SHAPES, 'text', 'bucket']);  // ferramentas que mostram o painel de estilo
+const STYLED = new Set([...SHAPES, 'text', 'note', 'bucket']);
+const HAS_TEXT = new Set(['text', 'note']);
+const NOTE_PAD = 12, NOTE_SIZE = 200, NOTE_COLOR = '#ffec99';  // ferramentas que mostram o painel de estilo
 
 export function initBoard(d) { deps = d; }
 export const currentBoard = () => board;
@@ -81,14 +83,29 @@ function hatch(color) {
   return `url(#${id})`;
 }
 
+function drawLines(g, e, lines, x, y, w) {
+  const align = ALIGN[e.textAlign] ?? ALIGN.left, ax = x + w * align[1];
+  const t = el('text', { x: ax, y, fill: e.strokeColor, 'font-size': e.fontSize, 'font-family': fontOf(e), 'dominant-baseline': 'text-before-edge', 'text-anchor': align[0] }, g);
+  lines.forEach((line, i) => { el('tspan', { x: ax, y: y + i * lineH(e.fontSize) }, t).textContent = line; });
+}
+
+// nota adesiva: o texto quebra por palavras na largura da nota; a nota cresce para baixo se faltar espaço
+function noteLines(e, text = e.text) {
+  mctx.font = `${e.fontSize}px ${fontOf(e)}`;
+  return text.split('\n').flatMap(p => wrapLines(p, e.w - 2 * NOTE_PAD, s => mctx.measureText(s).width));
+}
+const fitNote = (e, text = e.text) => { e.h = Math.max(e.h, 2 * NOTE_PAD + noteLines(e, text).length * lineH(e.fontSize)); };
+
 function drawElement(e) {
   const g = el('g', { class: 'el', 'data-id': e.id, opacity: (e.opacity ?? 100) / 100 });
   if (erasing?.ids.has(e.id)) g.classList.add('erasing');
+  if (e.type === 'note') {
+    el('rect', { class: 'note-bg', x: e.x, y: e.y, width: e.w, height: e.h, rx: 4, fill: HEX.test(e.backgroundColor ?? '') ? e.backgroundColor : NOTE_COLOR }, g);
+    if (editingText?.el !== e) drawLines(g, e, noteLines(e), e.x + NOTE_PAD, e.y + NOTE_PAD, e.w - 2 * NOTE_PAD);
+    return g;
+  }
   if (e.type === 'text') {
-    if (editingText?.el === e) return g;
-    const align = ALIGN[e.textAlign] ?? ALIGN.left, ax = e.x + e.w * align[1];
-    const t = el('text', { x: ax, y: e.y, fill: e.strokeColor, 'font-size': e.fontSize, 'font-family': fontOf(e), 'dominant-baseline': 'text-before-edge', 'text-anchor': align[0] }, g);
-    e.text.split('\n').forEach((line, i) => { el('tspan', { x: ax, y: e.y + i * lineH(e.fontSize) }, t).textContent = line; });
+    if (editingText?.el !== e) drawLines(g, e, e.text.split('\n'), e.x, e.y, e.w);
     return g;
   }
   if (e.type === 'image') {
@@ -195,6 +212,11 @@ svg.addEventListener('pointerdown', (e) => {
     if (!laserRaf) drawLaser();
   } else if (tool === 'lasso' && e.button === 0) {
     gesture = { kind: 'lasso', pts: [toWorld(e)], keep: e.shiftKey ? [...selection] : [] };
+  } else if (tool === 'note' && e.button === 0) {
+    e.preventDefault();
+    const [x, y] = toWorld(e), bg = HEX.test(style.backgroundColor) ? style.backgroundColor : NOTE_COLOR;
+    startText(createElement('note', [x - NOTE_SIZE / 2, y - NOTE_SIZE / 2], { ...style, backgroundColor: bg, w: NOTE_SIZE, h: NOTE_SIZE, text: '' }), true);
+    return;
   } else if (tool === 'text' && e.button === 0) {
     e.preventDefault();
     startText(createElement('text', toWorld(e), { ...style, text: '' }), true);
@@ -286,7 +308,7 @@ for (const b of document.querySelectorAll('#board-view button')) b.addEventListe
 const TOOL_KEYS = {
   h: 'hand', v: 'select', 1: 'select', r: 'rectangle', 2: 'rectangle', d: 'diamond', 3: 'diamond',
   o: 'ellipse', 4: 'ellipse', a: 'arrow', 5: 'arrow', l: 'line', 6: 'line', p: 'freedraw', 7: 'freedraw',
-  t: 'text', 8: 'text', e: 'eraser', 0: 'eraser', b: 'bucket', q: 'lasso', k: 'laser',
+  t: 'text', 8: 'text', n: 'note', e: 'eraser', 0: 'eraser', b: 'bucket', q: 'lasso', k: 'laser',
 };
 document.addEventListener('keydown', (e) => {
   if (!board || document.body.dataset.view !== 'board' || e.target.closest?.('input, textarea, select')) return;
@@ -437,6 +459,7 @@ function selectMove(e) {
     gesture.moved = true;
   } else if (gesture.kind === 'resize') {
     resizeElement(gesture.item, gesture.handle, p, gesture.start);
+    if (gesture.item.type === 'note') fitNote(gesture.item);
     gesture.moved = true;
   } else if (gesture.kind === 'lasso') gesture.pts.push(p);
   else gesture.cur = p;
@@ -510,7 +533,7 @@ for (const [prop, colors] of [['strokeColor', STROKES], ['backgroundColor', FILL
 function renderProps() {
   const sel = board.elements.filter(x => selection.includes(x.id));
   props.hidden = !(sel.length || STYLED.has(tool));
-  $('#board-font-row').hidden = !(sel.some(x => x.type === 'text') || tool === 'text');
+  $('#board-font-row').hidden = !(sel.some(x => HAS_TEXT.has(x.type)) || HAS_TEXT.has(tool));
   $('#board-sel-actions').hidden = !sel.length;
   if (props.hidden) return;
   const cur = sel[0] ?? style;
@@ -527,7 +550,11 @@ function setProp(prop, value) {
   const sel = board.elements.filter(x => selection.includes(x.id));
   if (!sel.length) { renderProps(); return; }
   const before = snapshot();
-  for (const item of sel) { item[prop] = value; if (item.type === 'text') measureText(item); }
+  for (const item of sel) {
+    item[prop] = value;
+    if (item.type === 'text') measureText(item);
+    if (item.type === 'note') fitNote(item);
+  }
   changed(before);
 }
 
@@ -553,14 +580,15 @@ function measureText(e) {
 }
 
 function placeTextArea() {
-  const e = editingText.el, k = view.k;
+  const e = editingText.el, k = view.k, note = e.type === 'note', pad = note ? NOTE_PAD : 0;
+  const lines = note ? noteLines(e, textArea.value) : textArea.value.split('\n');
   mctx.font = `${e.fontSize}px ${fontOf(e)}`;
-  const lines = textArea.value.split('\n');
   Object.assign(textArea.style, {
-    left: `${view.x + e.x * k}px`, top: `${view.y + e.y * k}px`, color: e.strokeColor, textAlign: e.textAlign ?? 'left',
+    left: `${view.x + (e.x + pad) * k}px`, top: `${view.y + (e.y + pad) * k}px`, color: e.strokeColor, textAlign: e.textAlign ?? 'left',
     // propriedades separadas: o atalho "font" zeraria a altura de linha e cortaria as últimas linhas
     fontFamily: fontOf(e), fontSize: `${e.fontSize * k}px`, lineHeight: `${lineH(e.fontSize) * k}px`,
-    width: `${(Math.max(20, ...lines.map(l => mctx.measureText(l).width)) + 20) * k}px`,
+    whiteSpace: note ? 'pre-wrap' : 'pre',  // na nota, a caixa quebra na largura dela
+    width: note ? `${(e.w - 2 * pad) * k}px` : `${(Math.max(20, ...lines.map(l => mctx.measureText(l).width)) + 20) * k}px`,
     height: `${lines.length * lineH(e.fontSize) * k + 4}px`,
   });
   textArea.scrollTop = 0;  // cresce antes de rolar: a primeira linha não some
@@ -568,6 +596,7 @@ function placeTextArea() {
 
 function startText(e, isNew) {
   editingText = { el: e, isNew, before: snapshot(), old: e.text };
+  if (isNew && e.type === 'note') board.elements.push(e);  // a nota aparece já durante a digitação
   textArea.value = e.text;
   textArea.hidden = false;
   placeTextArea();
@@ -582,21 +611,25 @@ function commitText() {
   editingText = null;
   textArea.blur();  // tira o foco antes de esconder: senão as próximas teclas iriam para o campo
   textArea.hidden = true;
-  const text = textArea.value.replace(/\s+$/, '');
-  if (!text) {
+  const text = textArea.value.replace(/\s+$/, ''), note = e.type === 'note';  // nota vazia continua (é uma forma)
+  if (!text && !note) {
     if (!isNew) { board.elements = board.elements.filter(x => x !== e); changed(before); }  // apagou o texto todo
   } else if (isNew || text !== old) {
     e.text = text;
-    measureText(e);
-    if (isNew) board.elements.push(e);
+    if (note) fitNote(e); else measureText(e);
+    if (isNew && !note) board.elements.push(e);
     changed(before);
   }
   setTool('select');
-  if (text) selection = [e.id];
+  if (text || note) selection = [e.id];
   render();
 }
 
-textArea.addEventListener('input', placeTextArea);
+textArea.addEventListener('input', () => {
+  const e = editingText?.el;
+  if (e?.type === 'note') { fitNote(e, textArea.value); render(); }
+  placeTextArea();
+});
 // Enter quebra a linha (a caixa cresce antes, então nada rola para fora); Esc, Ctrl+Enter ou clicar fora confirmam
 textArea.addEventListener('keydown', (e) => {
   e.stopPropagation();
@@ -621,7 +654,7 @@ function isDoubleClick(e) {
 function onDoubleClick(e) {
   const p = toWorld(e), id = elementAt(board.elements, p, 6 / view.k);
   const hit = id && board.elements.find(x => x.id === id);
-  if (hit?.type === 'text') startText(hit, false);
+  if (HAS_TEXT.has(hit?.type)) startText(hit, false);
   else if (!hit) startText(createElement('text', p, { ...style, text: '' }), true);
   else return false;  // duplo clique numa forma: segue como clique normal (selecionar/arrastar)
   return true;
@@ -658,7 +691,7 @@ export async function boardSvg() {
   r.prepend(bg);
   // imagens embutidas: o arquivo exportado não enxerga o servidor
   await Promise.all([...r.querySelectorAll('image')].map(async (im) => im.setAttribute('href', await dataUrl(im.getAttribute('href')))));
-  if (board.elements.some(x => x.type === 'text' && fontOf(x) === FONTS.hand)) {
+  if (board.elements.some(x => HAS_TEXT.has(x.type) && fontOf(x) === FONTS.hand)) {
     const st = document.createElementNS(SVG, 'style');
     st.textContent = await fontCss();
     clone.prepend(st);
