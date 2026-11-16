@@ -172,6 +172,35 @@ await key('z', 2);
 await sleep(900);
 assert.ok(!(await recursos()).children.some(c => c.text === 'Q1'), 'desfazer move de volta');
 
+// ligar nós: arrastar da bolinha de Q2 até Time cria a seta; clicar nela + Del apaga; Ctrl+Z volta
+const center = (r) => [r.x + r.w / 2, r.y + r.h / 2];
+await clickNode('Q2');
+const hd = await ev(`(() => { const r = document.querySelector('#viewport .link-handle').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
+const [hx, hy] = center(hd), [tx, ty] = center(await rect('Time'));
+await mouse('mousePressed', hx, hy);
+for (let i = 1; i <= 5; i++) { await mouse('mouseMoved', hx + (tx - hx) * i / 5, hy + (ty - hy) * i / 5); await sleep(30); }
+assert.equal(await ev(`!!document.querySelector('#viewport .link-preview')`), true, 'prévia da ligação');
+await mouse('mouseReleased', tx, ty);
+await sleep(900);
+assert.equal((await getMap()).links.length, 1, 'ligação gravada');
+assert.equal(await ev(`document.querySelectorAll('#viewport .link').length`), 1, 'seta desenhada');
+await ev(`document.querySelector('#viewport .link-hit').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
+await key('Delete');
+await sleep(900);
+assert.equal((await getMap()).links.length, 0, 'Del apaga a ligação selecionada');
+assert.ok((await texts()).includes('Q2'), 'Del não apagou o nó');
+await key('z', 2);
+await sleep(900);
+assert.equal((await getMap()).links.length, 1, 'desfazer restaura a ligação');
+// botão "Ligar" na barra: depois clicar no nó de destino
+await clickNode('Q2');
+await ev(`document.querySelector('#link-btn').click()`);
+const [qx, qy] = center(await rect('Q1'));
+await mouse('mousePressed', qx, qy);  // sem mover antes: clique direto no destino
+await mouse('mouseReleased', qx, qy);
+await sleep(900);
+assert.equal((await getMap()).links.length, 2, 'botão Ligar cria ligação');
+
 // conflito: outra "aba" grava antes
 await sleep(900);
 const cur = await getMap();

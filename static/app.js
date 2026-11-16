@@ -1,6 +1,6 @@
 import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
-  History, layout, edgePath, navigate, moveNode, dropTarget,
+  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath,
 } from './model.js';
 
 const $ = (s) => document.querySelector(s);
@@ -121,6 +121,7 @@ function render() {
     }, viewport);
   }
   for (const b of boxes) drawNode(b);
+  drawLinks();
   if (drag?.active) drawDrop();
   if (editing) placeInput();
   placeOverlays();
@@ -176,11 +177,12 @@ function drawToggle(b, n, g) {
 
 function select(id) {
   selected = id;
+  selectedLink = null;
   render();
 }
 
 // ---------- Mutações + histórico ----------
-const snapshot = () => JSON.stringify({ root: map.root, layout: map.layout });
+const snapshot = () => JSON.stringify({ root: map.root, layout: map.layout, links: map.links ?? [] });
 
 function mutate(fn) {
   history.push(snapshot());
@@ -193,6 +195,12 @@ const undo = () => restore(history.undo(snapshot()));
 const redo = () => restore(history.redo(snapshot()));
 
 function deleteSelected() {
+  if (selectedLink) {
+    const id = selectedLink;
+    selectedLink = null;
+    mutate(() => removeLink(map, id));
+    return;
+  }
   if (selected === map.root.id) return;
   mutate(() => { selected = removeNode(map, selected); });
 }
@@ -202,6 +210,8 @@ function restore(state) {
   const s = JSON.parse(state);
   map.root = s.root;
   map.layout = s.layout;
+  map.links = s.links ?? [];
+  if (!map.links.some(k => k.id === selectedLink)) selectedLink = null;
   if (!findNode(map.root, selected)) selected = map.root.id;
   render();
   scheduleSave();
@@ -290,6 +300,10 @@ document.addEventListener('keydown', (ev) => {
   } else if (key === 'Enter') {
     ev.preventDefault();
     addAndEdit(() => addSibling(map, selected));
+  } else if (key === 'Escape') {
+    linking = null;
+    selectedLink = null;
+    render();
   } else if (key === 'Delete' || key === 'Backspace') {
     ev.preventDefault();
     deleteSelected();
@@ -405,7 +419,7 @@ $('#undo').onclick = undo;
 $('#redo').onclick = redo;
 
 function placeOverlays() {
-  const b = drag?.active ? null : boxes.find(b => b.id === selected);
+  const b = drag?.active || linking ? null : boxes.find(b => b.id === selected);
   toolbar.hidden = !b;
   if (!b) stylePop.hidden = true;
   addChildBtn.hidden = addSiblingBtn.hidden = hints.hidden = !b || !!editing;
@@ -513,7 +527,7 @@ let drag = null;  // {id, ids, sx, sy, active, x, y, target}
 
 viewport.addEventListener('pointerdown', (e) => {
   const g = e.target.closest('.node');
-  if (!g || e.button !== 0 || editing || e.target.closest('.toggle') || g.dataset.id === map.root.id) return;
+  if (!g || e.button !== 0 || editing || linking || e.target.closest('.toggle') || g.dataset.id === map.root.id) return;
   const ids = new Set();
   const collect = (n) => { ids.add(n.id); n.children.forEach(collect); };
   collect(findNode(map.root, g.dataset.id).node);
@@ -589,3 +603,73 @@ function placeholderBox(t, p, W, H) {
   if (map.layout === 'list') return box(p.x + 32, p.y + p.h + 4);
   return box(left ? p.x - 36 - W : p.x + p.w + 36, p.y + p.h / 2 - H / 2);
 }
+
+// ---------- Ligações entre nós ----------
+let selectedLink = null;  // id da ligação selecionada
+let linking = null;       // {from, x, y, target, byClick} enquanto cria uma ligação
+
+const toWorld = (e) => {
+  const r = svg.getBoundingClientRect();
+  return [(e.clientX - r.left - view.x) / view.k, (e.clientY - r.top - view.y) / view.k];
+};
+
+function drawLinks() {
+  for (const k of map.links ?? []) {
+    const a = boxes.find(b => b.id === k.from), b = boxes.find(b => b.id === k.to);
+    if (!a || !b) continue;  // ponta escondida num ramo recolhido
+    const d = linkPath(a, b), sel = k.id === selectedLink;
+    el('path', {
+      d, class: 'link', fill: 'none', stroke: sel ? '#2f5bea' : '#22a559', 'stroke-width': sel ? 3 : 2,
+      'stroke-dasharray': '5 5', 'marker-end': `url(#${sel ? 'arrow-sel' : 'arrow'})`,
+    }, viewport);
+    const hit = el('path', { d, class: 'link-hit', fill: 'none', stroke: 'transparent', 'stroke-width': 14 }, viewport);
+    hit.addEventListener('click', (e) => { e.stopPropagation(); selectedLink = k.id; render(); });
+  }
+  const from = boxes.find(b => b.id === (linking ? linking.from : selected));
+  if (linking) {
+    svg.classList.add('linking');
+    const t = boxes.find(b => b.id === linking.target);
+    if (t) el('rect', { class: 'link-target', x: t.x - 5, y: t.y - 5, width: t.w + 10, height: t.h + 10, rx: 10, fill: '#22a55914', stroke: '#22a559', 'stroke-width': 2 }, viewport);
+    if (from && linking.x !== undefined) {
+      const end = t ?? { x: linking.x, y: linking.y, w: 0, h: 0 };
+      el('path', { d: linkPath(from, end), class: 'link-preview', fill: 'none', stroke: '#22a559', 'stroke-width': 2, 'stroke-dasharray': '3 4', 'marker-end': 'url(#arrow)' }, viewport);
+    }
+    return;
+  }
+  svg.classList.remove('linking');
+  // bolinha no canto do nó selecionado: arrastar dela até outro nó cria a ligação
+  if (from && !editing && !drag?.active) {
+    const h = el('circle', { class: 'link-handle', cx: from.x + from.w + 4, cy: from.y + from.h + 4, r: 6 }, viewport);
+    h.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      linking = { from: from.id, target: null };
+    });
+  }
+}
+
+$('#link-btn').onclick = () => { linking = { from: selected, target: null, byClick: true }; render(); };
+
+// atualiza ponteiro e nó de destino (caixa sob o ponteiro, exceto a origem)
+function trackLink(e) {
+  [linking.x, linking.y] = toWorld(e);
+  const hit = boxes.find(b => b.id !== linking.from && linking.x >= b.x && linking.x <= b.x + b.w && linking.y >= b.y && linking.y <= b.y + b.h);
+  linking.target = hit?.id ?? null;
+}
+
+window.addEventListener('pointermove', (e) => {
+  if (!linking) return;
+  trackLink(e);
+  render();
+});
+
+window.addEventListener('pointerup', (e) => {
+  if (!linking) return;
+  trackLink(e);
+  const { from, target } = linking;
+  linking = null;
+  if (target && !(map.links ?? []).some(k => k.from === from && k.to === target)) {
+    mutate(() => addLink(map, from, target));
+  } else {
+    render();
+  }
+});
