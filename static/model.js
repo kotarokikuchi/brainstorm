@@ -161,7 +161,7 @@ function layoutMap(root, measure, box, colorOf, edges) {
     stack(b, visible(n), depth + 1, side, next, centerY, color);
   };
   subH(root, 0);
-  const r = box(root, 0, '#222', null);
+  const r = box(root, 0, root.color || '#222', null);
   r.x = -r.w / 2;
   r.y = -r.h / 2;
   const kids = visible(root);
@@ -180,7 +180,7 @@ function layoutOrg(root, measure, box, colorOf, edges) {
     return w;
   };
   const place = (parentBox, n, depth, centerX, top, parentColor) => {
-    const color = depth === 0 ? '#222' : colorOf(n, parentColor, depth);
+    const color = depth === 0 ? n.color || '#222' : colorOf(n, parentColor, depth);
     const b = box(n, depth, color, null);
     b.x = centerX - b.w / 2;
     b.y = top;
@@ -201,7 +201,7 @@ function layoutOrg(root, measure, box, colorOf, edges) {
 function layoutList(root, measure, box, colorOf, edges) {
   let y = 0, x0 = 0;
   const place = (parentBox, n, depth, parentColor) => {
-    const color = depth === 0 ? '#222' : colorOf(n, parentColor, depth);
+    const color = depth === 0 ? n.color || '#222' : colorOf(n, parentColor, depth);
     const b = box(n, depth, color, null);
     if (depth === 0) {
       x0 = -b.w / 2;

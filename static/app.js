@@ -1,5 +1,5 @@
 import {
-  uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
+  PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
   History, layout, edgePath, navigate,
 } from './model.js';
 
@@ -77,14 +77,9 @@ async function openMap(id) {
   conflict = false;
   document.body.dataset.view = 'editor';
   setStatus('Salvo');
-  centerView();
+  stylePop.hidden = true;
   render();
-}
-
-function centerView() {
-  view.x = svg.clientWidth / 2;
-  view.y = svg.clientHeight / 2;
-  view.k = 1;
+  fitView();
 }
 
 // medida de texto via canvas (mesma fonte do SVG)
@@ -113,7 +108,9 @@ function render() {
   boxes = res.nodes;
   viewport.setAttribute('transform', `translate(${view.x} ${view.y}) scale(${view.k})`);
   viewport.replaceChildren();
-  for (const e of res.edges) {
+  // na lista, arestas longas primeiro: o tronco fica segmentado com a cor de cada ramo
+  const edges = map.layout === 'list' ? [...res.edges].reverse() : res.edges;
+  for (const e of edges) {
     el('path', {
       d: edgePath(map.layout, e.from, e.to), fill: 'none', stroke: e.color,
       'stroke-width': Math.max(2, 6 - e.depth), 'stroke-linecap': 'round',
@@ -121,6 +118,7 @@ function render() {
   }
   for (const b of boxes) drawNode(b);
   if (editing) placeInput();
+  placeOverlays();
 }
 
 function drawNode(b) {
@@ -183,6 +181,14 @@ function mutate(fn) {
   fn();
   render();
   scheduleSave();
+}
+
+const undo = () => restore(history.undo(snapshot()));
+const redo = () => restore(history.redo(snapshot()));
+
+function deleteSelected() {
+  if (selected === map.root.id) return;
+  mutate(() => { selected = removeNode(map, selected); });
 }
 
 function restore(state) {
@@ -265,10 +271,10 @@ document.addEventListener('keydown', (ev) => {
   const key = ev.key;
   if (ctrl && key.toLowerCase() === 'z') {
     ev.preventDefault();
-    restore(ev.shiftKey ? history.redo(snapshot()) : history.undo(snapshot()));
+    ev.shiftKey ? redo() : undo();
   } else if (ctrl && key.toLowerCase() === 'y') {
     ev.preventDefault();
-    restore(history.redo(snapshot()));
+    redo();
   } else if (ctrl || ev.altKey) {
     return;
   } else if (key === 'Tab') {
@@ -279,8 +285,7 @@ document.addEventListener('keydown', (ev) => {
     addAndEdit(() => addSibling(map, selected));
   } else if (key === 'Delete' || key === 'Backspace') {
     ev.preventDefault();
-    if (selected === map.root.id) return;
-    mutate(() => { selected = removeNode(map, selected); });
+    deleteSelected();
   } else if (key === 'F2') {
     ev.preventDefault();
     startEdit(selected, false);
@@ -355,3 +360,142 @@ window.addEventListener('beforeunload', (ev) => {
   if (dirty || saving) ev.preventDefault();
 });
 window.addEventListener('resize', render);
+
+// ---------- Controles flutuantes: barra, estilo, "+" ----------
+const toolbar = $('#toolbar'), stylePop = $('#style-pop'), hints = $('#hints');
+const addChildBtn = $('#add-child'), addSiblingBtn = $('#add-sibling');
+
+$('#swatches').append(...['', ...PALETTE].map(c => {
+  const b = document.createElement('button');
+  b.dataset.color = c;
+  if (c) b.style.background = c;
+  b.title = c || 'Cor padrão';
+  return b;
+}));
+
+function setStyle(prop, value) {
+  const n = findNode(map.root, selected).node;
+  if (n[prop] !== value) mutate(() => { n[prop] = value; });
+}
+
+$('#swatches').onclick = (e) => {
+  const c = e.target.dataset?.color;
+  if (c !== undefined) setStyle('color', c || null);
+};
+$('#shapes').onclick = (e) => {
+  const btn = e.target.closest('[data-shape]');
+  if (!btn) return;
+  // clicar na forma ativa volta ao padrão
+  const n = findNode(map.root, selected).node;
+  setStyle('shape', n.shape === btn.dataset.shape ? null : btn.dataset.shape);
+};
+$('#style-btn').onclick = () => { stylePop.hidden = !stylePop.hidden; render(); };
+$('#delete-btn').onclick = deleteSelected;
+addChildBtn.onclick = () => addAndEdit(() => addChild(map, selected));
+addSiblingBtn.onclick = () => addAndEdit(() => addSibling(map, selected));
+$('#undo').onclick = undo;
+$('#redo').onclick = redo;
+
+function placeOverlays() {
+  const b = boxes.find(b => b.id === selected);
+  toolbar.hidden = !b;
+  if (!b) stylePop.hidden = true;
+  addChildBtn.hidden = addSiblingBtn.hidden = hints.hidden = !b || !!editing;
+  if (!b) return;
+  const sx = (x) => view.x + x * view.k, sy = (y) => view.y + y * view.k;
+  const n = findNode(map.root, b.id).node;
+  const pos = (el, x, y) => { el.style.left = `${x}px`; el.style.top = `${y}px`; };
+
+  pos(toolbar, sx(b.x + b.w / 2), sy(b.y));
+  pos(stylePop, sx(b.x + b.w / 2) - 114, sy(b.y + b.h) + 14);
+  $('#style-btn').classList.toggle('active', !stylePop.hidden);
+  for (const s of $('#swatches').children) s.classList.toggle('active', (n.color || '') === s.dataset.color);
+  for (const s of $('#shapes').children) s.classList.toggle('active', n.shape === s.dataset.shape);
+
+  // "+ filho" do lado de fora do nó; afasta da bolinha de recolher quando existe
+  const gap = n.children.length && b.depth > 0 ? 40 : 20;
+  const left = map.layout === 'map' && b.side === 'left';
+  let child, sibling;
+  if (map.layout === 'org') {
+    child = [sx(b.x + b.w / 2), sy(b.y + b.h) + gap];
+    sibling = [sx(b.x + b.w) + 20, sy(b.y + b.h / 2)];
+  } else {
+    child = [left ? sx(b.x) - gap : sx(b.x + b.w) + gap, sy(b.y + b.h / 2)];
+    sibling = [sx(b.x + b.w / 2), sy(b.y + b.h) + 18];
+  }
+  pos(addChildBtn, ...child);
+  pos(addSiblingBtn, ...sibling);
+  addSiblingBtn.hidden ||= b.depth === 0;
+  // dicas só em nó sem filhos visíveis, como num mapa recém-criado
+  hints.hidden ||= left || map.layout === 'org' || (n.children.length > 0 && !n.collapsed);
+  pos(hints, child[0] + 22, child[1]);
+
+  $('#layout-select').value = map.layout;
+  $('#zoom-reset').textContent = `${Math.round(view.k * 100)}%`;
+}
+
+// botões não roubam o foco (o teclado continua indo para o mapa)
+for (const b of document.querySelectorAll('#editor-view button, .history-btns button')) {
+  b.addEventListener('mousedown', (e) => e.preventDefault());
+}
+
+// ---------- Layout, zoom e pan ----------
+$('#layout-select').onchange = (e) => {
+  const v = e.target.value;
+  e.target.blur();
+  if (v !== map.layout) mutate(() => { map.layout = v; });
+};
+
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+function zoomAt(factor, cx, cy) {
+  const k = clamp(view.k * factor, 0.2, 3);
+  view.x = cx - (cx - view.x) * (k / view.k);
+  view.y = cy - (cy - view.y) * (k / view.k);
+  view.k = k;
+  render();
+}
+const zoomCenter = (factor) => zoomAt(factor, svg.clientWidth / 2, svg.clientHeight / 2);
+
+function fitView(maxK = 1) {
+  if (!boxes.length) return;
+  const minX = Math.min(...boxes.map(b => b.x)), maxX = Math.max(...boxes.map(b => b.x + b.w));
+  const minY = Math.min(...boxes.map(b => b.y)), maxY = Math.max(...boxes.map(b => b.y + b.h));
+  const W = svg.clientWidth, H = svg.clientHeight;
+  // margem vertical maior: a barra flutuante fica acima do nó
+  view.k = clamp(Math.min((W - 80) / (maxX - minX), (H - 180) / (maxY - minY)), 0.2, maxK);
+  view.x = W / 2 - ((minX + maxX) / 2) * view.k;
+  view.y = H / 2 - ((minY + maxY) / 2) * view.k;
+  render();
+}
+
+$('#zoom-in').onclick = () => zoomCenter(1.2);
+$('#zoom-out').onclick = () => zoomCenter(1 / 1.2);
+$('#zoom-reset').onclick = () => zoomCenter(1 / view.k);
+$('#zoom-fit').onclick = () => fitView(3);
+
+svg.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const r = svg.getBoundingClientRect();
+  zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+
+let pan = null;
+svg.addEventListener('pointerdown', (e) => {
+  if (e.target !== svg) return;  // só o fundo arrasta
+  pan = { x: e.clientX - view.x, y: e.clientY - view.y, moved: false };
+  svg.setPointerCapture(e.pointerId);
+  svg.classList.add('panning');
+});
+svg.addEventListener('pointermove', (e) => {
+  if (!pan) return;
+  view.x = e.clientX - pan.x;
+  view.y = e.clientY - pan.y;
+  pan.moved = true;
+  render();
+});
+svg.addEventListener('pointerup', () => {
+  if (pan && !pan.moved && !stylePop.hidden) { stylePop.hidden = true; render(); }
+  pan = null;
+  svg.classList.remove('panning');
+});

@@ -13,6 +13,8 @@ const server = spawn('python3', ['-c',
 const chrome = spawn('google-chrome', ['--headless=new', '--disable-gpu', '--remote-debugging-port=9333',
   '--window-size=1400,800', '--user-data-dir=' + join(tmp, 'chrome'), 'about:blank'], { stdio: 'ignore' });
 process.on('exit', () => { chrome.kill(); server.kill(); rmSync(tmp, { recursive: true, force: true }); });
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(1));
+setTimeout(() => { console.error('E2E timeout'); process.exit(1); }, 45000).unref();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 let targets;
 for (let i = 0; i < 50; i++) { try { targets = await (await fetch('http://127.0.0.1:9333/json')).json(); break; } catch { await sleep(200); } }
@@ -91,6 +93,38 @@ await key(' ');
 assert.ok((await texts()).length < before, 'Espaço recolheu');
 await key(' ');
 
+// barra flutuante: cor e forma no nó selecionado
+const clickNode = (prefix) => ev(`[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('${prefix}')).dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
+await clickNode('Recursos');
+assert.equal(await ev(`!document.querySelector('#toolbar').hidden`), true, 'toolbar visível');
+await ev(`document.querySelector('#style-btn').click()`);
+await ev(`document.querySelector('#style-pop [data-color="#14b8a6"]').click()`);
+await ev(`document.querySelector('#style-pop [data-shape="rect"]').click()`);
+await sleep(900);
+const rec = (await getMap()).root.children.find(c => c.text === 'Recursos');
+assert.equal(rec.color, '#14b8a6');
+assert.equal(rec.shape, 'rect');
+assert.equal(await ev(`[...document.querySelectorAll('#viewport path')].filter(p => p.getAttribute('stroke') === '#14b8a6').length`), 3, 'descendentes herdam a cor');
+
+// botões "+" criam filho e irmão
+await ev(`document.querySelector('#add-child').click()`);
+assert.equal(await ev(`!document.querySelector('#editor').hidden`), true, '+ filho abre edição');
+await typeText('Pelo mais'); await key('Enter');
+assert.equal((await getMap()).root.children.length >= 2, true);
+assert.ok((await texts()).includes('Pelo mais'));
+
+// layout e zoom
+await ev(`(() => { const s = document.querySelector('#layout-select'); s.value = 'org'; s.dispatchEvent(new Event('change')); })()`);
+await sleep(900);
+assert.equal((await getMap()).layout, 'org');
+await ev(`document.querySelector('#zoom-in').click()`);
+assert.notEqual(await ev(`document.querySelector('#zoom-reset').textContent`), '100%');
+await ev(`document.querySelector('#zoom-reset').click()`);
+assert.equal(await ev(`document.querySelector('#zoom-reset').textContent`), '100%');
+await ev(`document.querySelector('#undo').click()`);
+assert.equal(await ev(`document.querySelector('#layout-select').value`), 'map', 'desfazer pelo botão');
+await sleep(900);
+
 // conflito: outra "aba" grava antes
 await sleep(900);
 const cur = await getMap();
@@ -101,4 +135,4 @@ assert.match(await status(), /outra aba/, 'conflito detectado');
 
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
-ws.close(); chrome.kill();
+process.exit(0);
