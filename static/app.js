@@ -3,7 +3,7 @@ import {
   History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, toMarkdown, slides, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
 } from './model.js';
 import { folderOf, childFolders, folderPath, removeFolder, placeDoc, subtree, moveFolder, folderOptions } from './folders.js';
-import { initBoard, openBoard, closeBoard, currentBoard, newBoard, boardSvg, boardPlace } from './board.js';
+import { initBoard, openBoard, closeBoard, currentBoard, newBoard, boardSvg, boardPlace, renameBoard } from './board.js';
 
 const $ = (s) => document.querySelector(s);
 const SVG = 'http://www.w3.org/2000/svg';
@@ -111,8 +111,9 @@ async function showList(folderId = null) {
     const sep = Object.assign(document.createElement('span'), { className: 'crumb-sep', textContent: '›' });
     if (c.id && i === crumbs.length - 1) {  // pasta aberta: clicar no nome edita ali mesmo
       const cur = Object.assign(document.createElement('span'), { className: 'crumb-current', textContent: c.name, title: 'Clique para renomear', tabIndex: 0 });
-      cur.onclick = () => editFolderName(cur, c);
-      cur.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); editFolderName(cur, c); } };
+      const edit = () => inlineEdit(cur, c.name, async (name) => { await renameFolder(c, name); showList(listFolder); });
+      cur.onclick = edit;
+      cur.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); edit(); } };
       return [sep, cur];
     }
     const a = document.createElement('a');
@@ -245,16 +246,17 @@ async function renameFolder(f, input) {
   if (!name || name === f.name) return false;
   return saveTree(t => ({ ...t, folders: t.folders.map(x => (x.id === f.id ? { ...x, name } : x)) }));
 }
-// nome da pasta no título vira campo: Enter ou clicar fora salva, Esc desiste
-function editFolderName(span, f) {
-  const input = Object.assign(document.createElement('input'), { value: f.name, className: 'crumb-input', maxLength: 200 });
+// texto vira campo ali mesmo: Enter ou clicar fora salva (onSave com o texto aparado), Esc desiste
+function inlineEdit(span, value, onSave) {
+  const input = Object.assign(document.createElement('input'), { value, className: 'inline-input', maxLength: 200 });
   const fit = () => { input.style.width = `${Math.max(3, input.value.length + 1)}ch`; };
   let done = false;
   const finish = async (save) => {
     if (done) return;
     done = true;
-    if (save) await renameFolder(f, input.value);
-    showList(listFolder);
+    input.replaceWith(span);
+    const v = input.value.trim();
+    if (save && v && v !== value) await onSave(v);
   };
   input.oninput = fit;
   input.onkeydown = (e) => {
@@ -267,6 +269,15 @@ function editFolderName(span, f) {
   input.focus();
   input.select();
 }
+
+// nome do documento no topo: clicar edita ali mesmo (no mapa, é o texto do nó central)
+const titleEl = $('#title');
+const editTitle = () => {
+  if (map) inlineEdit(titleEl, map.root.text, (t) => mutate(() => { map.root.text = t; }));
+  else if (currentBoard()) inlineEdit(titleEl, currentBoard().title, renameBoard);
+};
+titleEl.onclick = editTitle;
+titleEl.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); editTitle(); } };
 
 $('#new-folder').onclick = async () => {
   const name = prompt('Nome da nova pasta')?.trim();

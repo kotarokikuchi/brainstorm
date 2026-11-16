@@ -833,8 +833,14 @@ assert.equal(await ev(`document.body.dataset.view`), 'board', 'abre a lousa');
 const boardId = await ev(`location.hash.match(/^#\\/board\\/(.+)$/)?.[1]`);
 assert.ok(boardId, 'endereço do quadro');
 assert.equal(await ev(`getComputedStyle(document.querySelector('#board-canvas')).display`), 'block', 'lousa visível');
-promptAnswer = 'Rascunho de ideias';
-await ev(`document.querySelector('#title').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
+await ev(`document.querySelector('#title').click()`);
+assert.equal(await ev(`document.activeElement?.className`), 'inline-input', 'nome do quadro vira campo no topo');
+await typeText('Nome descartado');
+await key('Escape');
+assert.equal(await ev(`document.querySelector('#title').textContent`), 'Quadro sem título', 'Esc desiste');
+await ev(`document.querySelector('#title').click()`);
+await typeText('Rascunho de ideias');
+await key('Enter');
 await sleep(900);
 const boardDoc = await (await fetch(BASE + `/api/maps/${boardId}`)).json();
 assert.deepEqual([boardDoc.type, boardDoc.title, boardDoc.elements], ['board', 'Rascunho de ideias', []], 'renomeado e salvo');
@@ -1278,7 +1284,7 @@ assert.equal(Object.values((await tree()).place).filter(v => v === vip.id).lengt
 // pastas: clicar no nome da pasta aberta (título) edita ali mesmo; Esc desiste, Enter salva
 await ev(`location.hash = '#/folder/${dest.id}'`); await sleep(800);
 await ev(`document.querySelector('#list-title .crumb-current').click()`);
-assert.equal(await ev(`document.activeElement?.className`), 'crumb-input', 'nome vira campo de edição');
+assert.equal(await ev(`document.activeElement?.className`), 'inline-input', 'nome vira campo de edição');
 await typeText('Rascunho');
 await key('Escape'); await sleep(800);
 assert.equal((await tree()).folders.find(f => f.id === dest.id).name, 'Destino', 'Esc desiste');
@@ -1287,6 +1293,14 @@ await typeText('Projetos');
 await key('Enter'); await sleep(800);
 assert.equal((await tree()).folders.find(f => f.id === dest.id).name, 'Projetos', 'Enter salva o novo nome');
 assert.equal(await ev(`document.querySelector('#list-title .crumb-current').textContent`), 'Projetos');
+
+// mapa: clicar no nome no topo edita ali mesmo (é o texto do nó central)
+await ev(`location.hash = '#/map/demo'`); await sleep(800);
+await ev(`document.querySelector('#title').click()`);
+await typeText('Planejamento 2027');
+await key('Enter'); await sleep(900);
+assert.equal((await getMap()).root.text, 'Planejamento 2027', 'nome do mapa salvo');
+assert.equal(await ev(`document.querySelector('#title').textContent`), 'Planejamento 2027');
 
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
