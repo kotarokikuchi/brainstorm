@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import threading
 import unittest
@@ -6,7 +7,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from app import Handler, make_server
+from app import Handler, make_server, watch
 
 Handler.log_message = lambda *a: None  # silencia o log de requisições nos testes
 
@@ -153,6 +154,19 @@ class ApiTest(unittest.TestCase):
     def test_body_too_large_is_413(self):
         status, _ = self.req("PUT", "/api/maps/abc", raw=b"x", headers={"Content-Length": "5000001"})
         self.assertEqual(status, 413)
+
+
+class WatchTest(unittest.TestCase):
+    def test_watch_calls_back_when_file_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "app.py"
+            f.write_text("a")
+            changed = threading.Event()
+            watch([f], changed.set, interval=0.05)
+            self.assertFalse(changed.wait(0.2), "sem mudança, sem callback")
+            f.write_text("b")
+            os.utime(f, (f.stat().st_atime, f.stat().st_mtime + 5))
+            self.assertTrue(changed.wait(2), "mudança dispara o callback")
 
 
 if __name__ == "__main__":

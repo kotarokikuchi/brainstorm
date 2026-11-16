@@ -5,6 +5,8 @@ import os
 import re
 import shutil
 import sys
+import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from functools import partial
@@ -191,9 +193,32 @@ def make_server(data_dir: Path, port: int) -> ThreadingHTTPServer:
     return server
 
 
+def watch(paths, on_change, interval=1.0):
+    """Chama on_change (uma vez) quando o mtime de algum dos arquivos muda. Roda numa thread daemon."""
+    def loop():
+        before = [p.stat().st_mtime for p in paths]
+        while True:
+            time.sleep(interval)
+            try:
+                now = [p.stat().st_mtime for p in paths]
+            except FileNotFoundError:
+                continue  # editor salvando (arquivo trocado no meio): tenta de novo
+            if now != before:
+                on_change()
+                return
+    threading.Thread(target=loop, daemon=True).start()
+
+
+def restart():
+    print("app.py mudou — reiniciando o servidor…", flush=True)
+    os.execv(sys.executable, [sys.executable, *sys.argv])
+
+
 def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
     server = make_server(ROOT / "data", port)
+    # recarrega sozinho ao editar o servidor (HTML/CSS/JS já vêm frescos a cada F5)
+    watch([Path(__file__).resolve()], restart)
     print(f"Abra http://127.0.0.1:{port}")
     try:
         server.serve_forever()
