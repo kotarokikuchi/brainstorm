@@ -5,12 +5,13 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
-const PORT = 8765, BASE = `http://127.0.0.1:${PORT}`;
+// portas configuráveis: vários e2e (ex.: agentes em worktrees) podem rodar ao mesmo tempo
+const PORT = Number(process.env.E2E_PORT ?? 8765), CDP = Number(process.env.E2E_CDP_PORT ?? 9333), BASE = `http://127.0.0.1:${PORT}`;
 const tmp = mkdtempSync(join(tmpdir(), 'galho-e2e-'));
 const server = spawn('python3', ['-c',
   'import sys; from pathlib import Path; from app import make_server; make_server(Path(sys.argv[1]), int(sys.argv[2])).serve_forever()',
   join(tmp, 'data'), String(PORT)], { cwd: new URL('..', import.meta.url).pathname, stdio: 'ignore' });
-const chrome = spawn('google-chrome', ['--headless=new', '--disable-gpu', '--remote-debugging-port=9333',
+const chrome = spawn('google-chrome', ['--headless=new', '--disable-gpu', '--remote-debugging-port=' + CDP,
   '--window-size=1400,800', '--user-data-dir=' + join(tmp, 'chrome'), 'about:blank'], { stdio: 'ignore' });
 // maxRetries: o Chrome ainda pode estar gravando o perfil quando o processo sai
 process.on('exit', () => { chrome.kill(); server.kill(); rmSync(tmp, { recursive: true, force: true, maxRetries: 5 }); });
@@ -18,7 +19,7 @@ for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(1));
 setTimeout(() => { console.error('E2E timeout'); process.exit(1); }, 300000).unref();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 let targets;
-for (let i = 0; i < 50; i++) { try { targets = await (await fetch('http://127.0.0.1:9333/json')).json(); break; } catch { await sleep(200); } }
+for (let i = 0; i < 50; i++) { try { targets = await (await fetch(`http://127.0.0.1:${CDP}/json`)).json(); break; } catch { await sleep(200); } }
 const page = targets.find(t => t.type === 'page');
 const ws = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise(r => ws.onopen = r);
