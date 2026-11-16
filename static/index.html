@@ -119,6 +119,7 @@
       <button data-action="child">Novo filho <kbd>Tab</kbd></button>
       <button data-action="sibling">Novo irmão <kbd>Enter</kbd></button>
       <button data-action="collapse">Recolher / expandir <kbd>Espaço</kbd></button>
+      <button data-action="focus">Focar neste ramo <kbd>Ctrl+.</kbd></button>
       <hr>
       <button data-action="link">Ligar a outro nó</button>
       <button data-action="copy">Copiar ramo <kbd>Ctrl+C</kbd></button>
@@ -197,6 +198,10 @@
     <button class="link-anchor" data-side="left" hidden title="Sair pela esquerda">+</button>
     <div id="hints"><span><kbd>Tab</kbd> filho</span><span><kbd>Enter</kbd> irmão</span></div>
 
+    <div id="focus-bar" class="card" hidden>
+      <span>Foco: <strong id="focus-title"></strong></span>
+      <button id="focus-exit">Sair do foco <kbd>Esc</kbd></button>
+    </div>
     <div id="dock" class="card">
       <select id="layout-select" title="Layout">
         <option value="map">Mapa</option>

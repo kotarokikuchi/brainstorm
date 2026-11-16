@@ -316,7 +316,8 @@ export class History {
 
 const visible = (n) => (n.collapsed ? [] : n.children);
 
-export function layout(map, measure) {
+// focusId: desenha só aquele ramo, como centro do mapa (modo foco), mantendo a cor do ramo
+export function layout(map, measure, focusId = null) {
   const nodes = [], edges = [];
   const box = (n, depth, color, side) => {
     const { w, h } = measure(n, depth);
@@ -326,11 +327,14 @@ export function layout(map, measure) {
   };
   const colorOf = (n, parentColor, depth) => (depth > 0 && n.color) || parentColor;
   const fn = { map: layoutMap, org: layoutOrg, list: layoutList }[map.layout] || layoutMap;
-  fn(map.root, measure, box, colorOf, edges);
+  const focus = focusId && focusId !== map.root.id ? findNode(map.root, focusId)?.node : null;
+  const root = focus ?? map.root;
+  const rootColor = focus ? branchColor(map.root, focus.id) : map.root.color || '#222';
+  fn(root, measure, box, colorOf, edges, rootColor);
   return { nodes, edges };
 }
 
-function layoutMap(root, measure, box, colorOf, edges) {
+function layoutMap(root, measure, box, colorOf, edges, rootColor) {
   const GAP_Y = 12;
   const heights = new Map();
   const subH = (n, depth) => {
@@ -361,15 +365,15 @@ function layoutMap(root, measure, box, colorOf, edges) {
     stack(b, visible(n), depth + 1, side, next, centerY, color);
   };
   subH(root, 0);
-  const r = box(root, 0, root.color || '#222', null);
+  const r = box(root, 0, rootColor, null);
   r.x = -r.w / 2;
   r.y = -r.h / 2;
   const kids = visible(root);
-  stack(r, kids.filter(c => c.side !== 'left'), 1, 'right', r.x + r.w + 60, 0, '#222');
-  stack(r, kids.filter(c => c.side === 'left'), 1, 'left', r.x - 60, 0, '#222');
+  stack(r, kids.filter(c => c.side !== 'left'), 1, 'right', r.x + r.w + 60, 0, rootColor);
+  stack(r, kids.filter(c => c.side === 'left'), 1, 'left', r.x - 60, 0, rootColor);
 }
 
-function layoutOrg(root, measure, box, colorOf, edges) {
+function layoutOrg(root, measure, box, colorOf, edges, rootColor) {
   const GAP_X = 24, GAP_Y = 60;
   const widths = new Map();
   const subW = (n, depth) => {
@@ -380,7 +384,7 @@ function layoutOrg(root, measure, box, colorOf, edges) {
     return w;
   };
   const place = (parentBox, n, depth, centerX, top, parentColor) => {
-    const color = depth === 0 ? n.color || '#222' : colorOf(n, parentColor, depth);
+    const color = depth === 0 ? parentColor : colorOf(n, parentColor, depth);
     const b = box(n, depth, color, null);
     b.x = centerX - b.w / 2;
     b.y = top;
@@ -395,13 +399,13 @@ function layoutOrg(root, measure, box, colorOf, edges) {
     }
   };
   subW(root, 0);
-  place(null, root, 0, 0, -measure(root, 0).h / 2, '#222');
+  place(null, root, 0, 0, -measure(root, 0).h / 2, rootColor);
 }
 
-function layoutList(root, measure, box, colorOf, edges) {
+function layoutList(root, measure, box, colorOf, edges, rootColor) {
   let y = 0, x0 = 0;
   const place = (parentBox, n, depth, parentColor) => {
-    const color = depth === 0 ? n.color || '#222' : colorOf(n, parentColor, depth);
+    const color = depth === 0 ? parentColor : colorOf(n, parentColor, depth);
     const b = box(n, depth, color, null);
     if (depth === 0) {
       x0 = -b.w / 2;
@@ -413,7 +417,7 @@ function layoutList(root, measure, box, colorOf, edges) {
     if (parentBox) edges.push({ from: parentBox, to: b, color, depth });
     for (const c of visible(n)) place(b, c, depth + 1, color);
   };
-  place(null, root, 0, '#222');
+  place(null, root, 0, rootColor);
 }
 
 export function edgePath(layoutName, a, b) {
