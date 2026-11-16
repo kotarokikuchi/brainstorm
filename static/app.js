@@ -221,6 +221,7 @@ function drawNode(b) {
     el('rect', { class: 'selected-ring', x: b.x - 4, y: b.y - 4, width: b.w + 8, height: b.h + 8, rx: 8 }, g);
   }
   if (n.children.length && b.depth > 0) drawToggle(b, n, g);
+  if (n.attachments?.length) drawAttachBadge(b, n);
   g.addEventListener('click', (ev) => { ev.stopPropagation(); select(b.id, true); });
   g.addEventListener('dblclick', (ev) => { ev.stopPropagation(); startEdit(b.id, false); });
 }
@@ -386,7 +387,7 @@ document.addEventListener('keydown', (ev) => {
   } else if (key === 'Escape') {
     linking = null;
     selectedLink = null;
-    nodeMenu.hidden = stylePop.hidden = imagePop.hidden = true;
+    nodeMenu.hidden = stylePop.hidden = imagePop.hidden = attachPop.hidden = true;
     closeLinkPops();
     render();
   } else if (key === 'Delete' || key === 'Backspace') {
@@ -468,7 +469,7 @@ window.addEventListener('beforeunload', (ev) => {
 window.addEventListener('resize', render);
 
 // ---------- Controles flutuantes: barra, estilo, "+" ----------
-const toolbar = $('#toolbar'), stylePop = $('#style-pop'), nodeMenu = $('#node-menu'), imagePop = $('#image-pop'), hints = $('#hints');
+const toolbar = $('#toolbar'), stylePop = $('#style-pop'), nodeMenu = $('#node-menu'), imagePop = $('#image-pop'), attachPop = $('#attach-pop'), hints = $('#hints');
 const addChildBtn = $('#add-child'), addSiblingBtn = $('#add-sibling');
 
 // ---------- Painel de estilo: abas Forma / Borda / Linha ----------
@@ -530,7 +531,7 @@ stylePop.addEventListener('click', (e) => {
 });
 customInput.addEventListener('change', () => applyColor(customProp, customInput.value));
 $('#boundary').addEventListener('change', (e) => { e.target.blur(); setStyle({ boundary: e.target.checked || null }); });
-$('#style-btn').onclick = () => { stylePop.hidden = !stylePop.hidden; nodeMenu.hidden = imagePop.hidden = true; render(); };
+$('#style-btn').onclick = () => { stylePop.hidden = !stylePop.hidden; nodeMenu.hidden = imagePop.hidden = attachPop.hidden = true; render(); };
 $('#delete-btn').onclick = deleteSelected;
 addChildBtn.onclick = () => addAndEdit(() => addChild(map, selected));
 addSiblingBtn.onclick = () => addAndEdit(() => addSibling(map, selected));
@@ -540,7 +541,7 @@ $('#redo').onclick = redo;
 function placeOverlays() {
   const b = drag?.active || linking || selectedLink ? null : boxes.find(b => b.id === selected);
   toolbar.hidden = !b || !toolbarOn;
-  if (toolbar.hidden) stylePop.hidden = nodeMenu.hidden = imagePop.hidden = true;
+  if (toolbar.hidden) stylePop.hidden = nodeMenu.hidden = imagePop.hidden = attachPop.hidden = true;
   addChildBtn.hidden = addSiblingBtn.hidden = hints.hidden = !b || !!editing;
   if (!b) return;
   const sx = (x) => view.x + x * view.k, sy = (y) => view.y + y * view.k;
@@ -553,6 +554,9 @@ function placeOverlays() {
   below(stylePop, sx(b.x + b.w / 2) - 140);
   below(nodeMenu, sx(b.x + b.w / 2) - 125);
   below(imagePop, sx(b.x + b.w / 2) - 140);
+  if (!attachPop.hidden) fillAttachList(n);
+  below(attachPop, sx(b.x + b.w / 2) - 150);
+  $('#attach-btn').classList.toggle('active', !attachPop.hidden);
   $('#image-btn').classList.toggle('active', !imagePop.hidden);
   $('#image-remove').hidden = !n.image;
   $('#more-btn').classList.toggle('active', !nodeMenu.hidden);
@@ -582,7 +586,7 @@ function placeOverlays() {
   pos(addSiblingBtn, ...sibling);
   addSiblingBtn.hidden ||= b.depth === 0;
   // com painel/menu aberto, os "+" e as dicas sairiam por cima dele
-  if (!stylePop.hidden || !nodeMenu.hidden || !imagePop.hidden) addChildBtn.hidden = addSiblingBtn.hidden = hints.hidden = true;
+  if (!stylePop.hidden || !nodeMenu.hidden || !imagePop.hidden || !attachPop.hidden) addChildBtn.hidden = addSiblingBtn.hidden = hints.hidden = true;
   // dicas só em nó sem filhos visíveis, como num mapa recém-criado
   hints.hidden ||= left || map.layout === 'org' || (n.children.length > 0 && !n.collapsed);
   pos(hints, child[0] + 22, child[1]);
@@ -899,7 +903,7 @@ $('#more-btn').onclick = () => {
   item('delete').disabled = n === map.root;
   item('paste').disabled = !clipboard;
   nodeMenu.hidden = !nodeMenu.hidden;
-  stylePop.hidden = imagePop.hidden = true;
+  stylePop.hidden = imagePop.hidden = attachPop.hidden = true;
   render();
 };
 
@@ -914,7 +918,7 @@ nodeMenu.onclick = (e) => {
 // clicar fora dos controles (cabeçalho, lista...) fecha qualquer menu aberto
 document.addEventListener('pointerdown', (e) => {
   if (!map || e.target.closest('.card, .adder, .link-anchor, .node, .link-hit, .resize-handle, #editor')) return;
-  const pops = [stylePop, nodeMenu, imagePop, ...document.querySelectorAll('.link-pop')];
+  const pops = [stylePop, nodeMenu, imagePop, attachPop, ...document.querySelectorAll('.link-pop')];
   if (pops.every(p => p.hidden)) return;
   for (const p of pops) p.hidden = true;
   render();
@@ -1162,7 +1166,7 @@ async function addImage(file) {
   }
 }
 
-$('#image-btn').onclick = () => { imagePop.hidden = !imagePop.hidden; stylePop.hidden = nodeMenu.hidden = true; render(); };
+$('#image-btn').onclick = () => { imagePop.hidden = !imagePop.hidden; stylePop.hidden = nodeMenu.hidden = attachPop.hidden = true; render(); };
 $('#image-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; addImage(f); });
 const drop = $('#image-drop');
 drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
@@ -1173,3 +1177,71 @@ $('#image-remove').onclick = () => {
   imagePop.hidden = true;
   mutate(() => { delete n.image; });
 };
+
+// ---------- Anexos ----------
+// selo no canto do nó: clipe + quantidade; clicar abre a lista
+function drawAttachBadge(b, n) {
+  const x = b.x + b.w - 14, y = b.y - 6;
+  const g = el('g', { class: 'attach-badge', 'data-id': b.id }, viewport);
+  el('rect', { x: x - 18, y: y - 9, width: 36, height: 18, rx: 9, fill: '#fff', stroke: b.color, 'stroke-width': 1.5 }, g);
+  el('use', { href: '#i-paperclip', x: x - 15, y: y - 7, width: 14, height: 14, fill: 'none', stroke: b.color, 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);
+  el('text', { x: x + 7, y, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: b.color }, g).textContent = n.attachments.length;
+  g.addEventListener('click', (e) => {
+    e.stopPropagation();
+    select(b.id, true);
+    stylePop.hidden = nodeMenu.hidden = imagePop.hidden = true;
+    attachPop.hidden = false;
+    render();
+  });
+}
+
+const fmtSize = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+
+function fillAttachList(n) {
+  const items = (n.attachments ?? []).map((a, i) => {
+    const li = document.createElement('li');
+    if (FILE_ID.test(a.id)) {
+      const link = document.createElement('a');
+      link.href = fileUrl(a.id);
+      link.download = a.name;
+      link.textContent = a.name;
+      li.append(link);
+    }
+    const size = document.createElement('small');
+    size.textContent = fmtSize(a.size ?? 0);
+    const rm = document.createElement('button');
+    rm.dataset.remove = i;
+    rm.title = 'Remover anexo';
+    rm.textContent = '×';
+    li.append(size, rm);
+    return li;
+  });
+  $('#attach-list').replaceChildren(...items);
+}
+
+async function addAttachments(files) {
+  const id = selected, added = [];
+  try {
+    for (const f of files) {
+      const info = await uploadFile(f);
+      added.push({ id: info.id, name: info.name, size: info.size });
+    }
+  } catch (e) {
+    alert(`Não foi possível enviar o arquivo: ${e.message}`);
+  }
+  const n = findNode(map.root, id)?.node;
+  if (n && added.length) mutate(() => { n.attachments = [...(n.attachments ?? []), ...added]; });
+}
+
+$('#attach-btn').onclick = () => { attachPop.hidden = !attachPop.hidden; stylePop.hidden = nodeMenu.hidden = imagePop.hidden = true; render(); };
+$('#attach-input').addEventListener('change', (e) => { const fs = [...e.target.files]; e.target.value = ''; addAttachments(fs); });
+const attachDrop = $('#attach-drop');
+attachDrop.addEventListener('dragover', (e) => { e.preventDefault(); attachDrop.classList.add('over'); });
+attachDrop.addEventListener('dragleave', () => attachDrop.classList.remove('over'));
+attachDrop.addEventListener('drop', (e) => { e.preventDefault(); attachDrop.classList.remove('over'); addAttachments([...e.dataTransfer.files]); });
+$('#attach-list').addEventListener('click', (e) => {
+  const i = e.target.closest('[data-remove]')?.dataset.remove;
+  if (i === undefined) return;
+  const n = findNode(map.root, selected).node;
+  mutate(() => { n.attachments = n.attachments.filter((_, k) => k !== +i); if (!n.attachments.length) delete n.attachments; });
+});

@@ -28,13 +28,21 @@ class Handler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_PUT(self):
-        self._foreign_host() or self._api("PUT") or self._send(404, {"error": "not found"})
+        self._foreign_host() or self._foreign_origin() or self._api("PUT") or self._send(404, {"error": "not found"})
 
     def do_POST(self):
-        self._foreign_host() or self._api("POST") or self._send(404, {"error": "not found"})
+        self._foreign_host() or self._foreign_origin() or self._api("POST") or self._send(404, {"error": "not found"})
 
     def do_DELETE(self):
-        self._foreign_host() or self._api("DELETE") or self._send(404, {"error": "not found"})
+        self._foreign_host() or self._foreign_origin() or self._api("DELETE") or self._send(404, {"error": "not found"})
+
+    def _foreign_origin(self):
+        # escrita vinda de outra origem (página de outro site aberta no navegador) é recusada
+        port = self.server.server_address[1]
+        if self.headers.get("Origin") in (None, f"http://127.0.0.1:{port}", f"http://localhost:{port}"):
+            return False
+        self._send(403, {"error": "forbidden origin"})
+        return True
 
     def _foreign_host(self):
         # bloqueia DNS rebinding: um site externo apontando para 127.0.0.1 chega com outro Host
@@ -109,6 +117,13 @@ class Handler(SimpleHTTPRequestHandler):
         # /api/maps/<id>/files (POST) e /api/maps/<id>/files/<arquivo> (GET)
         folder = self.server.data_dir / "files" / map_id
         if method == "POST" and sub == "files":
+            # cabeçalho próprio obrigatório: o navegador faz preflight (que não autorizamos) para outros sites
+            if "X-Filename" not in self.headers:
+                self._send(400, {"error": "missing X-Filename"})
+                return
+            if not (self.server.data_dir / f"{map_id}.json").exists():
+                self._send(404, {"error": "map not found"})
+                return
             length = int(self.headers.get("Content-Length") or 0)
             if length > MAX_FILE:
                 self.close_connection = True

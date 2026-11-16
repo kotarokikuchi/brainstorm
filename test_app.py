@@ -31,6 +31,9 @@ class ApiTest(unittest.TestCase):
     def upload(self, map_id, name, data):
         return self.req("POST", f"/api/maps/{map_id}/files", raw=data, headers={"X-Filename": name})
 
+    def make_map(self, map_id="abc"):
+        self.req("PUT", f"/api/maps/{map_id}", {"version": 0, "root": {"text": "a", "children": []}})
+
     def req(self, method, path, body=None, raw=None, headers=None):
         data = raw if raw is not None else (None if body is None else json.dumps(body).encode())
         r = urllib.request.Request(self.base + path, data=data, method=method, headers=headers or {})
@@ -92,6 +95,7 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.req("GET", "/api/maps", headers={"Host": f"localhost:{port}"})[0], 200)
 
     def test_upload_image_is_served_inline(self):
+        self.make_map()
         png = b"\x89PNG\r\n\x1a\n" + b"x" * 100
         status, info = self.upload("abc", "foto.PNG", png)
         self.assertEqual(status, 201)
@@ -104,6 +108,7 @@ class ApiTest(unittest.TestCase):
         self.assertNotIn("Content-Disposition", headers)
 
     def test_non_image_files_always_download(self):
+        self.make_map()
         for name in ("pagina.html", "desenho.svg", "notas.txt", "sem-extensao"):
             status, info = self.upload("abc", name, b"<script>alert(1)</script>")
             self.assertEqual(status, 201, name)
@@ -112,14 +117,31 @@ class ApiTest(unittest.TestCase):
             self.assertEqual(headers["Content-Disposition"], "attachment", name)
 
     def test_file_ids_and_map_ids_are_validated(self):
+        self.make_map()
         self.assertEqual(self.upload("../x", "a.png", b"x")[0], 400)
         self.assertEqual(self.req("GET", "/api/maps/abc/files/..%2F..%2Fapp.py")[0], 400)
         self.assertEqual(self.req("GET", "/api/maps/abc/files/" + "0" * 32 + ".png")[0], 404)
 
     def test_upload_too_large_is_413(self):
+        self.make_map()
         status, _ = self.req("POST", "/api/maps/abc/files", raw=b"x",
                              headers={"X-Filename": "a.bin", "Content-Length": "20000001"})
         self.assertEqual(status, 413)
+
+    def test_cross_site_upload_is_blocked(self):
+        self.make_map()
+        # sem X-Filename seria um POST "simples" (sem preflight) vindo de qualquer site
+        self.assertEqual(self.req("POST", "/api/maps/abc/files", raw=b"x", headers={"Content-Type": "text/plain"})[0], 400)
+        evil = {"X-Filename": "a.png", "Origin": "http://evil.example"}
+        self.assertEqual(self.req("POST", "/api/maps/abc/files", raw=b"x", headers=evil)[0], 403)
+        self.assertEqual(self.req("PUT", "/api/maps/abc", {"version": 1, "root": {"text": "b", "children": []}},
+                                  headers={"Origin": "http://evil.example"})[0], 403)
+        self.assertEqual(self.req("DELETE", "/api/maps/abc", headers={"Origin": "http://evil.example"})[0], 403)
+        port = self.server.server_address[1]
+        ok = {"X-Filename": "a.png", "Origin": f"http://127.0.0.1:{port}"}
+        self.assertEqual(self.req("POST", "/api/maps/abc/files", raw=b"x", headers=ok)[0], 201)
+        self.assertFalse((self.data / "files" / "zzz").exists())
+        self.assertEqual(self.upload("zzz", "a.png", b"x")[0], 404, "mapa inexistente")
 
     def test_deleting_map_removes_its_files(self):
         self.req("PUT", "/api/maps/abc", {"version": 0, "root": {"text": "a", "children": []}})
