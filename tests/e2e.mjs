@@ -29,7 +29,7 @@ ws.onmessage = (m) => { const d = JSON.parse(m.data);
   if (d.method === 'Runtime.consoleAPICalled' && d.params.type === 'error') logs.push(JSON.stringify(d.params.args)); };
 const cmd = (method, params = {}) => new Promise(r => { const id = ++seq; waiting.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
 const ev = async (expr) => (await cmd('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result.result.value;
-const KEYS = { Tab: 9, Enter: 13, Escape: 27, Delete: 46, ' ': 32, ArrowRight: 39, ArrowLeft: 37, ArrowDown: 40, z: 90, c: 67, v: 86, b: 66, i: 73, F2: 113 };
+const KEYS = { Tab: 9, Enter: 13, Escape: 27, Delete: 46, ' ': 32, ArrowRight: 39, ArrowLeft: 37, ArrowDown: 40, z: 90, c: 67, v: 86, b: 66, i: 73, '.': 190, F2: 113 };
 async function key(k, mods = 0) { 
   const base = { key: k, code: k.length === 1 ? 'Key' + k.toUpperCase() : k, windowsVirtualKeyCode: KEYS[k], modifiers: mods };
   await cmd('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
@@ -268,7 +268,7 @@ await clickNode('Q2');
 await ev(`document.querySelector('#more-btn').click()`);
 assert.equal(await menuOpen(), true, 'menu abre');
 assert.deepEqual(await ev(`[...document.querySelectorAll('#node-menu [data-action]')].map(b => b.dataset.action)`),
-  ['child', 'sibling', 'collapse', 'link', 'copy', 'paste', 'delete']);
+  ['child', 'sibling', 'collapse', 'focus', 'link', 'copy', 'paste', 'delete']);
 await menu('copy');
 assert.equal(await menuOpen(), false, 'menu fecha após ação');
 await clickNode('Time');
@@ -600,6 +600,30 @@ await sleep(900);
 assert.equal((await orcNode()).url, undefined, 'remover link');
 await ev(`document.activeElement.blur()`);
 await key('Escape');
+
+// modo foco: Ctrl+. mostra só o ramo; Esc sai; menu "Focar neste ramo"; botão "Sair do foco"
+await clickNode('Cronograma');
+await key('.', 2);
+await sleep(300);
+assert.equal(await ev(`!document.querySelector('#focus-bar').hidden`), true, 'barra do foco aparece');
+const inFocus = await texts();
+assert.ok(inFocus.some(t => t.startsWith('Cronograma')), 'ramo focado aparece');
+assert.ok(!inFocus.some(t => t.startsWith('Recursos')), 'outros ramos somem');
+await key('Escape');
+await sleep(300);
+assert.equal(await ev(`document.querySelector('#focus-bar').hidden`), true, 'Esc sai do foco');
+assert.ok((await texts()).some(t => t.startsWith('Recursos')), 'mapa inteiro de volta');
+await clickNode('Cronograma');
+await ev(`document.querySelector('#more-btn').click()`);
+await menu('focus');
+await sleep(300);
+assert.ok(!(await texts()).some(t => t.startsWith('Recursos')), 'menu "Focar neste ramo"');
+await key('Tab'); await typeText('Novo no foco'); await key('Enter');  // edição continua funcionando no foco
+await sleep(900);
+assert.ok((await getMap()).root.children.find(c => c.text.startsWith('Cronograma')).children.some(c => c.text === 'Novo no foco'));
+await ev(`document.querySelector('#focus-exit').click()`);
+await sleep(300);
+assert.equal(await ev(`document.querySelector('#focus-bar').hidden`), true, 'botão sai do foco');
 
 // conflito: outra "aba" grava antes
 await sleep(900);

@@ -180,3 +180,8 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 #url-error { margin: 0; font-size: 13px; color: var(--danger); }
 #url-error[hidden] { display: none; }
 .url-icon { cursor: pointer; }
+
+/* Modo foco */
+#focus-bar { top: 14px; left: 50%; transform: translateX(-50%); gap: 12px; padding: 6px 6px 6px 14px; font-size: 14px; }
+#focus-bar strong { max-width: 280px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+#focus-exit { border: none; background: #f0f0f6; border-radius: 8px; }

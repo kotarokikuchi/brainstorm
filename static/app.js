@@ -10,7 +10,8 @@ const svg = $('#canvas'), viewport = $('#viewport'), input = $('#editor'), statu
 let map = null;          // mapa aberto
 let selected = null;     // id do nó selecionado
 let editing = null;
-let toolbarOn = false;   // barra flutuante visível (só depois de clicar num nó)      // {id, isNew} enquanto o input está ativo
+let toolbarOn = false;   // barra flutuante visível (só depois de clicar num nó)
+let focusId = null;      // modo foco: id do ramo mostrado como centro (null = mapa inteiro)      // {id, isNew} enquanto o input está ativo
 let boxes = [];          // caixas do último render
 let history = new History();
 const view = { x: 0, y: 0, k: 1 };  // translação + escala do viewport
@@ -84,6 +85,7 @@ async function openMap(id) {
   history = new History();
   selected = map.root.id;
   toolbarOn = false;
+  focusId = null;
   if (conflict) dirty = false;  // edições do mapa em conflito foram abandonadas ao sair dele
   conflict = false;
   document.body.dataset.view = 'editor';
@@ -148,12 +150,17 @@ const el = (tag, attrs = {}, parent) => {
 function render() {
   if (!map) return;
   $('#title').textContent = map.root.text;
-  const res = layout(map, measure);
+  if (focusId && !findNode(map.root, focusId)) focusId = null;  // ramo focado foi apagado/desfeito
+  const res = layout(map, measure, focusId);
   boxes = res.nodes;
-  // seleção nunca fica num nó invisível (recolhido/apagado): sobe ao ancestral visível
-  if (selected !== null) {
-    while (!boxes.some(b => b.id === selected)) selected = findNode(map.root, selected)?.parent?.id ?? map.root.id;
+  // seleção nunca fica num nó invisível (recolhido/apagado/fora do foco): sobe ao ancestral visível
+  if (selected !== null && !boxes.some(b => b.id === selected)) {
+    let id = selected;
+    while (id && !boxes.some(b => b.id === id)) id = findNode(map.root, id)?.parent?.id;
+    selected = id ?? focusId ?? map.root.id;
   }
+  $('#focus-bar').hidden = !focusId;
+  if (focusId) $('#focus-title').textContent = findNode(map.root, focusId).node.text;
   viewport.setAttribute('transform', `translate(${view.x} ${view.y}) scale(${view.k})`);
   viewport.replaceChildren();
   // na lista, arestas longas primeiro: o tronco fica segmentado com a cor de cada ramo
@@ -386,6 +393,9 @@ document.addEventListener('keydown', (ev) => {
     if (key.startsWith('Arrow') || key === 'Tab' || key === 'Enter') { ev.preventDefault(); select(map.root.id); }
   } else if (!selected) {
     return;
+  } else if (ctrl && key === '.') {
+    ev.preventDefault();
+    actions.focus();
   } else if (ctrl && (key.toLowerCase() === 'b' || key.toLowerCase() === 'i')) {
     ev.preventDefault();
     toggleText(key.toLowerCase() === 'b' ? 'textBold' : 'textItalic');
@@ -406,8 +416,11 @@ document.addEventListener('keydown', (ev) => {
     addAndEdit(() => addChild(map, selected));
   } else if (key === 'Enter') {
     ev.preventDefault();
-    addAndEdit(() => addSibling(map, selected));
+    actions.sibling();
   } else if (key === 'Escape') {
+    // Esc fecha o que estiver aberto; sem nada aberto, sai do modo foco
+    const busy = linking || selectedLink || nodePops.some(p => !p.hidden) || [...document.querySelectorAll('.link-pop')].some(p => !p.hidden);
+    if (!busy && focusId) setFocus(null);
     linking = null;
     selectedLink = null;
     closeNodePops();
@@ -933,7 +946,9 @@ let clipboard = null;  // JSON do ramo copiado (vale entre mapas na mesma aba)
 
 const actions = {
   child: () => addAndEdit(() => addChild(map, selected)),
-  sibling: () => addAndEdit(() => addSibling(map, selected)),
+  // no foco, o centro não ganha irmão (ficaria fora da tela): vira filho
+  sibling: () => addAndEdit(() => (selected === focusId ? addChild : addSibling)(map, selected)),
+  focus: () => setFocus(focusId === selected ? null : selected),
   collapse: () => {
     const n = findNode(map.root, selected).node;
     if (n.children.length && n !== map.root) mutate(() => { n.collapsed = !n.collapsed; });
@@ -1408,3 +1423,13 @@ $('#url-remove').onclick = () => {
   urlPop.hidden = true;
   mutate(() => { delete n.url; });
 };
+
+// ---------- Modo foco ----------
+function setFocus(id) {
+  focusId = id && id !== map.root.id ? id : null;
+  selected = id ?? selected;
+  closeNodePops();
+  render();
+  fitView();
+}
+$('#focus-exit').onclick = () => setFocus(null);

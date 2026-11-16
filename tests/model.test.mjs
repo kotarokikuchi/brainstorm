@@ -468,3 +468,19 @@ test('safeUrl accepts only http(s) and adds https:// when missing', () => {
   assert.equal(safeUrl(''), null);
   assert.equal(safeUrl('não é url'), null);
 });
+
+// ---- Modo foco: layout a partir de um ramo ----
+test('layout with a focus id draws only that branch, centered, keeping its color', () => {
+  const { m, r1, l1, g1, g2 } = sample('map');
+  for (const name of ['map', 'org', 'list']) {
+    m.layout = name;
+    const res = layout(m, measure, r1.id);
+    assert.deepEqual(res.nodes.map(n => n.id).sort(), [r1.id, g1.id, g2.id].sort(), name);
+    const b = byId(res);
+    assert.equal(b[r1.id].depth, 0);
+    assert.equal(b[r1.id].x + b[r1.id].w / 2, 0, `${name}: centrado`);
+    assert.equal(b[r1.id].color, r1.color, `${name}: cor do ramo`);
+    assert.equal(b[g1.id].color, r1.color, `${name}: filhos herdam`);
+    assert.equal(b[l1.id], undefined);
+  }
+});
