@@ -719,6 +719,22 @@ await ev(`window.fetch = window.__realFetch`);
 await sleep(6000);  // nova tentativa a cada 5 s
 assert.equal(await q1Text(), 'Q1 offline', 'alteração salva quando a rede volta');
 
+// histórico de versões: painel lista versões; restaurar a mais antiga traz o mapa inicial; Ctrl+Z volta
+const recKids = async () => (await recursos()).children.map(c => c.text);
+const recBefore = await recKids();
+await ev(`document.querySelector('#history-btn').click()`);
+await sleep(500);
+assert.equal(await ev(`!document.querySelector('#history-panel').hidden`), true, 'painel de histórico abre');
+assert.ok(await ev(`document.querySelectorAll('#history-list li').length`) >= 1, 'lista versões');
+dialogAccept = true;
+await ev(`[...document.querySelectorAll('#history-list [data-restore]')].at(-1).click()`);  // a mais antiga
+await sleep(1200);
+assert.deepEqual(await recKids(), ['Time', 'Orçamento'], 'versão antiga restaurada');
+assert.equal(await ev(`document.querySelector('#history-panel').hidden`), true, 'painel fecha');
+await key('z', 2);
+await sleep(900);
+assert.deepEqual(await recKids(), recBefore, 'Ctrl+Z desfaz a restauração');
+
 // conflito: outra "aba" grava antes
 await sleep(900);
 const cur = await getMap();

@@ -19,6 +19,8 @@ ID_RE = re.compile(r"^[a-z0-9-]{1,64}$")
 MAX_BODY = 5_000_000
 START = f"{os.getpid()}-{time.time()}"  # muda a cada partida/reinício do servidor
 MAX_FILE = 20_000_000
+HISTORY_INTERVAL = 120  # s entre cópias no histórico (autosave grava a cada edição)
+HISTORY_MAX = 50        # versões guardadas por mapa
 FILE_RE = re.compile(r"^[a-f0-9]{32}(\.[a-z0-9]{1,10})?$")
 # só estes tipos abrem no navegador; o resto (inclusive SVG/HTML) sempre baixa como anexo
 INLINE = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
@@ -78,6 +80,9 @@ class Handler(SimpleHTTPRequestHandler):
         if not ID_RE.match(map_id):
             self._send(400, {"error": "invalid id"})
             return True
+        if sub == "history" or sub.startswith("history/"):
+            self._history(method, map_id, sub)
+            return True
         if sub:
             self._files(method, map_id, sub)
             return True
@@ -94,6 +99,7 @@ class Handler(SimpleHTTPRequestHandler):
             else:
                 file.unlink()
                 shutil.rmtree(self.server.data_dir / "files" / map_id, ignore_errors=True)
+                shutil.rmtree(self.server.data_dir / "history" / map_id, ignore_errors=True)
                 self._send(204, None)
         elif method == "PUT":
             self._put(map_id, file)
@@ -125,6 +131,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self._send(409, {"version": stored})
                 return
             body["version"] = stored + 1
+            self._snapshot(map_id, file, stored)
         else:
             body["version"] = 1
         body["id"] = map_id
@@ -132,6 +139,42 @@ class Handler(SimpleHTTPRequestHandler):
         tmp.write_text(json.dumps(body, ensure_ascii=False), "utf-8")
         os.replace(tmp, file)
         self._send(200, {"version": body["version"]})
+
+    def _snapshot(self, map_id, file, version):
+        # guarda a versão que vai ser sobrescrita, no máximo uma a cada HISTORY_INTERVAL s
+        folder = self.server.data_dir / "history" / map_id
+        folder.mkdir(parents=True, exist_ok=True)
+        snaps = sorted(folder.glob("*.json"), key=lambda p: int(p.stem))
+        if snaps and time.time() - snaps[-1].stat().st_mtime < self.server.history_interval:
+            return
+        shutil.copy2(file, folder / f"{version}.json")  # mantém a data em que aquela versão foi gravada
+        for old in sorted(folder.glob("*.json"), key=lambda p: int(p.stem))[:-HISTORY_MAX]:
+            old.unlink()
+
+    def _history(self, method, map_id, sub):
+        # GET /api/maps/<id>/history (lista) e /api/maps/<id>/history/<versão> (conteúdo)
+        folder = self.server.data_dir / "history" / map_id
+        if method != "GET":
+            self._send(404, {"error": "not found"})
+            return
+        _, _, version = sub.partition("/")
+        if not version:
+            items = []
+            for f in sorted(folder.glob("*.json"), key=lambda p: int(p.stem), reverse=True):
+                data = read_map(f)
+                if data is None:
+                    continue
+                count = lambda n: 1 + sum(count(c) for c in n.get("children", []))
+                saved = datetime.fromtimestamp(f.stat().st_mtime, timezone.utc).isoformat()
+                items.append({"version": int(f.stem), "saved": saved,
+                              "title": data["root"].get("text", ""), "nodes": count(data["root"])})
+            self._send(200, items)
+            return
+        if not version.isdigit():
+            self._send(400, {"error": "invalid version"})
+            return
+        data = read_map(folder / f"{version}.json") if (folder / f"{version}.json").exists() else None
+        self._send(*((200, data) if data is not None else (404, {"error": "not found"})))
 
     def _files(self, method, map_id, sub):
         # /api/maps/<id>/files (POST) e /api/maps/<id>/files/<arquivo> (GET)
@@ -237,6 +280,7 @@ def make_server(data_dir: Path, port: int) -> ThreadingHTTPServer:
     server = ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=str(ROOT / "static")))
     server.data_dir = data_dir
     server.static_dir = ROOT / "static"
+    server.history_interval = HISTORY_INTERVAL
     return server
 
 

@@ -167,6 +167,41 @@ class ApiTest(unittest.TestCase):
         self.assertEqual((status, body), (500, {"error": "corrupt map file"}))
         self.assertEqual((self.data / "ruim.json").read_text(), "{", "arquivo corrompido não é sobrescrito")
 
+    def put_text(self, version, text):
+        return self.req("PUT", "/api/maps/abc", {"version": version, "root": {"text": text, "children": []}})
+
+    def test_history_keeps_previous_versions(self):
+        self.server.history_interval = 0
+        for v in range(3):
+            self.put_text(v, f"v{v}")
+        status, items = self.req("GET", "/api/maps/abc/history")
+        self.assertEqual(status, 200)
+        self.assertEqual([i["version"] for i in items], [2, 1], "mais recente primeiro")
+        self.assertEqual((items[0]["title"], items[0]["nodes"]), ("v1", 1))
+        self.assertIn("saved", items[0])
+        status, old = self.req("GET", "/api/maps/abc/history/1")
+        self.assertEqual((status, old["root"]["text"]), (200, "v0"))
+        self.assertEqual(self.req("GET", "/api/maps/abc/history/99")[0], 404)
+        self.assertEqual(self.req("GET", "/api/maps/abc/history/..%2Fx")[0], 400)
+
+    def test_history_is_throttled_and_capped(self):
+        for v in range(3):  # intervalo padrão (2 min): só a primeira gravação guarda cópia
+            self.put_text(v, f"v{v}")
+        self.assertEqual(len(self.req("GET", "/api/maps/abc/history")[1]), 1)
+        self.server.history_interval = 0
+        for v in range(3, 60):
+            self.put_text(v, f"v{v}")
+        items = self.req("GET", "/api/maps/abc/history")[1]
+        self.assertEqual(len(items), 50, "no máximo 50 versões")
+        self.assertEqual(items[0]["version"], 59)
+
+    def test_deleting_map_removes_its_history(self):
+        self.server.history_interval = 0
+        self.put_text(0, "a")
+        self.put_text(1, "b")
+        self.req("DELETE", "/api/maps/abc")
+        self.assertFalse((self.data / "history" / "abc").exists())
+
     def test_deleting_map_removes_its_files(self):
         self.req("PUT", "/api/maps/abc", {"version": 0, "root": {"text": "a", "children": []}})
         _, info = self.upload("abc", "foto.png", b"x")
