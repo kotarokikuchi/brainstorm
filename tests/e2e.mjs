@@ -269,7 +269,7 @@ await clickNode('Q2');
 await ev(`document.querySelector('#more-btn').click()`);
 assert.equal(await menuOpen(), true, 'menu abre');
 assert.deepEqual(await ev(`[...document.querySelectorAll('#node-menu [data-action]')].map(b => b.dataset.action)`),
-  ['child', 'sibling', 'collapse', 'focus', 'link', 'copy', 'paste', 'delete']);
+  ['child', 'sibling', 'collapse', 'focus', 'link', 'copy', 'cut', 'paste', 'delete']);
 await menu('copy');
 assert.equal(await menuOpen(), false, 'menu fecha após ação');
 await clickNode('Time');
@@ -1301,6 +1301,64 @@ await typeText('Planejamento 2027');
 await key('Enter'); await sleep(900);
 assert.equal((await getMap()).root.text, 'Planejamento 2027', 'nome do mapa salvo');
 assert.equal(await ev(`document.querySelector('#title').textContent`), 'Planejamento 2027');
+
+// área de transferência do sistema (eventos copy/paste): mapa copia ramo como lista com recuo; texto colado vira tópicos
+const clipEvent = (type, data = {}) => ev(`(() => { const dt = new DataTransfer();
+  for (const [k, v] of Object.entries(${JSON.stringify(data)})) dt.setData(k, v);
+  const e = new ClipboardEvent('${type}', { clipboardData: dt, bubbles: true, cancelable: true });
+  document.dispatchEvent(e);
+  return { prevented: e.defaultPrevented, types: [...dt.types], text: dt.getData('text/plain'), json: dt.getData('application/x-galho-board') || dt.getData('application/x-galho-branch') }; })()`);
+await clickNode('Planejamento 2027');
+const mcopy = await clipEvent('copy');
+assert.ok(mcopy.prevented && mcopy.json && mcopy.text.startsWith('Planejamento 2027\n  '), 'copiar ramo: Galho + lista com recuo');
+const kidsBefore = (await getMap()).root.children.length;
+await clipEvent('paste', { 'text/plain': 'Ideia A\n  Detalhe A1\nIdeia B' });
+await sleep(900);
+const rootKids = (await getMap()).root.children;
+assert.equal(rootKids.length, kidsBefore + 2, 'texto colado vira tópicos');
+assert.deepEqual(rootKids.find(c => c.text === 'Ideia A').children.map(c => c.text), ['Detalhe A1'], 'recuo vira filho');
+await clipEvent('paste', { 'application/x-galho-branch': '{"text": 1}' });
+await sleep(500);
+assert.equal((await getMap()).root.children.length, kidsBefore + 2, 'ramo inválido é ignorado');
+
+// quadro: copiar elementos para o sistema e colar (também depois de recarregar); texto de fora vira texto
+await ev(`location.hash = '#/board/${boardId}'`); await sleep(1200);
+await key('a', 2);
+const nSel = await selCount(), nBoard = (await boardEls()).length;
+const bcopy = await clipEvent('copy');
+assert.ok(bcopy.prevented && JSON.parse(bcopy.json).length === nSel, 'copiar elementos para o sistema');
+await cmd('Page.reload'); await sleep(1500);
+await clipEvent('paste', { 'application/x-galho-board': bcopy.json });
+await sleep(900);
+assert.equal((await boardEls()).length, nBoard + nSel, 'colar depois de recarregar');
+await clipEvent('paste', { 'text/plain': 'Texto colado' });
+await sleep(900);
+assert.deepEqual([(await boardEls()).at(-1).type, (await boardEls()).at(-1).text], ['text', 'Texto colado'], 'texto de fora vira texto');
+await clipEvent('paste', { 'application/x-galho-board': '[{"type":"script","x":0,"y":0}]' });
+await sleep(500);
+assert.equal((await boardEls()).length, nBoard + nSel + 1, 'elemento desconhecido é ignorado');
+
+// Ctrl+X recorta: no sistema (evento cut) e pela tecla (cópia interna); colar devolve
+const nCut = (await boardEls()).length, cutId = (await boardEls()).at(-1).id;
+await key('a', 2);
+await key('Escape');
+const lastBox = await elBox(cutId);
+await click(lastBox.x + lastBox.w / 2, lastBox.y + lastBox.h / 2);
+const bcut = await clipEvent('cut');
+await sleep(900);
+assert.ok(bcut.prevented && JSON.parse(bcut.json)[0].id === cutId, 'recortar copia para o sistema');
+assert.equal((await boardEls()).length, nCut - 1, 'recortar apaga');
+await clipEvent('paste', { 'application/x-galho-board': bcut.json });
+await sleep(900);
+assert.equal((await boardEls()).length, nCut, 'colar devolve o recortado');
+await key('x', 2);
+await sleep(900);
+assert.equal((await boardEls()).length, nCut - 1, 'Ctrl+X pela tecla também recorta');
+await ev(`location.hash = '#/map/demo'`); await sleep(1000);
+await clickNode('Ideia B');
+await clipEvent('cut');
+await sleep(900);
+assert.ok(!(await getMap()).root.children.some(c => c.text === 'Ideia B'), 'mapa: recortar apaga o ramo');
 
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');

@@ -573,3 +573,16 @@ test('branchLayout is ignored when the whole map is not in map layout', () => {
   r1.branchLayout = 'list';
   assert.deepEqual(layout(m, measure).nodes.map(n => [n.id, n.x, n.y]), plain);
 });
+
+// ---- Área de transferência ----
+import { branchToText, textToBranches } from '../static/model.js';
+
+test('branchToText and textToBranches round-trip an indented outline', () => {
+  const b = { text: 'Raiz', children: [{ text: 'A', children: [{ text: 'A1', children: [] }] }, { text: 'B', children: [] }] };
+  assert.equal(branchToText(b), 'Raiz\n  A\n    A1\n  B');
+  const back = textToBranches(branchToText(b));
+  const shape = (n) => [n.text, n.children.map(shape)];
+  assert.deepEqual(back.map(shape), [shape(b)]);
+  assert.deepEqual(textToBranches('- um\n\t* dois\n3. três\n\n').map(shape), [['um', [['dois', []]]], ['três', []]], 'marcadores, tab, linhas vazias');
+  assert.ok(back[0].id && back[0].children[0].id !== back[0].id, 'tópicos novos com id');
+});

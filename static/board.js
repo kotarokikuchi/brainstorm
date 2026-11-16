@@ -326,6 +326,8 @@ document.addEventListener('keydown', (e) => {
   else if (ctrl && k === 'd') { e.preventDefault(); act('duplicate'); }
   else if (ctrl && k === 'k') { e.preventDefault(); act('link'); }
   else if (ctrl && k === 'c') { if (selection.length) clipboard = JSON.stringify(board.elements.filter(x => selection.includes(x.id))); }
+  // Ctrl+X: o evento "cut" (sistema) vem depois desta tecla; se ele não vier, recorta só na cópia interna
+  else if (ctrl && k === 'x') { if (selection.length) pendingCut = setTimeout(() => { clipboard = JSON.stringify(board.elements.filter(x => selection.includes(x.id))); act('delete'); }, 0); }
   // Ctrl+V: sem preventDefault, para o evento "paste" (que traz imagens) acontecer antes; se não houver imagem, cola os elementos
   else if (ctrl && k === 'v') { pendingPaste = setTimeout(paste, 0); }
   else if (ctrl && e.shiftKey && (e.key === ']' || e.key === '}')) { e.preventDefault(); act('front'); }
@@ -354,11 +356,45 @@ document.addEventListener('keyup', (e) => {
 const imageInput = $('#board-image-input');
 let pendingPaste = 0;
 imageInput.addEventListener('change', () => { const f = imageInput.files[0]; imageInput.value = ''; insertImage(f); });
-document.addEventListener('paste', (e) => {
-  if (!board || document.body.dataset.view !== 'board' || e.target.closest?.('input, textarea, select')) return;
-  const f = [...(e.clipboardData?.files ?? [])].find(x => x.type.startsWith('image/'));
-  if (f) { clearTimeout(pendingPaste); e.preventDefault(); insertImage(f); }
+// área de transferência do sistema: vale entre abas e depois de recarregar (a variável clipboard é só o plano B)
+const CLIP = 'application/x-galho-board';
+const boardKeys = (e) => board && document.body.dataset.view === 'board' && !e.target.closest?.('input, textarea, select');
+let pendingCut = 0;
+function copyTo(e) {
+  const items = board.elements.filter(x => selection.includes(x.id));
+  clipboard = JSON.stringify(items);
+  e.clipboardData.setData(CLIP, clipboard);
+  e.clipboardData.setData('text/plain', items.map(x => x.text).filter(Boolean).join('\n'));  // texto para outros programas
+  e.preventDefault();
+}
+document.addEventListener('copy', (e) => { if (boardKeys(e) && selection.length) copyTo(e); });
+document.addEventListener('cut', (e) => {  // recortar = copiar e apagar
+  if (!boardKeys(e) || !selection.length) return;
+  clearTimeout(pendingCut);
+  copyTo(e);
+  act('delete');
 });
+// colar: elementos do Galho > imagem > texto (vira um texto no centro da tela)
+document.addEventListener('paste', (e) => {
+  if (!boardKeys(e) || !e.clipboardData) return;
+  const json = e.clipboardData.getData(CLIP);
+  const f = [...e.clipboardData.files].find(x => x.type.startsWith('image/'));
+  const text = e.clipboardData.getData('text/plain').replace(/\s+$/, '');
+  if (!json && !f && !text) return;  // nada aproveitável: fica o plano B (cópia interna)
+  clearTimeout(pendingPaste);
+  e.preventDefault();
+  if (json) { clipboard = json; paste(); } else if (f) insertImage(f); else pasteText(text);
+});
+function pasteText(text) {
+  const before = snapshot(), [cx, cy] = [(svg.clientWidth / 2 - view.x) / view.k, (svg.clientHeight / 2 - view.y) / view.k];
+  const item = createElement('text', [cx, cy], { ...style, text: text.slice(0, 10000) });
+  measureText(item);
+  Object.assign(item, { x: cx - item.w / 2, y: cy - item.h / 2 });
+  board.elements.push(item);
+  setTool('select');
+  selection = [item.id];
+  changed(before);
+}
 svg.addEventListener('dragover', (e) => e.preventDefault());
 svg.addEventListener('drop', (e) => {
   const f = [...e.dataTransfer.files].find(x => x.type.startsWith('image/'));
@@ -508,9 +544,18 @@ function act(name) {
   changed(before);
 }
 
+// elementos colados podem ter vindo de outro site: só tipos conhecidos, com posição e pontos numéricos
+const KINDS = new Set([...SHAPES, 'text', 'image', 'note']);
+const okElement = (x) => !!x && typeof x === 'object' && KINDS.has(x.type)
+  && [x.x, x.y, x.w ?? 0, x.h ?? 0].every(Number.isFinite)
+  && (x.points === undefined || (Array.isArray(x.points) && x.points.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite))))
+  && (x.text === undefined || typeof x.text === 'string');
 function paste() {
   if (!clipboard) return;
-  const items = JSON.parse(clipboard), before = snapshot();
+  let items;
+  try { items = JSON.parse(clipboard); } catch { return; }
+  if (!Array.isArray(items) || !items.every(okElement)) return;
+  const before = snapshot();
   const copies = duplicateElements(items, items.map(x => x.id), 20);
   board.elements.push(...copies);
   selection = copies.map(c => c.id);

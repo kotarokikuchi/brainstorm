@@ -555,6 +555,24 @@ export function outdentNode(map, nodeId) {
 }
 
 // ---- Exportar: Markdown (raiz = título, ramos = lista com recuo; tudo, mesmo recolhido) ----
+// ---- Área de transferência: ramo como texto com recuo (2 espaços por nível) e o caminho de volta ----
+export const branchToText = (n, depth = 0) =>
+  [`${'  '.repeat(depth)}${n.text}`, ...n.children.flatMap(c => branchToText(c, depth + 1))].join('\n');
+
+// cada linha vira um tópico; recuo maior que o da linha de cima = filho; marcadores (- * • 1.) saem
+export function textToBranches(text) {
+  const roots = [], stack = [];
+  for (const raw of text.replace(/\t/g, '  ').split(/\r?\n/)) {
+    if (!raw.trim()) continue;
+    const indent = raw.length - raw.trimStart().length;
+    const n = node(raw.trim().replace(/^([-*•]|\d+[.)])\s+/, ''));
+    while (stack.length && stack.at(-1).indent >= indent) stack.pop();
+    (stack.length ? stack.at(-1).node.children : roots).push(n);
+    stack.push({ indent, node: n });
+  }
+  return roots;
+}
+
 export function toMarkdown(map) {
   const esc = (t) => t.replace(/([\\[\]*_`#])/g, '\\$1');
   const item = (n) => {
