@@ -253,6 +253,27 @@ await key('ArrowRight');
 assert.equal(await ev(`!!document.querySelector('.selected-ring')`), true, 'seta seleciona de novo');
 await sleep(900);
 
+// curvar ligação: seta selecionada mostra o ponto de controle; arrastar curva; desfazer/refazer; duplo clique volta ao automático
+await ev(`document.querySelector('#viewport .link-hit').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
+const bh = await ev(`(() => { const r = document.querySelector('#viewport .link-bend').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
+const [bx0, by0] = center(bh);
+await mouse('mousePressed', bx0, by0);
+for (let i = 1; i <= 5; i++) { await mouse('mouseMoved', bx0 + 18 * i, by0 + 14 * i); await sleep(30); }
+await mouse('mouseReleased', bx0 + 90, by0 + 70);
+await sleep(900);
+const bend = async () => (await getMap()).links[0].bend;
+assert.ok((await bend()) && Math.hypot(...(await bend())) > 50, 'curva gravada');
+assert.match(await ev(`document.querySelector('#viewport .link').getAttribute('d')`), / Q/, 'seta passa pelo ponto');
+await key('z', 2);
+await sleep(900);
+assert.equal(await bend(), undefined, 'desfazer a curva');
+await key('z', 2 | 8);
+await sleep(900);
+assert.ok(await bend(), 'refazer a curva');
+await ev(`document.querySelector('#viewport .link-bend').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
+await sleep(900);
+assert.equal(await bend(), undefined, 'duplo clique volta à curva automática');
+
 // conflito: outra "aba" grava antes
 await sleep(900);
 const cur = await getMap();
