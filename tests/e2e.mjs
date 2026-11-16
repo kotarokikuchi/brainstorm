@@ -1263,6 +1263,19 @@ await ev(`(() => { const dt = new DataTransfer();
 await sleep(800);
 assert.equal(Object.values((await tree()).place).filter(v => v === vip.id).length, 1, 'soltar na trilha leva o documento para o Início');
 
+// pastas: clicar no nome da pasta aberta (título) edita ali mesmo; Esc desiste, Enter salva
+await ev(`location.hash = '#/folder/${dest.id}'`); await sleep(800);
+await ev(`document.querySelector('#list-title .crumb-current').click()`);
+assert.equal(await ev(`document.activeElement?.className`), 'crumb-input', 'nome vira campo de edição');
+await typeText('Rascunho');
+await key('Escape'); await sleep(800);
+assert.equal((await tree()).folders.find(f => f.id === dest.id).name, 'Destino', 'Esc desiste');
+await ev(`document.querySelector('#list-title .crumb-current').click()`);
+await typeText('Projetos');
+await key('Enter'); await sleep(800);
+assert.equal((await tree()).folders.find(f => f.id === dest.id).name, 'Projetos', 'Enter salva o novo nome');
+assert.equal(await ev(`document.querySelector('#list-title .crumb-current').textContent`), 'Projetos');
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);

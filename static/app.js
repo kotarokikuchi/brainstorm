@@ -108,11 +108,18 @@ async function showList(folderId = null) {
   // trilha: Meus mapas › Trabalho › Clientes
   const crumbs = [{ id: null, name: 'Meus mapas' }, ...folderPath(tree, listFolder)];
   $('#list-title').replaceChildren(...crumbs.flatMap((c, i) => {
+    const sep = Object.assign(document.createElement('span'), { className: 'crumb-sep', textContent: '›' });
+    if (c.id && i === crumbs.length - 1) {  // pasta aberta: clicar no nome edita ali mesmo
+      const cur = Object.assign(document.createElement('span'), { className: 'crumb-current', textContent: c.name, title: 'Clique para renomear', tabIndex: 0 });
+      cur.onclick = () => editFolderName(cur, c);
+      cur.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); editFolderName(cur, c); } };
+      return [sep, cur];
+    }
     const a = document.createElement('a');
     a.href = folderHref(c.id);
     a.textContent = c.name;
     a.dataset.drop = c.id ?? '';  // soltar aqui move para essa pasta
-    return i ? [Object.assign(document.createElement('span'), { className: 'crumb-sep', textContent: '›' }), a] : [a];
+    return i ? [sep, a] : [a];
   }));
   const btn = (text, data, value) => {
     const b = document.createElement('button');
@@ -173,9 +180,7 @@ $('#maps').addEventListener('click', async (e) => {
   else if (d?.moveDoc || d?.moveFolder) return openMoveMenu(d.moveDoc ? 'doc' : 'folder', d.moveDoc ?? d.moveFolder, e.target.closest('button'));
   else if (d?.renameFolder) {
     const f = tree.folders.find(x => x.id === d.renameFolder);
-    const name = prompt('Nome da pasta', f?.name)?.trim();
-    if (!f || !name || name === f.name) return;
-    await saveTree(t => ({ ...t, folders: t.folders.map(x => (x.id === f.id ? { ...x, name } : x)) }));
+    if (!f || !(await renameFolder(f, prompt('Nome da pasta', f.name)))) return;
   } else if (d?.deleteFolder) {
     const f = tree.folders.find(x => x.id === d.deleteFolder);
     if (!f || !confirm(`Apagar a pasta "${f.name}"? O que está dentro dela vai para a pasta de cima.`)) return;
@@ -234,6 +239,34 @@ listView.addEventListener('drop', (e) => {
   const [kind, id] = data.split(':');
   if (target.dataset.drop !== id) moveItem(kind, id, target.dataset.drop || null);
 });
+
+async function renameFolder(f, input) {
+  const name = input?.trim().slice(0, 200);
+  if (!name || name === f.name) return false;
+  return saveTree(t => ({ ...t, folders: t.folders.map(x => (x.id === f.id ? { ...x, name } : x)) }));
+}
+// nome da pasta no título vira campo: Enter ou clicar fora salva, Esc desiste
+function editFolderName(span, f) {
+  const input = Object.assign(document.createElement('input'), { value: f.name, className: 'crumb-input', maxLength: 200 });
+  const fit = () => { input.style.width = `${Math.max(3, input.value.length + 1)}ch`; };
+  let done = false;
+  const finish = async (save) => {
+    if (done) return;
+    done = true;
+    if (save) await renameFolder(f, input.value);
+    showList(listFolder);
+  };
+  input.oninput = fit;
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  };
+  input.onblur = () => finish(true);
+  fit();
+  span.replaceWith(input);
+  input.focus();
+  input.select();
+}
 
 $('#new-folder').onclick = async () => {
   const name = prompt('Nome da nova pasta')?.trim();
