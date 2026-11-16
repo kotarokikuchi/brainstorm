@@ -175,3 +175,18 @@ test('image elements hit by their whole box and resize freely', () => {
   resizeElement(im, 'se', [130, 70], { ...im });
   assert.deepEqual([im.w, im.h], [120, 60]);
 });
+
+// ---- Camadas, um passo ----
+import { forwardOne, backwardOne } from '../static/board-model.js';
+
+test('forwardOne / backwardOne move the selection one layer', () => {
+  const els = ['a', 'b', 'c', 'd'].map(id => ({ id }));
+  const ids = (xs) => xs.map(x => x.id).join('');
+  assert.equal(ids(forwardOne(els, ['a'])), 'bacd');
+  assert.equal(ids(forwardOne(els, ['a', 'c'])), 'badc');
+  assert.equal(ids(forwardOne(els, ['d'])), 'abcd', 'já no topo');
+  assert.equal(ids(forwardOne(els, ['c', 'd'])), 'abcd', 'bloco no topo não se embaralha');
+  assert.equal(ids(backwardOne(els, ['c'])), 'acbd');
+  assert.equal(ids(backwardOne(els, ['a', 'b'])), 'abcd', 'bloco no fundo não se embaralha');
+  assert.equal(ids(els), 'abcd', 'não altera a lista original');
+});

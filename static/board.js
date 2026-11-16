@@ -3,7 +3,7 @@
 
 import {
   createElement, resizeTo, elementPaths, fillPath, elementBounds, DEFAULTS, elementAt, elementsInBox,
-  moveElements, resizeElement, bringToFront, sendToBack, duplicateElements, elementsHitBy, paint, elementsInPolygon,
+  moveElements, resizeElement, bringToFront, sendToBack, duplicateElements, elementsHitBy, paint, elementsInPolygon, forwardOne, backwardOne,
 } from './board-model.js';
 import { History } from './model.js';
 
@@ -278,6 +278,8 @@ document.addEventListener('keydown', (e) => {
   else if (ctrl && k === 'v') { pendingPaste = setTimeout(paste, 0); }
   else if (ctrl && e.shiftKey && (e.key === ']' || e.key === '}')) { e.preventDefault(); act('front'); }
   else if (ctrl && e.shiftKey && (e.key === '[' || e.key === '{')) { e.preventDefault(); act('back'); }
+  else if (ctrl && e.key === ']') { e.preventDefault(); act('forward'); }
+  else if (ctrl && e.key === '[') { e.preventDefault(); act('backward'); }
   else if ((e.key === 'Delete' || e.key === 'Backspace') && selection.length) { e.preventDefault(); act('delete'); }
   else if (e.key === '?') { help.hidden = !help.hidden; }
   else if (e.key === 'Escape') { help.hidden = true; more.hidden = true; selection = []; setTool('select'); render(); }
@@ -441,6 +443,8 @@ function act(name) {
     selection = copies.map(c => c.id);
   } else if (name === 'front') board.elements = bringToFront(board.elements, selection);
   else if (name === 'back') board.elements = sendToBack(board.elements, selection);
+  else if (name === 'forward') board.elements = forwardOne(board.elements, selection);
+  else if (name === 'backward') board.elements = backwardOne(board.elements, selection);
   changed(before);
 }
 
