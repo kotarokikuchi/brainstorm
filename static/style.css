@@ -171,3 +171,12 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 #text-pop p { margin: 10px 0 6px; font-size: 12px; color: var(--muted); }
 .text-toggles button { font-size: 18px; font-family: Georgia, serif; }
 .text-toggles button.active { background: #e8eefe; color: var(--accent); }
+
+/* Link (URL) no nó */
+#url-pop { flex-direction: column; align-items: stretch; width: 340px; padding: 10px; gap: 6px; }
+#url-form { display: flex; gap: 6px; }
+#url-input { flex: 1; font: inherit; font-size: 14px; border: 1.5px solid var(--line); border-radius: 8px; padding: 6px 10px; outline: none; }
+#url-input:focus { border-color: var(--accent); }
+#url-error { margin: 0; font-size: 13px; color: var(--danger); }
+#url-error[hidden] { display: none; }
+.url-icon { cursor: pointer; }

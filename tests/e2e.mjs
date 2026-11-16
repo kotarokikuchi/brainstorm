@@ -574,6 +574,33 @@ await key('b', 2);
 await sleep(900);
 assert.equal((await orcNode()).textBold, null, 'Ctrl+B volta ao padrão (não negrito)');
 
+// link (URL) no nó: só http(s); ícone 🔗 no nó abre em nova aba; remover
+await clickNode('Orçamento');
+await ev(`document.querySelector('#url-btn').click()`);
+assert.equal(await ev(`!document.querySelector('#url-pop').hidden`), true, 'painel de link abre');
+assert.equal(await ev(`document.activeElement?.id`), 'url-input', 'campo recebe o foco');
+await typeText('javascript:alert(1)');
+await key('Enter');
+await sleep(300);
+assert.equal((await orcNode()).url, undefined, 'javascript: recusado');
+assert.equal(await ev(`!document.querySelector('#url-error').hidden`), true, 'mostra o erro');
+await ev(`document.querySelector('#url-input').value = ''`);
+await typeText('exemplo.com/docs');
+await key('Enter');
+await sleep(900);
+assert.equal((await orcNode()).url, 'https://exemplo.com/docs', 'endereço normalizado e gravado');
+assert.equal(await ev(`!!${orcG}.querySelector('.url-icon')`), true, 'ícone de link no nó');
+await ev(`window.open = (u, t, f) => { window.__opened = [u, t, f]; }`);
+await ev(`${orcG}.querySelector('.url-icon').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
+assert.deepEqual(await ev(`window.__opened`), ['https://exemplo.com/docs', '_blank', 'noopener,noreferrer'], 'clicar abre em nova aba');
+await clickNode('Orçamento');
+await ev(`document.querySelector('#url-btn').click()`);
+await ev(`document.querySelector('#url-remove').click()`);
+await sleep(900);
+assert.equal((await orcNode()).url, undefined, 'remover link');
+await ev(`document.activeElement.blur()`);
+await key('Escape');
+
 // conflito: outra "aba" grava antes
 await sleep(900);
 const cur = await getMap();

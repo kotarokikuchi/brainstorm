@@ -1,6 +1,6 @@
 import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
-  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, sideToward, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
+  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
 } from './model.js';
 
 const $ = (s) => document.querySelector(s);
@@ -126,7 +126,7 @@ function imageSize(image, width) {
 }
 
 const ICON_W = 26;  // ícones dentro do nó (comentário, link)
-const inlineIcons = (n) => (n.comments?.length ? 1 : 0);
+const inlineIcons = (n) => (n.comments?.length ? 1 : 0) + (n.url ? 1 : 0);
 
 function measure(n, depth) {
   const { width, image } = n, icons = inlineIcons(n), scale = SIZE_SCALE[n.textSize] ?? 1;
@@ -219,8 +219,8 @@ function drawNode(b) {
   const img = imageSize(n.image, n.width);
   if (img) el('image', { href: fileUrl(n.image.id), x: b.x + (b.w - img.w) / 2, y: b.y + 8, width: img.w, height: img.h }, g);
   const top = img ? img.h + 8 : 0, cy = b.y + top + (b.h - top) / 2;  // centro da área do texto
-  const icon = n.comments?.length ? ICON_W : 0, tx = b.x + (b.w - icon) / 2;  // texto centrado no espaço sem o ícone
-  if (icon) drawCommentIcon(b, cy, g);
+  const icon = inlineIcons(n) * ICON_W, tx = b.x + (b.w - icon) / 2;  // texto centrado no espaço sem os ícones
+  if (icon) drawInlineIcons(b, cy, g, n);
   const t = el('text', {
     x: tx, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central',
     fill: n.textColor || (solid ? textOn(b.color) : '#1d1d2b'), style: `font: ${fontFor(b.depth, n)}`,
@@ -493,9 +493,9 @@ window.addEventListener('resize', render);
 
 // ---------- Controles flutuantes: barra, estilo, "+" ----------
 const toolbar = $('#toolbar'), stylePop = $('#style-pop'), nodeMenu = $('#node-menu'), imagePop = $('#image-pop'), attachPop = $('#attach-pop'), hints = $('#hints');
-const commentPop = $('#comment-pop'), textPop = $('#text-pop');
+const commentPop = $('#comment-pop'), textPop = $('#text-pop'), urlPop = $('#url-pop');
 // painéis presos ao nó selecionado: só um aberto por vez
-const nodePops = [stylePop, nodeMenu, imagePop, attachPop, commentPop, textPop];
+const nodePops = [stylePop, nodeMenu, imagePop, attachPop, commentPop, textPop, urlPop];
 function closeNodePops() { for (const p of nodePops) p.hidden = true; }
 function openNodePop(pop) {
   const show = pop.hidden;
@@ -593,6 +593,9 @@ function placeOverlays() {
   if (!commentPop.hidden) fillCommentList(n);
   below(commentPop, sx(b.x + b.w / 2) - 160);
   below(textPop, sx(b.x + b.w / 2) - 140);
+  below(urlPop, sx(b.x + b.w / 2) - 170);
+  $('#url-btn').classList.toggle('active', !urlPop.hidden);
+  $('#url-remove').hidden = !n.url;
   $('#text-btn').classList.toggle('active', !textPop.hidden);
   for (const t of textPop.querySelectorAll('[data-toggle]')) {
     t.classList.toggle('active', t.dataset.toggle === 'textBold' ? isBold(n, b.depth) : !!n[t.dataset.toggle]);
@@ -1306,17 +1309,21 @@ setInterval(async () => {
 }, 1000);
 
 // ---------- Comentários ----------
-function drawCommentIcon(b, cy, g) {
-  const x = b.x + b.w - ICON_W - 4;
-  const ic = el('g', { class: 'comment-icon' }, g);
-  el('circle', { cx: x + 12, cy, r: 11, fill: '#ffffffcc' }, ic);
-  el('use', { href: '#i-message', x: x + 4, y: cy - 8, width: 16, height: 16, fill: 'none', stroke: '#1d1d2b', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, ic);
-  ic.addEventListener('click', (e) => {
-    e.stopPropagation();
-    select(b.id, true);
-    closeNodePops();
-    openNodePop(commentPop);
-  });
+// ícones dentro do nó, da direita para a esquerda: comentários, link
+function drawInlineIcons(b, cy, g, n) {
+  let x = b.x + b.w - 4;
+  const icon = (cls, symbol, onClick) => {
+    x -= ICON_W;
+    const ic = el('g', { class: cls }, g);
+    el('circle', { cx: x + 12, cy, r: 11, fill: '#ffffffcc' }, ic);
+    el('use', { href: symbol, x: x + 4, y: cy - 8, width: 16, height: 16, fill: 'none', stroke: '#1d1d2b', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, ic);
+    ic.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+  };
+  if (n.comments?.length) icon('comment-icon', '#i-message', () => { select(b.id, true); closeNodePops(); openNodePop(commentPop); });
+  if (n.url) {
+    // revalida ao abrir: o mapa vem de arquivo e pode ter sido editado à mão
+    icon('url-icon', '#i-link', () => { const u = safeUrl(n.url); if (u) window.open(u, '_blank', 'noopener,noreferrer'); });
+  }
 }
 
 function fillCommentList(n) {
@@ -1375,3 +1382,29 @@ textPop.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-value]'), group = btn?.parentElement.closest('[data-prop]');
   if (btn && group) setStyle({ [group.dataset.prop]: btn.dataset.value || null });
 });
+
+// ---------- Link (URL) no nó ----------
+$('#url-btn').onclick = () => {
+  $('#url-input').value = findNode(map.root, selected).node.url ?? '';
+  $('#url-error').hidden = true;
+  openNodePop(urlPop);
+  if (!urlPop.hidden) $('#url-input').focus();
+};
+$('#url-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const url = safeUrl($('#url-input').value);
+  $('#url-error').hidden = !!url;
+  if (!url) return;
+  urlPop.hidden = true;
+  setStyle({ url });
+});
+$('#url-input').addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Enter') { e.preventDefault(); $('#url-form').requestSubmit(); }
+  if (e.key === 'Escape') { e.target.blur(); urlPop.hidden = true; render(); }
+});
+$('#url-remove').onclick = () => {
+  const n = findNode(map.root, selected).node;
+  urlPop.hidden = true;
+  mutate(() => { delete n.url; });
+};

@@ -491,3 +491,17 @@ export function wrapLines(text, maxW, widthOf) {
   lines.push(cur);
   return lines;
 }
+
+// ---- Link (URL) no nó ----
+// só http(s); sem esquema vira https://; qualquer outro esquema (javascript:, data:...) é recusado
+export function safeUrl(input) {
+  const s = (input ?? '').trim();
+  if (!s || /\s/.test(s)) return null;
+  const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(s);
+  try {
+    const u = new URL(hasScheme ? s : `https://${s}`);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null;
+  } catch {
+    return null;
+  }
+}
