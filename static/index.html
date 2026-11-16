@@ -281,6 +281,19 @@
       <button data-tool="line" class="icon" title="Linha (L ou 6)"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
       <button data-tool="freedraw" class="icon" title="Lápis (P ou 7)"><svg viewBox="0 0 24 24"><use href="#i-pencil"/></svg></button>
     </div>
+    <div id="board-props" class="card" hidden>
+      <p>Traço</p><div class="swatches" data-prop="strokeColor"></div>
+      <p>Fundo</p><div class="swatches" data-prop="backgroundColor"></div>
+      <p>Preenchimento</p><div class="seg" data-prop="fillStyle"><button data-value="hachure">Hachurado</button><button data-value="solid">Sólido</button></div>
+      <p>Espessura</p><div class="seg" data-prop="strokeWidth"><button data-value="1">Fina</button><button data-value="2">Média</button><button data-value="4">Grossa</button></div>
+      <p>Estilo do traço</p><div class="seg" data-prop="strokeStyle"><button data-value="solid">Sólido</button><button data-value="dashed">Tracejado</button><button data-value="dotted">Pontilhado</button></div>
+      <p>Desleixo</p><div class="seg" data-prop="roughness"><button data-value="0">Arquiteto</button><button data-value="1">Artista</button><button data-value="2">Cartunista</button></div>
+      <p>Opacidade</p><input type="range" id="board-opacity" min="0" max="100" step="10">
+      <div id="board-sel-actions">
+        <p>Camadas</p><div class="seg"><button data-act="back">Para trás</button><button data-act="front">Para frente</button></div>
+        <p>Ações</p><div class="seg"><button data-act="duplicate">Duplicar</button><button data-act="delete">Apagar</button></div>
+      </div>
+    </div>
     <div id="board-bottom" class="card">
       <button id="board-zoom-out" class="icon" title="Diminuir zoom (Ctrl −)"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
       <button id="board-zoom" title="Zoom 100%">100%</button>
