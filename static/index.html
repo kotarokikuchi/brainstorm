@@ -31,6 +31,8 @@
     <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="M15 6l-6 6l6 6" /></symbol>
     <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 6l6 6l-6 6" /></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6l-12 12" /> <path d="M6 6l12 12" /></symbol>
+    <symbol id="i-brush" viewBox="0 0 24 24"><path d="M3 21v-4a4 4 0 1 1 4 4h-4" /> <path d="M21 3a16 16 0 0 0 -12.8 10.2" /> <path d="M21 3a16 16 0 0 1 -10.2 12.8" /> <path d="M10.6 9a9 9 0 0 1 4.4 4.4" /></symbol>
+    <symbol id="i-sitemap" viewBox="0 0 24 24"><path d="M3 15m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" /> <path d="M15 15m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" /> <path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" /> <path d="M6 15v-1a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v1" /> <path d="M12 9l0 3" /></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5l0 14" /> <path d="M5 12l14 0" /></symbol>
     <symbol id="i-square-rounded" viewBox="0 0 24 24"><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></symbol>
     <symbol id="i-square" viewBox="0 0 24 24"><path d="M3 3m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" /></symbol>
@@ -56,7 +58,7 @@
     <ul id="history-list"></ul>
   </aside>
   <div id="map-menu" class="card menu" hidden>
-    <button data-map-action="duplicate">Duplicar mapa</button>
+    <button data-map-action="duplicate">Duplicar</button>
     <hr>
     <button data-map-action="trash" class="danger">Mover para a lixeira</button>
   </div>
@@ -69,7 +71,10 @@
   <main id="list-view">
     <div class="list-head">
       <h1>Meus mapas</h1>
-      <button id="new-map" class="primary">Novo mapa</button>
+      <span class="new-buttons">
+        <button id="new-board">Novo quadro</button>
+        <button id="new-map" class="primary">Novo mapa</button>
+      </span>
     </div>
     <ul id="maps"></ul>
     <p id="empty" hidden>Nenhum mapa ainda. Crie o primeiro.</p>
@@ -255,6 +260,10 @@
       <button id="zoom-in" class="icon" title="Aumentar zoom"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
       <button id="zoom-fit" class="icon" title="Ajustar à tela"><svg viewBox="0 0 24 24"><use href="#i-arrows-maximize"/></svg></button>
     </div>
+  </section>
+
+  <section id="board-view">
+    <svg id="board-canvas"><g id="board-root"></g></svg>
   </section>
 
   <script type="module" src="app.js"></script>

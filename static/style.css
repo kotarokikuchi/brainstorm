@@ -22,7 +22,10 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 #status { margin-left: auto; font-size: 13px; color: var(--muted); }
 #status.error { color: var(--danger); font-weight: 600; }
 
-body[data-view="list"] #editor-view, body[data-view="editor"] #list-view { display: none; }
+body:not([data-view="editor"]) #editor-view, body:not([data-view="list"]) #list-view, body:not([data-view="board"]) #board-view { display: none; }
+/* no quadro, os controles do mapa mental não se aplicam */
+body[data-view="board"] #present-btn, body[data-view="board"] #history-btn, body[data-view="board"] #export-btn,
+body[data-view="board"] #undo, body[data-view="board"] #redo { display: none; }
 body[data-view="list"] #title, body[data-view="list"] #status, body[data-view="list"] .history-btns, body[data-view="list"] #map-menu-btn { display: none; }
 
 /* Lista de mapas */
@@ -243,3 +246,10 @@ body.presenting #canvas { cursor: default; }
 .menu-seg span { font-size: 13px; color: var(--muted); }
 .menu-seg .seg button { padding: 5px 6px; font-size: 12px; }
 .menu-seg .seg button.active { background: #e8eefe; border-color: var(--accent); color: var(--accent); }
+
+/* Quadros (lousa) */
+.new-buttons { display: flex; gap: 8px; }
+#maps a svg { width: 18px; height: 18px; margin-right: 8px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: .55; }
+#board-view { position: relative; height: calc(100% - 52px); overflow: hidden; background: #fff; }
+#board-canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+body[data-view="board"] #title { cursor: text; }

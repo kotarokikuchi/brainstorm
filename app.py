@@ -26,6 +26,24 @@ FILE_RE = re.compile(r"^[a-f0-9]{32}(\.[a-z0-9]{1,10})?$")
 INLINE = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 
 
+# documentos: mapa mental ({root}) ou quadro de desenho ({type: "board", title, elements})
+def valid_doc(body):
+    if not (isinstance(body, dict) and isinstance(body.get("version"), int)):
+        return False
+    if body.get("type", "map") == "board":
+        return isinstance(body.get("elements"), list) and isinstance(body.get("title", ""), str)
+    return body.get("type", "map") == "map" and isinstance(body.get("root"), dict)
+
+
+def doc_title(data):
+    return data.get("title", "") if data.get("type") == "board" else data["root"].get("text", "")
+
+
+def doc_size(data, count):
+    # tópicos do mapa ou elementos do quadro (mostrado no histórico)
+    return len(data["elements"]) if data.get("type") == "board" else count(data["root"])
+
+
 def read_map(file):
     # JSON do mapa como dict; None se o arquivo estiver corrompido
     try:
@@ -119,8 +137,7 @@ class Handler(SimpleHTTPRequestHandler):
             body = json.loads(self.rfile.read(length))
         except ValueError:
             body = None
-        if not (isinstance(body, dict) and isinstance(body.get("root"), dict)
-                and isinstance(body.get("version"), int)):
+        if not valid_doc(body):
             self._send(400, {"error": "invalid map"})
             return
         # ponytail: checagem de versão sem lock; dois PUTs simultâneos no mesmo
@@ -169,7 +186,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if data is None:
                     continue
                 mtime = box.stat().st_mtime
-                items.append((mtime, {"id": box.name, "title": data["root"].get("text", ""),
+                items.append((mtime, {"id": box.name, "title": doc_title(data),
                                       "deleted": datetime.fromtimestamp(mtime, timezone.utc).isoformat()}))
             self._send(200, [i for _, i in sorted(items, key=lambda x: x[0], reverse=True)])
             return
@@ -205,7 +222,10 @@ class Handler(SimpleHTTPRequestHandler):
             return
         new_id = f"{map_id[:48]}-copia-{uuid.uuid4().hex[:6]}"
         data.update(id=new_id, version=1)
-        data["root"]["text"] = f"{data['root'].get('text', '')} (cópia)"
+        if data.get("type") == "board":
+            data["title"] = f"{data.get('title', '')} (cópia)"
+        else:
+            data["root"]["text"] = f"{data['root'].get('text', '')} (cópia)"
         (d / f"{new_id}.json").write_text(json.dumps(data, ensure_ascii=False), "utf-8")
         if (d / "files" / map_id).exists():
             shutil.copytree(d / "files" / map_id, d / "files" / new_id)  # imagens/anexos apontam para o mapa
@@ -238,7 +258,7 @@ class Handler(SimpleHTTPRequestHandler):
                 count = lambda n: 1 + sum(count(c) for c in n.get("children", []))
                 saved = datetime.fromtimestamp(f.stat().st_mtime, timezone.utc).isoformat()
                 items.append({"version": int(f.stem), "saved": saved,
-                              "title": data["root"].get("text", ""), "nodes": count(data["root"])})
+                              "title": doc_title(data), "nodes": doc_size(data, count)})
             self._send(200, items)
             return
         if not version.isdigit():
@@ -328,11 +348,11 @@ class Handler(SimpleHTTPRequestHandler):
         for f in self.server.data_dir.glob("*.json"):
             try:
                 m = json.loads(f.read_text("utf-8"))
-                title = m["root"]["text"]
-            except (ValueError, KeyError, TypeError):
+                title = doc_title(m)
+            except (ValueError, KeyError, TypeError, AttributeError):
                 continue  # arquivo corrompido não derruba a listagem
             mtime = f.stat().st_mtime
-            items.append((mtime, {"id": f.stem, "title": title,
+            items.append((mtime, {"id": f.stem, "title": title, "type": m.get("type", "map"),
                                   "updated": datetime.fromtimestamp(mtime, timezone.utc).isoformat()}))
         return [item for _, item in sorted(items, key=lambda x: x[0], reverse=True)]
 

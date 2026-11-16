@@ -823,6 +823,29 @@ await ev(`document.querySelector('#trash-list [data-purge="${extra[0]}"]').click
 await sleep(800);
 assert.ok(!(await trashIds()).includes(extra[0]), 'apagar de vez');
 
+// quadros (lousa): novo quadro pela lista; renomear pelo título; aparece na lista como quadro; reabre
+await ev(`location.hash = '#/'`);
+await sleep(800);
+await ev(`document.querySelector('#new-board').click()`);
+await sleep(1200);
+assert.equal(await ev(`document.body.dataset.view`), 'board', 'abre a lousa');
+const boardId = await ev(`location.hash.match(/^#\\/board\\/(.+)$/)?.[1]`);
+assert.ok(boardId, 'endereço do quadro');
+assert.equal(await ev(`getComputedStyle(document.querySelector('#board-canvas')).display`), 'block', 'lousa visível');
+promptAnswer = 'Rascunho de ideias';
+await ev(`document.querySelector('#title').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
+await sleep(900);
+const boardDoc = await (await fetch(BASE + `/api/maps/${boardId}`)).json();
+assert.deepEqual([boardDoc.type, boardDoc.title, boardDoc.elements], ['board', 'Rascunho de ideias', []], 'renomeado e salvo');
+assert.equal(await ev(`document.querySelector('#title').textContent`), 'Rascunho de ideias');
+await ev(`location.hash = '#/'`);
+await sleep(800);
+assert.equal(await ev(`document.querySelector('#maps a[href="#/board/${boardId}"]')?.textContent`), 'Rascunho de ideias', 'quadro na lista');
+assert.equal(await ev(`document.querySelector('#maps a[href="#/board/${boardId}"]').closest('li').classList.contains('board')`), true);
+await ev(`location.hash = '#/board/${boardId}'`);
+await sleep(800);
+assert.equal(await ev(`document.body.dataset.view`), 'board', 'reabre o quadro');
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);
