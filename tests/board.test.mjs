@@ -46,7 +46,9 @@ test('elementPaths draw each shape (two passes when rough) and arrowheads', () =
   const rect0 = elementPaths(mk('rectangle', 0));
   assert.equal(rect0.length, 1, 'sem desleixo: uma passada');
   for (const corner of ['0,0', '100,0', '100,60', '0,60']) assert.ok(rect0[0].includes(corner), corner);
-  assert.equal(elementPaths(mk('rectangle', 1)).length, 2, 'com desleixo: duas passadas');
+  assert.equal(elementPaths(mk('rectangle', 1)).length, 1, 'Artista (padrão): um traço só, sem linha duplicada');
+  assert.equal(elementPaths(mk('line', 1)).length, 1);
+  assert.equal(elementPaths(mk('rectangle', 2)).length, 2, 'Cartunista: duas passadas de propósito');
   assert.ok(elementPaths(mk('diamond', 0))[0].includes('50,0'), 'losango pelos pontos médios');
   assert.match(elementPaths(mk('ellipse', 0))[0], /^M/);
   const arrow = elementPaths(mk('arrow', 0));
