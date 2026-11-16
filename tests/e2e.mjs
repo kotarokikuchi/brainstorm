@@ -12,7 +12,8 @@ const server = spawn('python3', ['-c',
   join(tmp, 'data'), String(PORT)], { cwd: new URL('..', import.meta.url).pathname, stdio: 'ignore' });
 const chrome = spawn('google-chrome', ['--headless=new', '--disable-gpu', '--remote-debugging-port=9333',
   '--window-size=1400,800', '--user-data-dir=' + join(tmp, 'chrome'), 'about:blank'], { stdio: 'ignore' });
-process.on('exit', () => { chrome.kill(); server.kill(); rmSync(tmp, { recursive: true, force: true }); });
+// maxRetries: o Chrome ainda pode estar gravando o perfil quando o processo sai
+process.on('exit', () => { chrome.kill(); server.kill(); rmSync(tmp, { recursive: true, force: true, maxRetries: 5 }); });
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(1));
 setTimeout(() => { console.error('E2E timeout'); process.exit(1); }, 300000).unref();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
