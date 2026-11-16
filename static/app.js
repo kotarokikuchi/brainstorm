@@ -2,6 +2,7 @@ import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
   History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, toMarkdown, slides, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
 } from './model.js';
+import { initBoard, openBoard, closeBoard, currentBoard, newBoard } from './board.js';
 
 const $ = (s) => document.querySelector(s);
 const SVG = 'http://www.w3.org/2000/svg';
@@ -41,11 +42,12 @@ route();
 async function route() {
   finishEdit(true);  // navegar no meio da digitação confirma o texto
   await flushSave();
-  const m = location.hash.match(/^#\/map\/([a-z0-9-]+)$/);
-  // saindo de um mapa que não conseguiu salvar: pergunta antes de abandonar as alterações
-  if (dirty && pending && pending.id !== m?.[1]) {
-    if (!confirm('Este mapa tem alterações que não foram salvas (erro ao salvar). Sair mesmo assim e perdê-las?')) {
-      window.history.replaceState(null, '', `#/map/${pending.id}`);  // volta o endereço sem nova navegação
+  const m = location.hash.match(/^#\/(map|board)\/([a-z0-9-]+)$/);
+  // saindo de um documento que não conseguiu salvar: pergunta antes de abandonar as alterações
+  if (dirty && pending && pending.id !== m?.[2]) {
+    if (!confirm('Este documento tem alterações que não foram salvas (erro ao salvar). Sair mesmo assim e perdê-las?')) {
+      const kind = pending.type === 'board' ? 'board' : 'map';
+      window.history.replaceState(null, '', `#/${kind}/${pending.id}`);  // volta o endereço sem nova navegação
       return;
     }
     dirty = false;
@@ -53,7 +55,8 @@ async function route() {
     clearTimeout(retryTimer);
     retryTimer = null;
   }
-  if (m) openMap(m[1]); else showList();
+  closeBoard();
+  if (m?.[1] === 'board') { map = null; openBoard(m[2]); } else if (m) openMap(m[2]); else showList();
 }
 
 // ---------- Lista de mapas ----------
@@ -70,8 +73,11 @@ async function showList() {
   $('#maps').replaceChildren(...items.map(it => {
     const li = document.createElement('li');
     const a = document.createElement('a');
-    a.href = `#/map/${it.id}`;
-    a.textContent = it.title || '(sem título)';
+    const kind = it.type === 'board' ? 'board' : 'map';
+    li.classList.toggle('board', kind === 'board');
+    a.href = `#/${kind}/${it.id}`;
+    a.innerHTML = `<svg viewBox="0 0 24 24"><use href="#i-${kind === 'board' ? 'brush' : 'sitemap'}"/></svg>`;
+    a.append(it.title || '(sem título)');
     const time = document.createElement('time');
     time.textContent = new Date(it.updated).toLocaleString('pt-BR');
     li.append(a, time, btn('Duplicar', 'duplicate', it.id), btn('Apagar', 'delete', it.id));
@@ -111,6 +117,13 @@ $('#trash-list').addEventListener('click', async (e) => {
   showList();
 });
 
+$('#new-board').onclick = async () => {
+  const b = newBoard(uid());
+  const r = await api('PUT', `/${b.id}`, b);
+  if (r.ok) location.hash = `#/board/${b.id}`;
+  else alert('Não foi possível criar o quadro.');
+};
+
 $('#new-map').onclick = async () => {
   const m = newMap(uid());
   const r = await api('PUT', `/${m.id}`, m);
@@ -127,6 +140,7 @@ async function openMap(id) {
     return;
   }
   map = await r.json();
+  if (map.type === 'board') { map = null; location.hash = `#/board/${id}`; return; }  // endereço antigo de quadro
   history = new History();
   selected = map.root.id;
   toolbarOn = false;
@@ -515,11 +529,11 @@ function setStatus(text, error = false) {
   statusEl.classList.toggle('error', error);
 }
 
-function scheduleSave() {
+function scheduleSave(doc = map) {
   // após um 409 não grava mais, mas marca pendência para o aviso ao fechar a aba
   if (conflict) { dirty = true; return; }
   dirty = true;
-  pending = map;
+  pending = doc;
   setStatus('Salvando…');
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, 500);
@@ -1750,11 +1764,11 @@ mapMenu.addEventListener('click', async (e) => {
   const action = e.target.closest('[data-map-action]')?.dataset.mapAction;
   if (!action) return;
   mapMenu.hidden = true;
-  const id = map.id;
+  const doc = map ?? currentBoard(), id = doc.id, kind = doc.type === 'board' ? 'board' : 'map';
   await flushSave();
   if (action === 'duplicate') {
     const r = await fetch(`/api/maps/${id}/duplicate`, { method: 'POST' });
-    if (r.ok) location.hash = `#/map/${(await r.json()).id}`;
+    if (r.ok) location.hash = `#/${kind}/${(await r.json()).id}`;
     else alert('Não foi possível duplicar o mapa.');
   } else if (action === 'trash') {
     dirty = false;  // o mapa vai inteiro para a lixeira; nada pendente a perguntar
@@ -1817,4 +1831,12 @@ $('#branch-layout-row').addEventListener('click', (e) => {
   if (v === undefined) return;
   nodeMenu.hidden = true;
   setStyle({ branchLayout: v || null });
+});
+
+// ---------- Quadros (lousa) ----------
+initBoard({
+  api,
+  setStatus,
+  scheduleSave,
+  resetSave: () => { if (conflict) dirty = false; conflict = false; },
 });

@@ -240,6 +240,34 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.raw_get(f"/api/maps/{new}/files/{info['id']}")[0], 200, "arquivos copiados")
         self.assertEqual(self.req("POST", "/api/maps/zzz/duplicate", raw=b"")[0], 404)
 
+    def board(self, version=0, title="Quadro", elements=None):
+        return {"version": version, "type": "board", "title": title, "elements": elements or []}
+
+    def test_board_is_a_document_like_maps(self):
+        self.assertEqual(self.req("PUT", "/api/maps/qd", self.board(elements=[{"id": "e1"}])), (200, {"version": 1}))
+        status, doc = self.req("GET", "/api/maps/qd")
+        self.assertEqual((status, doc["type"], doc["title"], len(doc["elements"])), (200, "board", "Quadro", 1))
+        lst = {i["id"]: i for i in self.req("GET", "/api/maps")[1]}
+        self.assertEqual((lst["qd"]["type"], lst["qd"]["title"]), ("board", "Quadro"))
+        self.make_map()
+        self.assertEqual(self.req("GET", "/api/maps")[1][0]["type"], "map")
+
+    def test_board_validation(self):
+        self.assertEqual(self.req("PUT", "/api/maps/qd", {"version": 0, "type": "board", "title": "x", "elements": {}})[0], 400)
+        self.assertEqual(self.req("PUT", "/api/maps/qd", {"version": 0, "type": "board", "title": 3, "elements": []})[0], 400)
+        self.assertEqual(self.req("PUT", "/api/maps/qd", {"version": 0, "type": "outro", "root": {}})[0], 400)
+
+    def test_board_duplicate_history_and_trash(self):
+        self.server.history_interval = 0
+        self.req("PUT", "/api/maps/qd", self.board(0, "Quadro", [{"id": "a"}]))
+        self.req("PUT", "/api/maps/qd", self.board(1, "Quadro 2", [{"id": "a"}, {"id": "b"}]))
+        hist = self.req("GET", "/api/maps/qd/history")[1]
+        self.assertEqual((hist[0]["title"], hist[0]["nodes"]), ("Quadro", 1))
+        _, dup = self.req("POST", "/api/maps/qd/duplicate", raw=b"")
+        self.assertEqual(self.req("GET", f"/api/maps/{dup['id']}")[1]["title"], "Quadro 2 (cópia)")
+        self.req("DELETE", "/api/maps/qd")
+        self.assertEqual(self.req("GET", "/api/trash")[1][0]["title"], "Quadro 2")
+
     def test_deleting_map_removes_its_files(self):
         self.req("PUT", "/api/maps/abc", {"version": 0, "root": {"text": "a", "children": []}})
         _, info = self.upload("abc", "foto.png", b"x")
