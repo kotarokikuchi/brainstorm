@@ -44,6 +44,34 @@ def doc_size(data, count):
     return len(data["elements"]) if data.get("type") == "board" else count(data["root"])
 
 
+# pastas: {version, folders: [{id, name, parent}], place: {id do documento: id da pasta}}
+# (fica fora dos documentos: mover não mexe na versão de um mapa aberto em outra aba)
+EMPTY_FOLDERS = {"version": 0, "folders": [], "place": {}}
+
+
+def valid_folders(body):
+    if not (isinstance(body, dict) and isinstance(body.get("version"), int)
+            and isinstance(body.get("folders"), list) and isinstance(body.get("place"), dict)):
+        return False
+    parents = {}
+    for f in body["folders"]:
+        if not (isinstance(f, dict) and isinstance(f.get("id"), str) and ID_RE.match(f["id"])
+                and isinstance(f.get("name"), str) and 0 < len(f["name"].strip()) <= 200
+                and (f.get("parent") is None or isinstance(f.get("parent"), str))):
+            return False
+        if f["id"] in parents:
+            return False
+        parents[f["id"]] = f.get("parent")
+    for fid in parents:  # pai precisa existir e não pode haver ciclo (pasta dentro dela mesma)
+        seen, cur = set(), fid
+        while cur is not None:
+            if cur in seen or cur not in parents:
+                return False
+            seen.add(cur)
+            cur = parents[cur]
+    return all(isinstance(k, str) and ID_RE.match(k) and v in parents for k, v in body["place"].items())
+
+
 def read_map(file):
     # JSON do mapa como dict; None se o arquivo estiver corrompido
     try:
@@ -97,6 +125,9 @@ class Handler(SimpleHTTPRequestHandler):
             return True
         if path == "/api/events" and method == "GET":
             self._events()
+            return True
+        if path == "/api/folders" and method in ("GET", "PUT"):
+            self._folders(method)
             return True
         if path == "/api/maps" and method == "GET":
             self._send(200, self._list())
@@ -348,6 +379,35 @@ class Handler(SimpleHTTPRequestHandler):
                 time.sleep(0.5)
         except (BrokenPipeError, ConnectionResetError):
             pass
+
+    def _folders(self, method):
+        file = self.server.data_dir / "folders" / "tree.json"
+        stored = (read_map(file) if file.exists() else None) or EMPTY_FOLDERS
+        if method == "GET":
+            self._send(200, stored)
+            return
+        length = int(self.headers.get("Content-Length") or 0)
+        if length > MAX_BODY:
+            self.close_connection = True
+            self._send(413, {"error": "too large"})
+            return
+        try:
+            body = json.loads(self.rfile.read(length))
+        except ValueError:
+            body = None
+        if not valid_folders(body):
+            self._send(400, {"error": "invalid folders"})
+            return
+        # ponytail: mesma checagem de versão sem lock dos documentos
+        if body["version"] != stored.get("version", 0):
+            self._send(409, stored)
+            return
+        body["version"] += 1
+        file.parent.mkdir(parents=True, exist_ok=True)
+        tmp = file.with_suffix(".tmp")
+        tmp.write_text(json.dumps(body, ensure_ascii=False), "utf-8")
+        os.replace(tmp, file)
+        self._send(200, body)
 
     def _list(self):
         items = []
