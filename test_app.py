@@ -75,6 +75,15 @@ class ApiTest(unittest.TestCase):
         status, lst = self.req("GET", "/api/maps")
         self.assertEqual((status, lst), (200, []))
 
+    def test_foreign_host_is_403(self):
+        # protege contra DNS rebinding: só aceita Host local
+        self.assertEqual(self.req("GET", "/api/maps", headers={"Host": "evil.com"})[0], 403)
+        body = {"version": 0, "root": {"text": "a", "children": []}}
+        self.assertEqual(self.req("PUT", "/api/maps/abc", body, headers={"Host": "evil.com:80"})[0], 403)
+        self.assertEqual(list(self.data.iterdir()), [])
+        port = self.server.server_address[1]
+        self.assertEqual(self.req("GET", "/api/maps", headers={"Host": f"localhost:{port}"})[0], 200)
+
     def test_body_too_large_is_413(self):
         status, _ = self.req("PUT", "/api/maps/abc", raw=b"x", headers={"Content-Length": "5000001"})
         self.assertEqual(status, 413)
