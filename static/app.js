@@ -2,7 +2,7 @@ import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
   History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, toMarkdown, slides, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
 } from './model.js';
-import { initBoard, openBoard, closeBoard, currentBoard, newBoard, boardSvg } from './board.js';
+import { initBoard, openBoard, closeBoard, currentBoard, newBoard, boardSvg, boardPlace } from './board.js';
 
 const $ = (s) => document.querySelector(s);
 const SVG = 'http://www.w3.org/2000/svg';
@@ -35,11 +35,28 @@ const api = (method, path = '', body) => fetch('/api/maps' + path, {
   body: body && JSON.stringify(body),
 });
 
+// ---------- Onde parou: posição, zoom e seleção de cada documento (só neste navegador) ----------
+const PLACE = 'galho:place:';
+function savePlace() {
+  const board = currentBoard(), id = map?.id ?? board?.id;
+  const place = map ? { view: { ...view }, selected, focusId, outlineOn } : board ? boardPlace() : null;
+  try { if (id) localStorage.setItem(PLACE + id, JSON.stringify(place)); } catch { /* armazenamento bloqueado: só não lembra */ }
+}
+function loadPlace(id) {
+  try {
+    const p = JSON.parse(localStorage.getItem(PLACE + id));
+    const v = p?.view;
+    return v && [v.x, v.y, v.k].every(Number.isFinite) && v.k > 0 ? p : null;
+  } catch { return null; }
+}
+window.addEventListener('pagehide', savePlace);  // recarregar (F5 ou automática) e fechar a aba
+
 // ---------- Rotas ----------
 window.addEventListener('hashchange', route);
 route();
 
 async function route() {
+  savePlace();  // ainda com o documento anterior aberto
   finishEdit(true);  // navegar no meio da digitação confirma o texto
   await flushSave();
   const m = location.hash.match(/^#\/(map|board)\/([a-z0-9-]+)$/);
@@ -155,8 +172,12 @@ async function openMap(id) {
   document.body.dataset.view = 'editor';
   setStatus('Salvo');
   stylePop.hidden = true;
+  const place = loadPlace(id);
+  if (place && findNode(map.root, place.selected)) selected = place.selected;
+  if (place?.focusId && findNode(map.root, place.focusId)) focusId = place.focusId;
   render();
-  fitView();
+  if (place) { Object.assign(view, place.view); render(); } else fitView();
+  if (place?.outlineOn) setOutline(true);
 }
 
 // medida de texto via canvas (mesma fonte do SVG)
@@ -1853,4 +1874,5 @@ initBoard({
   setStatus,
   scheduleSave,
   resetSave: () => { if (conflict) dirty = false; conflict = false; },
+  loadPlace,
 });

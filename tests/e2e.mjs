@@ -1183,6 +1183,21 @@ for (const [tool, x] of [['n', 300], ['t', 800]]) {
   assert.equal(await ev(`document.querySelector('#board-text').hidden`), true);
 }
 
+// recarregar volta onde parou: posição/zoom e seleção (quadro e mapa)
+await key('a', 2);
+await ev(`document.querySelector('#board-zoom-in').click()`);
+const boardT = await ev(`document.querySelector('#board-root').getAttribute('transform')`), boardSel = await selCount();
+await sleep(900); await cmd('Page.reload'); await sleep(1500);
+assert.equal(await ev(`document.querySelector('#board-root').getAttribute('transform')`), boardT, 'quadro volta na mesma posição e zoom');
+assert.equal(await selCount(), boardSel, 'quadro volta com a mesma seleção');
+await ev(`location.hash = '#/map/demo'`); await sleep(800);
+await ev(`document.querySelector('#zoom-in').click()`);
+await clickNode('Recursos');
+const mapT = await ev(`document.querySelector('#viewport').getAttribute('transform')`);
+await sleep(900); await cmd('Page.reload'); await sleep(1500);
+assert.equal(await ev(`document.querySelector('#viewport').getAttribute('transform')`), mapT, 'mapa volta na mesma posição e zoom');
+assert.ok((await ev(`document.querySelector('.selected-ring').parentNode.textContent`)).startsWith('Recursos'), 'mapa volta com o mesmo nó selecionado');
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);
