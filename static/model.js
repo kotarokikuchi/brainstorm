@@ -417,3 +417,31 @@ export function navigate(boxes, fromId, dir) {
   }
   return best;
 }
+
+// ---- Estilo: nuvem e contorno do ramo ----
+
+// contorno de nuvem: arcos para fora ao longo do perímetro (sentido horário)
+export function cloudPath({ x, y, w, h }) {
+  const pts = [];
+  const edge = (x1, y1, x2, y2) => {
+    const n = Math.max(1, Math.round(Math.hypot(x2 - x1, y2 - y1) / 22));
+    for (let i = 0; i < n; i++) pts.push([x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n]);
+  };
+  edge(x, y, x + w, y);
+  edge(x + w, y, x + w, y + h);
+  edge(x + w, y + h, x, y + h);
+  edge(x, y + h, x, y);
+  const r = (a, b) => (Math.hypot(b[0] - a[0], b[1] - a[1]) * 0.62).toFixed(1);
+  const arcs = pts.map((p, i) => { const q = pts[(i + 1) % pts.length]; return `A${r(p, q)},${r(p, q)} 0 0 1 ${q[0].toFixed(1)},${q[1].toFixed(1)}`; });
+  return `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)} ${arcs.join(' ')} Z`;
+}
+
+// retângulo que envolve o nó e seus descendentes visíveis, com folga pad
+export function branchBounds(map, boxes, nodeId, pad = 12) {
+  const ids = new Set();
+  const walk = (n) => { ids.add(n.id); if (!n.collapsed) n.children.forEach(walk); };
+  walk(findNode(map.root, nodeId).node);
+  const bs = boxes.filter(b => ids.has(b.id));
+  const x = Math.min(...bs.map(b => b.x)) - pad, y = Math.min(...bs.map(b => b.y)) - pad;
+  return { x, y, w: Math.max(...bs.map(b => b.x + b.w)) + pad - x, h: Math.max(...bs.map(b => b.y + b.h)) + pad - y };
+}
