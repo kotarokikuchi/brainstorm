@@ -444,3 +444,13 @@ test('layout passes the node image to measure', () => {
   const b = byId(res)[g1.id];
   assert.deepEqual([b.w, b.h], [216, 136]);
 });
+
+// ---- Comentários: ícone dentro do nó ocupa espaço ----
+test('layout tells measure how many inline icons the node shows', () => {
+  const { m, g1, g2 } = sample('map');
+  g1.comments = [{ id: 'c1', text: 'oi', at: '2026-11-16T00:00:00Z' }];
+  const res = layout(m, (text, depth, width, image, icons) => ({ w: 50 + 26 * (icons ?? 0), h: 20 }));
+  const b = byId(res);
+  assert.equal(b[g1.id].w, 76);
+  assert.equal(b[g2.id].w, 50);
+});
