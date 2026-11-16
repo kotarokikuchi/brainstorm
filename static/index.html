@@ -7,13 +7,30 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body data-view="list">
+  <!-- Ícones: Tabler Icons (MIT, https://tabler.io/icons) — licença em LICENSE-tabler-icons.txt -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-arrow-back-up" viewBox="0 0 24 24"><path d="M9 14l-4 -4l4 -4" /> <path d="M5 10h11a4 4 0 1 1 0 8h-1" /></symbol>
+    <symbol id="i-arrow-forward-up" viewBox="0 0 24 24"><path d="M15 14l4 -4l-4 -4" /> <path d="M19 10h-11a4 4 0 1 0 0 8h1" /></symbol>
+    <symbol id="i-arrows-exchange" viewBox="0 0 24 24"><path d="M7 10h14l-4 -4" /> <path d="M17 14h-14l4 4" /></symbol>
+    <symbol id="i-arrows-maximize" viewBox="0 0 24 24"><path d="M16 4l4 0l0 4" /> <path d="M14 10l6 -6" /> <path d="M8 20l-4 0l0 -4" /> <path d="M4 20l6 -6" /> <path d="M16 20l4 0l0 -4" /> <path d="M14 14l6 6" /> <path d="M8 4l-4 0l0 4" /> <path d="M4 4l6 6" /></symbol>
+    <symbol id="i-bucket-droplet" viewBox="0 0 24 24"><path d="M5 16l1.465 1.638a2 2 0 1 1 -3.015 .099l1.55 -1.737z" /> <path d="M13.737 9.737c2.299 -2.3 3.23 -5.095 2.081 -6.245c-1.15 -1.15 -3.945 -.217 -6.244 2.082c-2.3 2.299 -3.231 5.095 -2.082 6.244c1.15 1.15 3.946 .218 6.245 -2.081z" /> <path d="M7.492 11.818c.362 .362 .768 .676 1.208 .934l6.895 4.047c1.078 .557 2.255 -.075 3.692 -1.512c1.437 -1.437 2.07 -2.614 1.512 -3.692c-.372 -.718 -1.72 -3.017 -4.047 -6.895a6.015 6.015 0 0 0 -.934 -1.208" /></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M6.657 18c-2.572 0 -4.657 -2.007 -4.657 -4.483c0 -2.475 2.085 -4.482 4.657 -4.482c.393 -1.762 1.794 -3.2 3.675 -3.773c1.88 -.572 3.956 -.193 5.444 1c1.488 1.19 2.162 3.007 1.77 4.769h.99c1.913 0 3.464 1.56 3.464 3.486c0 1.927 -1.551 3.487 -3.465 3.487h-11.878" /></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><path d="M5 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /> <path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /> <path d="M19 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /></symbol>
+    <symbol id="i-line" viewBox="0 0 24 24"><path d="M6 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /> <path d="M18 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /> <path d="M7.5 16.5l9 -9" /></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12l14 0" /></symbol>
+    <symbol id="i-oval" viewBox="0 0 24 24"><path d="M12 12m-6 0a6 9 0 1 0 12 0a6 9 0 1 0 -12 0" /></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5l0 14" /> <path d="M5 12l14 0" /></symbol>
+    <symbol id="i-square-rounded" viewBox="0 0 24 24"><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></symbol>
+    <symbol id="i-square" viewBox="0 0 24 24"><path d="M3 3m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" /></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7l16 0" /> <path d="M10 11l0 6" /> <path d="M14 11l0 6" /> <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /> <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></symbol>
+  </svg>
   <header class="topbar">
     <a href="#/" class="brand"><span class="logo"></span>Galho</a>
     <span id="title"></span>
     <span id="status"></span>
     <span class="history-btns">
-      <button id="undo" class="icon" title="Desfazer (Ctrl+Z)"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button>
-      <button id="redo" class="icon" title="Refazer (Ctrl+Shift+Z)"><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5M20 9H9a5 5 0 0 0 0 10h3"/></svg></button>
+      <button id="undo" class="icon" title="Desfazer (Ctrl+Z)"><svg viewBox="0 0 24 24"><use href="#i-arrow-back-up"/></svg></button>
+      <button id="redo" class="icon" title="Refazer (Ctrl+Shift+Z)"><svg viewBox="0 0 24 24"><use href="#i-arrow-forward-up"/></svg></button>
     </span>
   </header>
 
@@ -38,10 +55,10 @@
 
     <!-- barra flutuante sobre o nó selecionado -->
     <div id="toolbar" class="card" hidden>
-      <button id="style-btn" class="icon" title="Cor e forma"><svg viewBox="0 0 24 24"><path d="M12 3s-6 7-6 11a6 6 0 0 0 12 0c0-4-6-11-6-11z"/></svg></button>
-      <button id="link-btn" class="icon" title="Ligar a outro nó"><svg viewBox="0 0 24 24"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="m8 16 8-8" stroke-dasharray="2 3"/></svg></button>
-      <button id="delete-btn" class="icon" title="Apagar (Del)"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg></button>
-      <button id="more-btn" class="icon" title="Mais opções"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+      <button id="style-btn" class="icon" title="Cor e forma"><svg viewBox="0 0 24 24"><use href="#i-bucket-droplet"/></svg></button>
+      <button id="link-btn" class="icon" title="Ligar a outro nó"><svg viewBox="0 0 24 24"><use href="#i-line"/></svg></button>
+      <button id="delete-btn" class="icon" title="Apagar (Del)"><svg viewBox="0 0 24 24"><use href="#i-trash"/></svg></button>
+      <button id="more-btn" class="icon" title="Mais opções"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
     </div>
     <div id="node-menu" class="card menu" hidden>
       <button data-action="child">Novo filho <kbd>Tab</kbd></button>
@@ -59,10 +76,10 @@
       <button id="link-color-btn" class="icon" title="Cor"><span class="dot"></span></button>
       <span class="sep"></span>
       <button id="link-start-btn" class="icon" title="Ponta inicial"></button>
-      <button id="link-swap" class="icon" title="Inverter direção"><svg viewBox="0 0 24 24"><path d="M4 8h15l-3-3M20 16H5l3 3"/></svg></button>
+      <button id="link-swap" class="icon" title="Inverter direção"><svg viewBox="0 0 24 24"><use href="#i-arrows-exchange"/></svg></button>
       <button id="link-end-btn" class="icon" title="Ponta final"></button>
       <span class="sep"></span>
-      <button id="link-more" class="icon" title="Mais opções"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+      <button id="link-more" class="icon" title="Mais opções"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
     </div>
     <div id="link-colors" class="card link-pop" hidden><p>Cores do tema</p><div class="swatches"></div></div>
     <div id="link-markers" class="card link-pop" hidden></div>
@@ -84,11 +101,11 @@
         <div class="customs"><div class="swatches" data-prop="color" data-custom></div><button class="add-custom icon" data-prop="color" title="Escolher cor">+</button></div>
         <hr>
         <div class="seg shapes" data-prop="shape">
-          <button data-value="underline" class="icon" title="Linha"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
-          <button data-value="rect" class="icon" title="Retângulo"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12"/></svg></button>
-          <button data-value="rounded" class="icon" title="Arredondado"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="4"/></svg></button>
-          <button data-value="pill" class="icon" title="Elipse"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="5"/></svg></button>
-          <button data-value="cloud" class="icon" title="Nuvem"><svg viewBox="0 0 24 24"><path d="M7 18a4 4 0 0 1-.6-8 5 5 0 0 1 9.7-1A4.5 4.5 0 0 1 17 18z"/></svg></button>
+          <button data-value="underline" class="icon" title="Linha"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
+          <button data-value="rect" class="icon" title="Retângulo"><svg viewBox="0 0 24 24"><use href="#i-square"/></svg></button>
+          <button data-value="rounded" class="icon" title="Arredondado"><svg viewBox="0 0 24 24"><use href="#i-square-rounded"/></svg></button>
+          <button data-value="pill" class="icon" title="Elipse"><svg viewBox="0 0 24 24" style="transform:rotate(90deg)"><use href="#i-oval"/></svg></button>
+          <button data-value="cloud" class="icon" title="Nuvem"><svg viewBox="0 0 24 24"><use href="#i-cloud"/></svg></button>
         </div>
         <label class="switch"><input type="checkbox" id="boundary"><span></span> Mostrar como contorno</label>
       </div>
@@ -131,10 +148,10 @@
         <option value="org">Organograma</option>
         <option value="list">Lista</option>
       </select>
-      <button id="zoom-out" class="icon" title="Diminuir zoom">−</button>
+      <button id="zoom-out" class="icon" title="Diminuir zoom"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
       <button id="zoom-reset" title="Zoom 100%">100%</button>
-      <button id="zoom-in" class="icon" title="Aumentar zoom">+</button>
-      <button id="zoom-fit" class="icon" title="Ajustar à tela"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button id="zoom-in" class="icon" title="Aumentar zoom"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
+      <button id="zoom-fit" class="icon" title="Ajustar à tela"><svg viewBox="0 0 24 24"><use href="#i-arrows-maximize"/></svg></button>
     </div>
   </section>
 

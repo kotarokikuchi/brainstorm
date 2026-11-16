@@ -514,8 +514,10 @@ function placeOverlays() {
   const pos = (el, x, y) => { el.style.left = `${x}px`; el.style.top = `${y}px`; };
 
   pos(toolbar, sx(b.x + b.w / 2), sy(b.y));
-  pos(stylePop, sx(b.x + b.w / 2) - 114, sy(b.y + b.h) + 14);
-  pos(nodeMenu, sx(b.x + b.w / 2) - 125, sy(b.y + b.h) + 14);
+  // popovers abaixo do nó, mas sem passar da borda de baixo da tela
+  const below = (pop, x) => pos(pop, x, Math.max(8, Math.min(sy(b.y + b.h) + 14, svg.clientHeight - pop.offsetHeight - 8)));
+  below(stylePop, sx(b.x + b.w / 2) - 140);
+  below(nodeMenu, sx(b.x + b.w / 2) - 125);
   $('#more-btn').classList.toggle('active', !nodeMenu.hidden);
   $('#style-btn').classList.toggle('active', !stylePop.hidden);
   for (const t of stylePop.querySelectorAll('[data-tab]')) t.classList.toggle('active', t.dataset.tab === styleTab);
@@ -542,6 +544,8 @@ function placeOverlays() {
   pos(addChildBtn, ...child);
   pos(addSiblingBtn, ...sibling);
   addSiblingBtn.hidden ||= b.depth === 0;
+  // com painel/menu aberto, os "+" e as dicas sairiam por cima dele
+  if (!stylePop.hidden || !nodeMenu.hidden) addChildBtn.hidden = addSiblingBtn.hidden = hints.hidden = true;
   // dicas só em nó sem filhos visíveis, como num mapa recém-criado
   hints.hidden ||= left || map.layout === 'org' || (n.children.length > 0 && !n.collapsed);
   pos(hints, child[0] + 22, child[1]);
