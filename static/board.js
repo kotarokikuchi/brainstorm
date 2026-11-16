@@ -59,7 +59,9 @@ const el = (tag, attrs, parent) => {
   return e;
 };
 const DASH = { solid: null, dashed: '8 8', dotted: '1.5 6' };
-const HEX = /^#[0-9a-fA-F]{3,8}$/;  // cor vinda do arquivo só entra em id/atributo se for hexadecimal
+const HEX = /^#[0-9a-fA-F]{3,8}$/;
+const FILE_ID = /^[a-f0-9]{32}(\.[a-z0-9]{1,10})?$/;  // mesmo formato que o servidor gera
+const fileUrl = (id) => `/api/maps/${board.id}/files/${id}`;  // cor vinda do arquivo só entra em id/atributo se for hexadecimal
 
 // hachurado: um <pattern> diagonal por cor
 function hatch(color) {
@@ -79,6 +81,10 @@ function drawElement(e) {
     if (editingText?.el === e) return g;
     const t = el('text', { x: e.x, y: e.y, fill: e.strokeColor, 'font-size': e.fontSize, 'font-family': HAND_FONT, 'dominant-baseline': 'text-before-edge' }, g);
     e.text.split('\n').forEach((line, i) => { el('tspan', { x: e.x, y: e.y + i * lineH(e.fontSize) }, t).textContent = line; });
+    return g;
+  }
+  if (e.type === 'image') {
+    if (FILE_ID.test(e.fileId ?? '')) el('image', { href: fileUrl(e.fileId), x: e.x, y: e.y, width: e.w, height: e.h, preserveAspectRatio: 'none' }, g);
     return g;
   }
   const bg = HEX.test(e.backgroundColor ?? '') && fillPath(e);
@@ -120,7 +126,8 @@ moreBtn.onclick = () => { more.hidden = !more.hidden; };
 document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#board-more, #board-more-btn')) more.hidden = true; }, true);
 document.querySelector('#board-tools').addEventListener('click', (e) => {
   const t = e.target.closest('[data-tool]')?.dataset.tool;
-  if (t) setTool(t);
+  if (t === 'image') { more.hidden = true; imageInput.click(); }
+  else if (t) setTool(t);
 });
 
 const snapshot = () => JSON.stringify(board.elements);
@@ -267,7 +274,8 @@ document.addEventListener('keydown', (e) => {
   else if (ctrl && k === 'a') { e.preventDefault(); setTool('select'); selection = board.elements.map(x => x.id); render(); }
   else if (ctrl && k === 'd') { e.preventDefault(); act('duplicate'); }
   else if (ctrl && k === 'c') { if (selection.length) clipboard = JSON.stringify(board.elements.filter(x => selection.includes(x.id))); }
-  else if (ctrl && k === 'v') { e.preventDefault(); paste(); }
+  // Ctrl+V: sem preventDefault, para o evento "paste" (que traz imagens) acontecer antes; se não houver imagem, cola os elementos
+  else if (ctrl && k === 'v') { pendingPaste = setTimeout(paste, 0); }
   else if (ctrl && e.shiftKey && (e.key === ']' || e.key === '}')) { e.preventDefault(); act('front'); }
   else if (ctrl && e.shiftKey && (e.key === '[' || e.key === '{')) { e.preventDefault(); act('back'); }
   else if ((e.key === 'Delete' || e.key === 'Backspace') && selection.length) { e.preventDefault(); act('delete'); }
@@ -281,11 +289,54 @@ document.addEventListener('keydown', (e) => {
     changed(before);
   }
   else if (e.key === ' ') { e.preventDefault(); spaceDown = true; svg.classList.add('panning'); }
+  else if (!ctrl && !e.altKey && e.key === '9') imageInput.click();
   else if (!ctrl && !e.altKey && TOOL_KEYS[k]) setTool(TOOL_KEYS[k]);
 });
 document.addEventListener('keyup', (e) => {
   if (e.key === ' ') { spaceDown = false; if (!panning) svg.classList.remove('panning'); }
 });
+
+// ---------- Imagens: seletor (9 / menu ⋯), colar e arrastar arquivo ----------
+const imageInput = $('#board-image-input');
+let pendingPaste = 0;
+imageInput.addEventListener('change', () => { const f = imageInput.files[0]; imageInput.value = ''; insertImage(f); });
+document.addEventListener('paste', (e) => {
+  if (!board || document.body.dataset.view !== 'board' || e.target.closest?.('input, textarea, select')) return;
+  const f = [...(e.clipboardData?.files ?? [])].find(x => x.type.startsWith('image/'));
+  if (f) { clearTimeout(pendingPaste); e.preventDefault(); insertImage(f); }
+});
+svg.addEventListener('dragover', (e) => e.preventDefault());
+svg.addEventListener('drop', (e) => {
+  const f = [...e.dataTransfer.files].find(x => x.type.startsWith('image/'));
+  if (!f) return;
+  e.preventDefault();
+  insertImage(f, toWorld(e));
+});
+
+// envia ao servidor (mesma rota de anexos dos mapas) e põe no centro da tela, com no máx. 400 px
+async function insertImage(file, at = null) {
+  if (!file || !board) return;
+  if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) { alert('Use uma imagem PNG, JPG, GIF ou WEBP.'); return; }
+  const id = board.id;
+  try {
+    const r = await fetch(`/api/maps/${id}/files`, { method: 'POST', headers: { 'X-Filename': encodeURIComponent(file.name || 'imagem.png') }, body: file });
+    if (!r.ok) throw new Error(r.status === 413 ? 'arquivo maior que 20 MB' : `HTTP ${r.status}`);
+    const { id: fileId } = await r.json();
+    const im = new Image();
+    im.src = `/api/maps/${id}/files/${fileId}`;
+    await im.decode();
+    if (board?.id !== id) return;  // trocou de quadro durante o envio
+    const k = Math.min(1, 400 / Math.max(im.naturalWidth, im.naturalHeight)), w = im.naturalWidth * k, h = im.naturalHeight * k;
+    const [cx, cy] = at ?? [(svg.clientWidth / 2 - view.x) / view.k, (svg.clientHeight / 2 - view.y) / view.k];
+    const before = snapshot(), item = { ...createElement('image', [cx - w / 2, cy - h / 2]), w, h, fileId };
+    board.elements.push(item);
+    setTool('select');
+    selection = [item.id];
+    changed(before);
+  } catch (err) {
+    alert(`Não foi possível inserir a imagem: ${err.message}`);
+  }
+}
 
 // título do quadro: duplo clique no topo
 $('#title').addEventListener('dblclick', () => {
@@ -543,12 +594,13 @@ $('#board-help-btn').onclick = () => { help.hidden = !help.hidden; };
 
 // ---------- Exportar (o app.js chama): SVG solto do quadro, sem seleção, com fundo branco ----------
 // fonte embutida no arquivo exportado (a imagem solta não enxerga os arquivos do app)
+const dataUrl = async (href) => {
+  const blob = await (await fetch(href)).blob();
+  return new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob); });
+};
 async function fontCss() {
-  const parts = await Promise.all(['latin', 'latin-ext'].map(async (sub) => {
-    const blob = await (await fetch(`fonts/kalam-${sub}-400-normal.woff2`)).blob();
-    const url = await new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob); });
-    return `@font-face{font-family:Kalam;src:url(${url}) format("woff2")}`;
-  }));
+  const parts = await Promise.all(['latin', 'latin-ext'].map(async (sub) =>
+    `@font-face{font-family:Kalam;src:url(${await dataUrl(`fonts/kalam-${sub}-400-normal.woff2`)}) format("woff2")}`));
   return parts.join('');
 }
 
@@ -565,6 +617,8 @@ export async function boardSvg() {
   const bg = document.createElementNS(SVG, 'rect');
   Object.entries({ x: bb.x - pad, y: bb.y - pad, width: w, height: h, fill: '#ffffff' }).forEach(([k, v]) => bg.setAttribute(k, v));
   r.prepend(bg);
+  // imagens embutidas: o arquivo exportado não enxerga o servidor
+  await Promise.all([...r.querySelectorAll('image')].map(async (im) => im.setAttribute('href', await dataUrl(im.getAttribute('href')))));
   if (board.elements.some(x => x.type === 'text')) {
     const st = document.createElementNS(SVG, 'style');
     st.textContent = await fontCss();

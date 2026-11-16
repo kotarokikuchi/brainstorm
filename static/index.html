@@ -292,6 +292,7 @@
       <span class="sep"></span>
       <button id="board-more-btn" class="icon" title="Mais ferramentas"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
       <div id="board-more" class="card menu" hidden>
+        <button data-tool="image"><span><svg viewBox="0 0 24 24"><use href="#i-photo"/></svg>Inserir imagem</span><kbd>9</kbd></button>
         <button data-tool="bucket"><span><svg viewBox="0 0 24 24"><use href="#i-bucket-droplet"/></svg>Balde de tinta</span><kbd>B</kbd></button>
         <button data-tool="lasso"><span><svg viewBox="0 0 24 24"><use href="#i-lasso"/></svg>Seleção de laço</span><kbd>Q</kbd></button>
         <button data-tool="laser"><span><svg viewBox="0 0 24 24"><use href="#i-laser"/></svg>Ponteiro laser</span><kbd>K</kbd></button>
@@ -321,6 +322,7 @@
       <span class="sep"></span>
       <button id="board-help-btn" class="icon" title="Atalhos (?)"><svg viewBox="0 0 24 24"><use href="#i-help"/></svg></button>
     </div>
+    <input type="file" id="board-image-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
     <textarea id="board-text" hidden spellcheck="false" wrap="off"></textarea>
     <div id="board-help" class="card" hidden>
       <strong>Atalhos do quadro</strong>
@@ -328,7 +330,7 @@
         <dt>H / Espaço</dt><dd>Mover a tela</dd><dt>V ou 1</dt><dd>Selecionar</dd>
         <dt>R ou 2</dt><dd>Retângulo</dd><dt>D ou 3</dt><dd>Losango</dd><dt>O ou 4</dt><dd>Elipse</dd>
         <dt>A ou 5</dt><dd>Seta</dd><dt>L ou 6</dt><dd>Linha</dd><dt>P ou 7</dt><dd>Lápis</dd>
-        <dt>K</dt><dd>Ponteiro laser: rastro que some sozinho (não é salvo)</dd><dt>Q</dt><dd>Seleção de laço: contorno livre (Shift soma à seleção)</dd><dt>B</dt><dd>Balde de tinta: pinta o fundo da forma (ou a cor da linha/texto)</dd><dt>T ou 8</dt><dd>Texto (ou duplo clique); Enter quebra a linha, Esc ou clicar fora conclui</dd><dt>E ou 0</dt><dd>Borracha</dd>
+        <dt>9</dt><dd>Inserir imagem (ou colar com Ctrl+V, ou arrastar o arquivo para a lousa)</dd><dt>K</dt><dd>Ponteiro laser: rastro que some sozinho (não é salvo)</dd><dt>Q</dt><dd>Seleção de laço: contorno livre (Shift soma à seleção)</dd><dt>B</dt><dd>Balde de tinta: pinta o fundo da forma (ou a cor da linha/texto)</dd><dt>T ou 8</dt><dd>Texto (ou duplo clique); Enter quebra a linha, Esc ou clicar fora conclui</dd><dt>E ou 0</dt><dd>Borracha</dd>
         <dt>Ctrl+Z / Ctrl+Shift+Z</dt><dd>Desfazer / refazer</dd><dt>Ctrl+D</dt><dd>Duplicar</dd>
         <dt>Ctrl+C / Ctrl+V</dt><dd>Copiar / colar</dd><dt>Ctrl+A</dt><dd>Selecionar tudo</dd>
         <dt>Delete</dt><dd>Apagar</dd><dt>Setas</dt><dd>Mover 1 px (Shift: 10)</dd>

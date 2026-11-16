@@ -165,3 +165,13 @@ test('elementsInPolygon keeps only elements fully inside the free outline', () =
   assert.deepEqual(elementsInPolygon([a, b, ln], all), [a.id, b.id, ln.id]);
   assert.deepEqual(elementsInPolygon([a], [[0, 0], [50, 50]]), [], 'contorno com menos de 3 pontos');
 });
+
+// ---- Imagem ----
+test('image elements hit by their whole box and resize freely', () => {
+  const im = { ...createElement('image', [10, 10]), w: 80, h: 40, fileId: 'a'.repeat(32) + '.png' };
+  assert.equal(hitTest(im, [50, 30], 6), true, 'miolo da imagem');
+  assert.equal(hitTest(im, [200, 30], 6), false);
+  assert.deepEqual(elementPaths(im), [], 'sem traço');
+  resizeElement(im, 'se', [130, 70], { ...im });
+  assert.deepEqual([im.w, im.h], [120, 60]);
+});
