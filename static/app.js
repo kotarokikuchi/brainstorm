@@ -1,6 +1,6 @@
 import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
-  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, insertParent,
+  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, insertParent, cloudPath, branchBounds,
 } from './model.js';
 
 const $ = (s) => document.querySelector(s);
@@ -13,6 +13,13 @@ let editing = null;      // {id, isNew} enquanto o input está ativo
 let boxes = [];          // caixas do último render
 let history = new History();
 const view = { x: 0, y: 0, k: 1 };  // translação + escala do viewport
+const WIDTHS = { thin: 1.5, medium: 3, thick: 5 };
+const DASHES = { solid: null, dashed: '8 6', dotted: '1 5' };
+// texto escuro em fundos claros (branco, amarelo...), branco nos escuros
+const textOn = (hex) => {
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  return 0.299 * r + 0.587 * g + 0.114 * b > 170 ? '#1d1d2b' : '#fff';
+};
 // estado do autosave
 let saveTimer = null, retryTimer = null, dirty = false, saving = null, conflict = false;
 let pending = null;  // mapa com alteração pendente (sobrevive a sair do editor)
@@ -98,7 +105,7 @@ function measure(text, depth) {
 
 const el = (tag, attrs = {}, parent) => {
   const e = document.createElementNS(SVG, tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  for (const [k, v] of Object.entries(attrs)) if (v != null) e.setAttribute(k, v);
   parent?.append(e);
   return e;
 };
@@ -116,10 +123,21 @@ function render() {
   viewport.replaceChildren();
   // na lista, arestas longas primeiro: o tronco fica segmentado com a cor de cada ramo
   const edges = map.layout === 'list' ? [...res.edges].reverse() : res.edges;
+  // "mostrar como contorno": área tracejada em volta do ramo, atrás de tudo
+  for (const b of boxes) {
+    if (!findNode(map.root, b.id).node.boundary) continue;
+    const r = branchBounds(map, boxes, b.id, 12);
+    el('rect', {
+      class: 'boundary', x: r.x, y: r.y, width: r.w, height: r.h, rx: 16,
+      fill: b.color, 'fill-opacity': 0.08, stroke: b.color, 'stroke-width': 1.5, 'stroke-dasharray': '6 4',
+    }, viewport);
+  }
   for (const e of edges) {
+    const n = findNode(map.root, e.to.id).node;  // a linha até o pai é estilizada pelo filho
     el('path', {
-      d: edgePath(map.layout, e.from, e.to), fill: 'none', stroke: e.color,
-      'stroke-width': Math.max(2, 6 - e.depth), 'stroke-linecap': 'round',
+      class: 'edge', d: edgePath(map.layout, e.from, e.to), fill: 'none', stroke: n.lineColor || e.color,
+      'stroke-width': n.lineWidth ? WIDTHS[n.lineWidth] : Math.max(2, 6 - e.depth),
+      'stroke-dasharray': n.lineStyle === 'dashed' ? DASHES.dashed : null, 'stroke-linecap': 'round',
     }, viewport);
   }
   for (const b of boxes) drawNode(b);
@@ -135,23 +153,35 @@ function drawNode(b) {
   if (drag?.active && drag.ids.has(b.id)) g.classList.add('dragging');
   // forma efetiva: raiz sem caixa, 1º nível pílula, demais sublinhado
   const shape = b.shape ?? (b.depth === 0 ? 'none' : b.depth === 1 ? 'pill' : 'underline');
-  const filled = shape === 'pill' || shape === 'rect' || shape === 'rounded';
-  if (filled) {
+  const boxed = ['pill', 'rect', 'rounded', 'cloud'].includes(shape);
+  const solid = boxed && !n.fillNone;
+  // borda: explícita, ou automática quando a forma está sem preenchimento
+  const border = n.borderColor || n.borderWidth || n.borderStyle || (boxed && n.fillNone);
+  const line = {
+    stroke: border ? n.borderColor || b.color : null,
+    'stroke-width': border ? WIDTHS[n.borderWidth || 'medium'] : null,
+    'stroke-dasharray': DASHES[n.borderStyle || 'solid'],
+  };
+  const fill = solid ? b.color : 'transparent';
+  if (shape === 'cloud') {
+    el('path', { class: 'cloud', d: cloudPath(b), fill, ...line }, g);
+  } else if (boxed) {
     const rx = { pill: b.h / 2, rect: 2, rounded: 8 }[shape];
-    el('rect', { x: b.x, y: b.y, width: b.w, height: b.h, rx, fill: b.color }, g);
+    el('rect', { x: b.x, y: b.y, width: b.w, height: b.h, rx, fill, ...line }, g);
   } else {
     // área clicável invisível
     el('rect', { x: b.x, y: b.y, width: b.w, height: b.h, fill: 'transparent' }, g);
   }
   if (shape === 'underline') {
     el('line', {
-      x1: b.x, y1: b.y + b.h, x2: b.x + b.w, y2: b.y + b.h,
-      stroke: b.color, 'stroke-width': 2.5, 'stroke-linecap': 'round',
+      x1: b.x, y1: b.y + b.h, x2: b.x + b.w, y2: b.y + b.h, 'stroke-linecap': 'round',
+      stroke: n.borderColor || b.color, 'stroke-width': n.borderWidth ? WIDTHS[n.borderWidth] : 2.5,
+      'stroke-dasharray': line['stroke-dasharray'],
     }, g);
   }
   const t = el('text', {
     x: b.x + b.w / 2, y: b.y + b.h / 2, 'text-anchor': 'middle', 'dominant-baseline': 'central',
-    fill: filled ? '#fff' : '#1d1d2b', style: `font: ${fontFor(b.depth)}`,
+    fill: solid ? textOn(b.color) : '#1d1d2b', style: `font: ${fontFor(b.depth)}`,
   }, g);
   t.textContent = editing?.id === b.id ? '' : n.text;
   if (b.id === selected) {
@@ -408,30 +438,65 @@ window.addEventListener('resize', render);
 const toolbar = $('#toolbar'), stylePop = $('#style-pop'), nodeMenu = $('#node-menu'), hints = $('#hints');
 const addChildBtn = $('#add-child'), addSiblingBtn = $('#add-sibling');
 
-$('#swatches').append(...['', ...PALETTE].map(c => {
-  const b = document.createElement('button');
-  b.dataset.color = c;
-  if (c) b.style.background = c;
-  b.title = c || 'Cor padrão';
-  return b;
-}));
+// ---------- Painel de estilo: abas Forma / Borda / Linha ----------
+const EXTRA_COLORS = ['#ffffff', '#c2410c', '#3f4448'];  // branco, terracota, grafite
+const customInput = $('#custom-color');
+let styleTab = 'shape', customProp = 'color';
 
-function setStyle(prop, value) {
-  const n = findNode(map.root, selected).node;
-  if (n[prop] !== value) mutate(() => { n[prop] = value; });
+const swatch = (c) => {
+  const b = document.createElement('button');
+  b.dataset.value = c;
+  if (c && c !== 'none') b.style.background = c;
+  b.title = c === '' ? 'Automática' : c === 'none' ? 'Sem preenchimento' : c;
+  return b;
+};
+for (const row of stylePop.querySelectorAll('.swatches[data-extra]')) {
+  const extra = row.dataset.extra.split(' ').map(v => (v === 'auto' ? '' : v));
+  row.append(...[...extra, ...PALETTE, ...EXTRA_COLORS].map(swatch));
 }
 
-$('#swatches').onclick = (e) => {
-  const c = e.target.dataset?.color;
-  if (c !== undefined) setStyle('color', c || null);
-};
-$('#shapes').onclick = (e) => {
-  const btn = e.target.closest('[data-shape]');
-  if (!btn) return;
-  // clicar na forma ativa volta ao padrão
+// cores fora da paleta já usadas no mapa viram amostras "personalizadas"
+function fillCustomRows() {
+  const known = new Set([...PALETTE, ...EXTRA_COLORS]), used = new Set();
+  const walk = (n) => {
+    for (const k of ['color', 'borderColor', 'lineColor']) if (n[k] && !known.has(n[k])) used.add(n[k]);
+    n.children.forEach(walk);
+  };
+  walk(map.root);
+  const list = [...used].join();
+  for (const row of stylePop.querySelectorAll('.swatches[data-custom]')) {
+    if (row.dataset.list === list) continue;
+    row.dataset.list = list;
+    row.replaceChildren(...[...used].map(swatch));
+  }
+}
+
+function setStyle(changes) {
   const n = findNode(map.root, selected).node;
-  setStyle('shape', n.shape === btn.dataset.shape ? null : btn.dataset.shape);
-};
+  if (Object.entries(changes).every(([k, v]) => (n[k] ?? null) === (v ?? null))) return;
+  mutate(() => Object.assign(n, changes));
+}
+
+const applyColor = (prop, v) => setStyle(prop === 'color' ? { color: v || null, fillNone: false } : { [prop]: v || null });
+
+stylePop.addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
+stylePop.addEventListener('click', (e) => {
+  const tabBtn = e.target.closest('[data-tab]');
+  if (tabBtn) { styleTab = tabBtn.dataset.tab; placeOverlays(); return; }
+  const add = e.target.closest('.add-custom');
+  if (add) { customProp = add.dataset.prop; customInput.click(); return; }
+  const btn = e.target.closest('[data-value]'), group = btn?.parentElement.closest('[data-prop]');
+  if (!btn || !group) return;
+  const prop = group.dataset.prop, v = btn.dataset.value, n = findNode(map.root, selected).node;
+  if (group.classList.contains('swatches')) {
+    if (v === 'none') setStyle({ fillNone: true });
+    else applyColor(prop, v);
+  } else {
+    setStyle({ [prop]: n[prop] === v ? null : v });  // clicar na opção ativa volta ao padrão
+  }
+});
+customInput.addEventListener('change', () => applyColor(customProp, customInput.value));
+$('#boundary').addEventListener('change', (e) => { e.target.blur(); setStyle({ boundary: e.target.checked || null }); });
 $('#style-btn').onclick = () => { stylePop.hidden = !stylePop.hidden; nodeMenu.hidden = true; render(); };
 $('#delete-btn').onclick = deleteSelected;
 addChildBtn.onclick = () => addAndEdit(() => addChild(map, selected));
@@ -454,8 +519,15 @@ function placeOverlays() {
   pos(nodeMenu, sx(b.x + b.w / 2) - 125, sy(b.y + b.h) + 14);
   $('#more-btn').classList.toggle('active', !nodeMenu.hidden);
   $('#style-btn').classList.toggle('active', !stylePop.hidden);
-  for (const s of $('#swatches').children) s.classList.toggle('active', (n.color || '') === s.dataset.color);
-  for (const s of $('#shapes').children) s.classList.toggle('active', n.shape === s.dataset.shape);
+  for (const t of stylePop.querySelectorAll('[data-tab]')) t.classList.toggle('active', t.dataset.tab === styleTab);
+  for (const pnl of stylePop.querySelectorAll('[data-panel]')) pnl.hidden = pnl.dataset.panel !== styleTab;
+  fillCustomRows();
+  for (const group of stylePop.querySelectorAll('div[data-prop]')) {
+    const prop = group.dataset.prop;
+    const cur = prop === 'color' && n.fillNone ? 'none' : (n[prop] ?? '');
+    for (const btn of group.querySelectorAll('[data-value]')) btn.classList.toggle('active', btn.dataset.value === cur);
+  }
+  $('#boundary').checked = !!n.boundary;
 
   // "+ filho" do lado de fora do nó; afasta da bolinha de recolher quando existe
   const gap = n.children.length && b.depth > 0 ? 40 : 20;

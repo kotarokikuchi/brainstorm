@@ -98,13 +98,54 @@ const clickNode = (prefix) => ev(`[...document.querySelectorAll('.node')].find(g
 await clickNode('Recursos');
 assert.equal(await ev(`!document.querySelector('#toolbar').hidden`), true, 'toolbar visível');
 await ev(`document.querySelector('#style-btn').click()`);
-await ev(`document.querySelector('#style-pop [data-color="#14b8a6"]').click()`);
-await ev(`document.querySelector('#style-pop [data-shape="rect"]').click()`);
+await ev(`document.querySelector('#style-pop [data-prop="color"] [data-value="#14b8a6"]').click()`);
+await ev(`document.querySelector('#style-pop [data-prop="shape"] [data-value="rect"]').click()`);
 await sleep(900);
 const rec = (await getMap()).root.children.find(c => c.text === 'Recursos');
 assert.equal(rec.color, '#14b8a6');
 assert.equal(rec.shape, 'rect');
 assert.equal(await ev(`[...document.querySelectorAll('#viewport path')].filter(p => p.getAttribute('stroke') === '#14b8a6').length`), 3, 'descendentes herdam a cor');
+
+// painel de estilo: abas Forma/Borda/Linha, sem preenchimento, cor personalizada, nuvem, contorno do ramo
+const recNode = async () => (await getMap()).root.children.find(c => c.text === 'Recursos');
+const pick = (panel, prop, value) => ev(`document.querySelector('#style-pop [data-panel="${panel}"] [data-prop="${prop}"] [data-value="${value}"]').click()`);
+const tab = (name) => ev(`document.querySelector('#style-pop [data-tab="${name}"]').click()`);
+const recG = `[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('Recursos'))`;
+const shown = (sel) => ev(`!document.querySelector('${sel}').hidden`);
+await pick('shape', 'shape', 'cloud');
+assert.equal(await ev(`!!${recG}.querySelector('path.cloud')`), true, 'forma nuvem');
+await pick('shape', 'color', 'none');
+await sleep(900);
+assert.equal((await recNode()).fillNone, true, 'sem preenchimento');
+// (o '+' abre o seletor nativo de cor, que não roda no headless: aplica a cor direto pelo input)
+await ev(`(() => { const i = document.querySelector('#custom-color'); i.value = '#123456'; i.dispatchEvent(new Event('change')); })()`);
+await sleep(900);
+assert.equal((await recNode()).color, '#123456', 'cor personalizada');
+assert.equal((await recNode()).fillNone, false, 'cor volta a preencher');
+assert.equal(await ev(`!!document.querySelector('#style-pop [data-panel="shape"] [data-prop="color"] [data-value="#123456"]')`), true, 'cor personalizada vira amostra');
+await ev(`document.querySelector('#boundary').click()`);
+await sleep(900);
+assert.equal((await recNode()).boundary, true);
+assert.equal(await ev(`!!document.querySelector('#viewport .boundary')`), true, 'contorno do ramo');
+await tab('border');
+assert.equal(await shown('#style-pop [data-panel="border"]'), true, 'aba borda');
+assert.equal(await shown('#style-pop [data-panel="shape"]'), false);
+await pick('border', 'borderColor', '#e5383b');
+await pick('border', 'borderWidth', 'thick');
+await pick('border', 'borderStyle', 'dashed');
+await sleep(900);
+let rn = await recNode();
+assert.deepEqual([rn.borderColor, rn.borderWidth, rn.borderStyle], ['#e5383b', 'thick', 'dashed']);
+assert.equal(await ev(`(() => { const p = ${recG}.querySelector('path.cloud'); return p.getAttribute('stroke') + ' ' + !!p.getAttribute('stroke-dasharray'); })()`), '#e5383b true', 'borda desenhada');
+await tab('line');
+await pick('line', 'lineColor', '#2f5bea');
+await pick('line', 'lineStyle', 'dashed');
+await sleep(900);
+assert.equal(await ev(`[...document.querySelectorAll('#viewport path.edge')].filter(p => p.getAttribute('stroke') === '#2f5bea' && p.getAttribute('stroke-dasharray')).length`), 1, 'linha do pai estilizada');
+await pick('line', 'lineStyle', 'dashed');  // clicar no ativo volta ao padrão
+await sleep(900);
+assert.equal((await recNode()).lineStyle, null);
+await tab('shape');
 
 // botões "+" criam filho e irmão
 await ev(`document.querySelector('#add-child').click()`);

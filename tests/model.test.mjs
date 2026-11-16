@@ -354,3 +354,30 @@ test('insertParent puts a new node between the node and its parent', () => {
   assert.equal(r1.color, null);
   assert.equal(insertParent(m, m.root.id), null);
 });
+
+// ---- Estilo do nó: nuvem e contorno do ramo ----
+import { cloudPath, branchBounds } from '../static/model.js';
+
+test('cloudPath is a closed bumpy outline around the box', () => {
+  const d = cloudPath({ x: 0, y: 0, w: 120, h: 40 });
+  assert.match(d, /^M/);
+  assert.match(d, /Z$/);
+  assert.ok((d.match(/A/g) || []).length >= 8, 'várias ondulações');
+});
+
+test('branchBounds covers the node and its visible descendants only', () => {
+  const { m, r1, r2, g1, g2 } = sample('map');
+  const res = layout(m, measure);
+  const b = byId(res);
+  const r = branchBounds(m, res.nodes, r1.id, 10);
+  for (const id of [r1.id, g1.id, g2.id]) {
+    const x = b[id];
+    assert.ok(x.x >= r.x + 10 && x.y >= r.y + 10 && x.x + x.w <= r.x + r.w - 10 && x.y + x.h <= r.y + r.h - 10, id);
+  }
+  const o = b[r2.id];
+  assert.ok(o.y >= r.y + r.h || o.y + o.h <= r.y, 'irmão fica de fora');
+  r1.collapsed = true;
+  const res2 = layout(m, measure);
+  const small = branchBounds(m, res2.nodes, r1.id, 10);
+  assert.equal(small.w, byId(res2)[r1.id].w + 20);
+});
