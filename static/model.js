@@ -543,3 +543,6 @@ export function toMarkdown(map) {
   walk(map.root, 0);
   return lines.join('\n') + '\n';
 }
+
+// ---- Apresentação: visão geral (null) e um slide por ramo principal ----
+export const slides = (map) => [null, ...map.root.children.map(c => c.id)];

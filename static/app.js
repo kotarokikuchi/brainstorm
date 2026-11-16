@@ -1,6 +1,6 @@
 import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
-  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, toMarkdown, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
+  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, toMarkdown, slides, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
 } from './model.js';
 
 const $ = (s) => document.querySelector(s);
@@ -133,6 +133,7 @@ async function openMap(id) {
   focusId = null;
   outlineOn = false;
   $('#history-panel').hidden = true;
+  if (presenting) stopPresentation();
   document.body.classList.remove('outline-mode');
   $('#outline-view').hidden = true;
   if (conflict) dirty = false;  // edições do mapa em conflito foram abandonadas ao sair dele
@@ -432,6 +433,7 @@ function addAndEdit(create) {
 // ---------- Teclado ----------
 document.addEventListener('keydown', (ev) => {
   if (!map || editing || document.body.dataset.view !== 'editor') return;
+  if (presenting) { presentKey(ev); return; }  // na apresentação só as teclas de navegação valem
   if (ev.target.closest?.('input, textarea, select')) return;  // digitando num campo (ex.: comentário)
   const ctrl = ev.ctrlKey || ev.metaKey;
   const key = ev.key;
@@ -1753,3 +1755,50 @@ mapMenu.addEventListener('click', async (e) => {
     location.hash = '#/';
   }
 });
+
+// ---------- Apresentação ----------
+let presenting = null;  // {list, i}
+
+function showSlide(i) {
+  presenting.i = Math.max(0, Math.min(i, presenting.list.length - 1));
+  focusId = presenting.list[presenting.i];
+  selected = null;
+  selectedLink = null;
+  closeNodePops();
+  render();
+  fitView(2);
+  $('#present-count').textContent = `${presenting.i + 1} / ${presenting.list.length}`;
+}
+
+function startPresentation() {
+  if (outlineOn) setOutline(false);
+  presenting = { list: slides(map), i: 0 };
+  document.body.classList.add('presenting');
+  $('#present-bar').hidden = false;
+  document.documentElement.requestFullscreen?.().catch(() => {});  // sem tela cheia, segue na janela
+  setTimeout(() => showSlide(0), 50);  // espera o layout sem o topo para ajustar o zoom
+}
+
+function stopPresentation() {
+  presenting = null;
+  focusId = null;
+  document.body.classList.remove('presenting');
+  $('#present-bar').hidden = true;
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  selected = map?.root.id ?? null;
+  if (map) { render(); fitView(); }
+}
+
+function presentKey(ev) {
+  const k = ev.key;
+  if (k === 'ArrowRight' || k === ' ' || k === 'PageDown') { ev.preventDefault(); showSlide(presenting.i + 1); }
+  else if (k === 'ArrowLeft' || k === 'PageUp') { ev.preventDefault(); showSlide(presenting.i - 1); }
+  else if (k === 'Escape') { ev.preventDefault(); stopPresentation(); }
+}
+
+$('#present-btn').onclick = startPresentation;
+$('#present-prev').onclick = () => showSlide(presenting.i - 1);
+$('#present-next').onclick = () => showSlide(presenting.i + 1);
+$('#present-exit').onclick = stopPresentation;
+// saiu da tela cheia pelo navegador (Esc do próprio navegador): encerra a apresentação também
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && presenting) stopPresentation(); });

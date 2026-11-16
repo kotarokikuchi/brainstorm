@@ -27,6 +27,10 @@
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6l11 0" /> <path d="M9 12l11 0" /> <path d="M9 18l11 0" /> <path d="M5 6l0 .01" /> <path d="M5 12l0 .01" /> <path d="M5 18l0 .01" /></symbol>
     <symbol id="i-message" viewBox="0 0 24 24"><path d="M8 9h8" /> <path d="M8 13h6" /> <path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z" /></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M10 14l11 -11" /> <path d="M21 3l-6.5 18a.55 .55 0 0 1 -1 0l-3.5 -7l-7 -3.5a.55 .55 0 0 1 0 -1l18 -6.5" /></symbol>
+    <symbol id="i-player-play" viewBox="0 0 24 24"><path d="M7 4v16l13 -8z" /></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="M15 6l-6 6l6 6" /></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 6l6 6l-6 6" /></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6l-12 12" /> <path d="M6 6l12 12" /></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5l0 14" /> <path d="M5 12l14 0" /></symbol>
     <symbol id="i-square-rounded" viewBox="0 0 24 24"><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></symbol>
     <symbol id="i-square" viewBox="0 0 24 24"><path d="M3 3m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" /></symbol>
@@ -41,6 +45,7 @@
     <span class="history-btns">
       <button id="undo" class="icon" title="Desfazer (Ctrl+Z)"><svg viewBox="0 0 24 24"><use href="#i-arrow-back-up"/></svg></button>
       <button id="redo" class="icon" title="Refazer (Ctrl+Shift+Z)"><svg viewBox="0 0 24 24"><use href="#i-arrow-forward-up"/></svg></button>
+      <button id="present-btn" class="icon" title="Apresentar"><svg viewBox="0 0 24 24"><use href="#i-player-play"/></svg></button>
       <button id="history-btn" class="icon" title="Histórico de versões"><svg viewBox="0 0 24 24"><use href="#i-history"/></svg></button>
       <button id="export-btn" class="icon" title="Exportar"><svg viewBox="0 0 24 24"><use href="#i-download"/></svg></button>
     </span>
@@ -227,6 +232,12 @@
     <div id="focus-bar" class="card" hidden>
       <span>Foco: <strong id="focus-title"></strong></span>
       <button id="focus-exit">Sair do foco <kbd>Esc</kbd></button>
+    </div>
+    <div id="present-bar" class="card" hidden>
+      <button id="present-prev" class="icon" title="Anterior (←)"><svg viewBox="0 0 24 24"><use href="#i-chevron-left"/></svg></button>
+      <span id="present-count"></span>
+      <button id="present-next" class="icon" title="Próximo (→ ou Espaço)"><svg viewBox="0 0 24 24"><use href="#i-chevron-right"/></svg></button>
+      <button id="present-exit" class="icon" title="Sair (Esc)"><svg viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
     </div>
     <div id="dock" class="card">
       <button id="outline-btn" class="icon" title="Outline (Alt+Shift+O)"><svg viewBox="0 0 24 24"><use href="#i-list"/></svg></button>

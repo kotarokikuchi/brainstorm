@@ -527,3 +527,12 @@ test('toMarkdown writes the root as title and branches as nested lists', () => {
     '',
   ].join('\n'));
 });
+
+// ---- Apresentação ----
+import { slides } from '../static/model.js';
+
+test('slides: overview first, then one per main branch in order', () => {
+  const { m, r1, l1, r2 } = sample('map');
+  assert.deepEqual(slides(m), [null, r1.id, l1.id, r2.id]);
+  assert.deepEqual(slides(newMap('x')), [null]);
+});
