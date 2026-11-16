@@ -198,3 +198,12 @@ body.outline-mode #canvas { display: none; }
 .outline input { flex: 1; border: none; background: none; font: inherit; font-size: 15px; padding: 4px 6px; border-radius: 6px; outline: none; color: var(--ink); }
 .outline input:focus { background: #fff; box-shadow: 0 0 0 1.5px var(--accent); }
 .outline > li > .row input { font-size: 20px; font-weight: 700; }
+
+/* Exportar */
+#export-menu { position: fixed; top: 56px; right: 16px; min-width: 220px; z-index: 10; }
+@media print {
+  @page { size: landscape; margin: 10mm; }
+  .topbar, .card, .adder, #hints, .link-anchor, #link-ring, #editor, #outline-view { display: none !important; }
+  .selected-ring, .resize-handle, .link-bend, .link-end, .anchor-dot { display: none; }
+  html, body, #editor-view { background: #fff; height: 100%; }
+}
