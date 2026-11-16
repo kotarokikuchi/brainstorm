@@ -512,6 +512,43 @@ assert.equal(await ev(`!document.querySelector('#attach-pop').hidden`), true, 'c
 assert.equal(await ev(`document.querySelectorAll('#attach-list li').length`), 2);
 await key('Escape');
 
+// comentários: botão 💬 abre o painel; Enter envia; ícone no nó; digitar no campo não dispara atalhos; apagar; desfazer; Alt+Shift+C
+await clickNode('Orçamento');
+await ev(`document.querySelector('#comment-btn').click()`);
+assert.equal(await ev(`!document.querySelector('#comment-pop').hidden`), true, 'painel de comentários abre');
+assert.equal(await ev(`document.activeElement?.id`), 'comment-input', 'campo recebe o foco');
+await key('x');  // letra no campo não pode começar a editar o nó
+assert.equal(await ev(`document.querySelector('#editor').hidden`), true, 'atalhos do mapa não disparam no campo');
+await ev(`document.querySelector('#comment-input').value = ''`);
+await typeText('Revisar valores');
+await key('Enter');
+await sleep(900);
+assert.deepEqual((await orcNode()).comments?.map(c => c.text), ['Revisar valores'], 'comentário gravado');
+assert.ok((await orcNode()).comments[0].at, 'com data/hora');
+assert.equal(await ev(`document.querySelectorAll('#comment-list li').length`), 1, 'lista mostra o comentário');
+assert.equal(await ev(`!!${orcG}.querySelector('.comment-icon')`), true, 'ícone de comentário no nó');
+assert.equal(await ev(`document.querySelector('#comment-input').value`), '', 'campo limpo após enviar');
+await ev(`document.querySelector('#comment-list [data-del]').click()`);
+await sleep(900);
+assert.equal((await orcNode()).comments, undefined, 'apagar comentário');
+await ev(`document.activeElement.blur()`);  // Ctrl+Z dentro do campo é o desfazer do próprio campo
+await key('z', 2);
+await sleep(900);
+assert.equal((await orcNode()).comments.length, 1, 'desfazer volta o comentário');
+await ev(`document.activeElement.blur()`);
+await key('Escape');
+assert.equal(await ev(`document.querySelector('#comment-pop').hidden`), true);
+await clickNode('Orçamento');
+await key('c', 1 | 8);  // Alt+Shift+C
+assert.equal(await ev(`!document.querySelector('#comment-pop').hidden`), true, 'atalho Alt+Shift+C abre comentários');
+await ev(`document.activeElement.blur()`);
+await key('Escape');
+await clickNode('Q2');
+await ev(`${orcG}.querySelector('.comment-icon').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
+assert.equal(await ev(`!document.querySelector('#comment-pop').hidden`), true, 'clicar no ícone abre os comentários');
+await ev(`document.activeElement.blur()`);
+await key('Escape');
+
 // conflito: outra "aba" grava antes
 await sleep(900);
 const cur = await getMap();
