@@ -42,6 +42,8 @@ body[data-view="list"] #title, body[data-view="list"] #status, body[data-view="l
 .node { cursor: pointer; }
 .selected-ring { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; }
 .toggle circle { fill: #fff; stroke-width: 1.5; }
+.toggle .hit { fill: transparent; stroke: none; }
+.toggle .open { stroke-width: 2.5; }
 .toggle text { font-size: 10px; font-weight: 700; }
 #editor { position: absolute; border: 2px solid var(--accent); border-radius: 6px; padding: 0 6px; outline: none; background: #fff; color: var(--ink); text-align: center; }
 

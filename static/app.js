@@ -213,10 +213,15 @@ function drawToggle(b, n, g) {
   let cx = b.x + b.w + 12, cy = b.y + b.h / 2;
   if (map.layout === 'map' && b.side === 'left') cx = b.x - 12;
   if (map.layout === 'org') { cx = b.x + b.w / 2; cy = b.y + b.h + 12; }
+  // expandido: círculo vazado pequeno; recolhido: círculo com o número de filhos escondidos
   const tg = el('g', { class: 'toggle' }, g);
-  el('circle', { cx, cy, r: 9, stroke: b.color }, tg);
-  const t = el('text', { x: cx, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: b.color }, tg);
-  t.textContent = n.collapsed ? n.children.length : '−';
+  el('circle', { class: 'hit', cx, cy, r: 12 }, tg);  // área de clique
+  if (n.collapsed) {
+    el('circle', { cx, cy, r: 9, stroke: b.color }, tg);
+    el('text', { x: cx, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: b.color }, tg).textContent = n.children.length;
+  } else {
+    el('circle', { class: 'open', cx, cy, r: 5, stroke: b.color }, tg);
+  }
   tg.addEventListener('click', (ev) => {
     ev.stopPropagation();
     mutate(() => { n.collapsed = !n.collapsed; });
