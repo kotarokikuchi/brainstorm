@@ -1029,6 +1029,10 @@ await typeText('!');
 await key('Enter', 2);  // Ctrl+Enter também confirma
 await sleep(900);
 assert.equal((await boardEls()).at(-1).text, 'Linha um\nlinha dois\nlinha três!', 'Ctrl+Enter confirma');
+await ev(`document.querySelector('#board-props [data-prop="textAlign"] [data-value="center"]').click()`);
+await sleep(900);
+assert.equal((await boardEls()).at(-1).textAlign, 'center', 'alinhamento salvo');
+assert.equal(await ev(`document.querySelector('#board-root .el[data-id="${lastTxt.id}"] text').getAttribute('text-anchor')`), 'middle', 'texto centralizado');
 
 // quadro: cada ferramenta mostra a letra do atalho no canto do botão
 const hint = (t) => ev(`getComputedStyle(document.querySelector('#board-tools [data-tool="${t}"]'), '::after').content`);
