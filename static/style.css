@@ -253,3 +253,12 @@ body.presenting #canvas { cursor: default; }
 #board-view { position: relative; height: calc(100% - 52px); overflow: hidden; background: #fff; }
 #board-canvas { width: 100%; height: 100%; display: block; touch-action: none; }
 body[data-view="board"] #title { cursor: text; }
+#board-tools { top: 14px; left: 50%; transform: translateX(-50%); }
+#board-tools .sep, #board-bottom .sep { width: 1px; align-self: stretch; background: var(--line); margin: 4px 2px; }
+#board-tools button.active { background: #e0dfff; color: #4338ca; }
+#board-bottom { left: 16px; bottom: 16px; }
+#board-zoom { border: none; min-width: 56px; }
+#board-canvas[data-tool="hand"] { cursor: grab; }
+#board-canvas.panning { cursor: grabbing; }
+#board-canvas[data-tool="rectangle"], #board-canvas[data-tool="diamond"], #board-canvas[data-tool="ellipse"],
+#board-canvas[data-tool="arrow"], #board-canvas[data-tool="line"], #board-canvas[data-tool="freedraw"] { cursor: crosshair; }
