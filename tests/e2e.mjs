@@ -1232,6 +1232,37 @@ assert.equal(t2.folders.find(f => f.id === cli.id).parent, null, 'subpasta sobe 
 assert.equal(t2.place[newMapId], cli.id, 'mapa continua na subpasta');
 assert.equal((await listNames()).length, rootDocs, 'Clientes VIP no lugar de Trabalho');
 
+// pastas: mover pelo menu e arrastando; pasta não entra nela mesma
+const vip = (await tree()).folders.find(f => f.name === 'Clientes VIP');
+const rootDocId = await ev(`document.querySelector('#maps li:not(.folder)').dataset.drag.split(':')[1]`);
+await ev(`document.querySelector('#maps li:not(.folder) [data-move-doc]').click()`);
+assert.equal(await shownSel('#move-menu'), true, 'menu Mover para abre');
+assert.equal(await ev(`document.querySelector('#move-menu [data-to=""]').disabled`), true, 'pasta atual desabilitada');
+await ev(`document.querySelector('#move-menu [data-to="${vip.id}"]').click()`); await sleep(800);
+assert.equal((await tree()).place[rootDocId], vip.id, 'menu move o documento');
+assert.equal(await shownSel('#move-menu'), false);
+await ev(`document.querySelector('#maps li.folder [data-move-folder]').click()`);
+assert.equal(await ev(`document.querySelector('#move-menu [data-to="${vip.id}"]').disabled`), true, 'pasta não pode ir para dentro dela mesma');
+await key('Escape');
+await ev(`window.prompt = () => 'Destino'; document.querySelector('#new-folder').click()`); await sleep(800);
+const dest = (await tree()).folders.find(f => f.name === 'Destino');
+await ev(`(() => { const dt = new DataTransfer();
+  const src = [...document.querySelectorAll('#maps li.folder')].find(li => li.textContent.startsWith('Clientes VIP'));
+  const dst = [...document.querySelectorAll('#maps li.folder')].find(li => li.textContent.startsWith('Destino'));
+  src.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+  dst.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  dst.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); })()`);
+await sleep(800);
+assert.equal((await tree()).folders.find(f => f.id === vip.id).parent, dest.id, 'arrastar pasta sobre pasta move');
+await ev(`location.hash = '#/folder/${vip.id}'`); await sleep(800);
+await ev(`(() => { const dt = new DataTransfer();
+  document.querySelector('#maps li:not(.folder)').dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+  const home = document.querySelector('#list-title a[data-drop=""]');
+  home.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  home.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); })()`);
+await sleep(800);
+assert.equal(Object.values((await tree()).place).filter(v => v === vip.id).length, 1, 'soltar na trilha leva o documento para o Início');
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);

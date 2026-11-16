@@ -38,3 +38,24 @@ export function placeDoc(tree, docId, folderId) {
   if (folderId) place[docId] = folderId; else delete place[docId];
   return { ...tree, place };
 }
+
+// a pasta e tudo abaixo dela (destinos proibidos ao mover a pasta)
+export function subtree(tree, id) {
+  const out = new Set([id]);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const f of tree.folders) if (out.has(f.parent) && !out.has(f.id)) { out.add(f.id); grew = true; }
+  }
+  return out;
+}
+
+// muda a pasta de lugar; null se o destino for ela mesma ou uma subpasta dela
+export function moveFolder(tree, id, parent) {
+  if (parent && subtree(tree, id).has(parent)) return null;
+  return { ...tree, folders: tree.folders.map(f => (f.id === id ? { ...f, parent: parent ?? null } : f)) };
+}
+
+// todas as pastas em árvore (para o menu "Mover para"), com a profundidade de cada uma
+export function folderOptions(tree, parent = null, depth = 0) {
+  return childFolders(tree, parent).flatMap(f => [{ id: f.id, name: f.name, depth }, ...folderOptions(tree, f.id, depth + 1)]);
+}
