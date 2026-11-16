@@ -273,6 +273,9 @@ body[data-view="board"] #title { cursor: text; }
 #board-canvas[data-tool="arrow"], #board-canvas[data-tool="line"], #board-canvas[data-tool="freedraw"] { cursor: crosshair; }
 #board-canvas[data-tool="bucket"] { cursor: cell; }
 #board-canvas[data-tool="lasso"], #board-canvas[data-tool="laser"] { cursor: crosshair; }
+.link-badge { cursor: pointer; }
+.link-badge rect { fill: #fff; stroke: #c9c7d6; }
+.link-badge use { fill: none; stroke: #4338ca; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .laser { fill: none; stroke: #ff3b30; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; filter: drop-shadow(0 0 3px #ff3b30aa); }
 #board-more { top: calc(100% + 8px); right: 0; }
 #board-more button > span { display: flex; align-items: center; gap: 12px; }
