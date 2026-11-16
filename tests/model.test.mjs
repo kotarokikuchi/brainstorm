@@ -413,3 +413,24 @@ test('markerShape rejects unknown types and sanitizes colors', () => {
   assert.ok(!bad.includes('pwn'), 'cor maliciosa não entra na marcação');
   assert.match(bad, /fill="#22a559"/);
 });
+
+// ---- Redimensionar nó: largura fixa e quebra de linha ----
+import { wrapLines } from '../static/model.js';
+
+test('wrapLines breaks words to fit the width and keeps long words whole', () => {
+  const widthOf = (s) => s.length * 10;
+  assert.deepEqual(wrapLines('um dois tres quatro', 90, widthOf), ['um dois', 'tres', 'quatro']);
+  assert.deepEqual(wrapLines('curto', 200, widthOf), ['curto']);
+  assert.deepEqual(wrapLines('palavragigante x', 50, widthOf), ['palavragigante', 'x']);
+  assert.deepEqual(wrapLines('', 50, widthOf), ['']);
+});
+
+test('layout passes the node width to measure', () => {
+  const { m, g1 } = sample('map');
+  g1.width = 150;
+  const seen = [];
+  const res = layout(m, (text, depth, width) => { seen.push(width); return { w: width ?? text.length * 8 + 16, h: width ? 44 : 20 }; });
+  const b = byId(res)[g1.id];
+  assert.deepEqual([b.w, b.h], [150, 44]);
+  assert.ok(seen.includes(150));
+});

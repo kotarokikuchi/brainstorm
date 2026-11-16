@@ -311,14 +311,15 @@ export class History {
 
 // ---- Layouts ----
 // Cada layout devolve caixas (canto superior esquerdo + tamanho) e arestas pai→filho.
-// measure(text, depth) -> {w, h} é injetado: no navegador mede via SVG, nos testes é fixo.
+// measure(text, depth, width) -> {w, h} é injetado: no navegador mede via canvas, nos testes é fixo.
+// width = largura fixa do nó (redimensionado); o texto quebra em linhas para caber.
 
 const visible = (n) => (n.collapsed ? [] : n.children);
 
 export function layout(map, measure) {
   const nodes = [], edges = [];
   const box = (n, depth, color, side) => {
-    const { w, h } = measure(n.text, depth);
+    const { w, h } = measure(n.text, depth, n.width);
     const b = { id: n.id, x: 0, y: 0, w, h, depth, color, shape: effectiveShape(n, depth), side };
     nodes.push(b);
     return b;
@@ -334,7 +335,7 @@ function layoutMap(root, measure, box, colorOf, edges) {
   const heights = new Map();
   const subH = (n, depth) => {
     const kids = visible(n);
-    const own = measure(n.text, depth).h;
+    const own = measure(n.text, depth, n.width).h;
     const sum = kids.reduce((s, c) => s + subH(c, depth + 1), 0) + GAP_Y * Math.max(0, kids.length - 1);
     const h = Math.max(own, sum);
     heights.set(n.id, h);
@@ -374,7 +375,7 @@ function layoutOrg(root, measure, box, colorOf, edges) {
   const subW = (n, depth) => {
     const kids = visible(n);
     const sum = kids.reduce((s, c) => s + subW(c, depth + 1), 0) + GAP_X * Math.max(0, kids.length - 1);
-    const w = Math.max(measure(n.text, depth).w, sum);
+    const w = Math.max(measure(n.text, depth, n.width).w, sum);
     widths.set(n.id, w);
     return w;
   };
@@ -394,7 +395,7 @@ function layoutOrg(root, measure, box, colorOf, edges) {
     }
   };
   subW(root, 0);
-  place(null, root, 0, 0, -measure(root.text, 0).h / 2, '#222');
+  place(null, root, 0, 0, -measure(root.text, 0, root.width).h / 2, '#222');
 }
 
 function layoutList(root, measure, box, colorOf, edges) {
@@ -477,4 +478,16 @@ export function branchBounds(map, boxes, nodeId, pad = 12) {
   const bs = boxes.filter(b => ids.has(b.id));
   const x = Math.min(...bs.map(b => b.x)) - pad, y = Math.min(...bs.map(b => b.y)) - pad;
   return { x, y, w: Math.max(...bs.map(b => b.x + b.w)) + pad - x, h: Math.max(...bs.map(b => b.y + b.h)) + pad - y };
+}
+
+// quebra gulosa por palavras para caber em maxW; palavra maior que a largura fica inteira
+export function wrapLines(text, maxW, widthOf) {
+  const lines = [];
+  let cur = '';
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const next = cur ? `${cur} ${word}` : word;
+    if (cur && widthOf(next) > maxW) { lines.push(cur); cur = word; } else cur = next;
+  }
+  lines.push(cur);
+  return lines;
 }
