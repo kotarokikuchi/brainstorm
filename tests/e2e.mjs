@@ -1480,6 +1480,15 @@ assert.equal(await shownSel('#empty'), false, 'sem "nada encontrado" quando só 
 await key('Escape');
 assert.equal(await shownSel('#trash'), false, 'sem busca, dentro da pasta, lixeira some');
 
+// apagar mapa/quadro pergunta antes; cancelar não apaga
+await fetch(BASE + '/api/maps/pergunta', { method: 'PUT', body: JSON.stringify({ version: 0, type: 'board', title: 'Pergunta', elements: [] }) });
+await ev(`location.hash = '#/'`); await sleep(1000);
+await ev(`window.__asked = []; window.confirm = (m) => { window.__asked.push(m); return false; }; document.querySelector('#maps [data-delete="pergunta"]').click()`); await sleep(600);
+assert.match(await ev(`window.__asked[0]`), /^Apagar o quadro "Pergunta"\?/, 'pergunta com o nome');
+assert.equal((await fetch(BASE + '/api/maps/pergunta')).status, 200, 'cancelar não apaga');
+await ev(`window.confirm = () => true; document.querySelector('#maps [data-delete="pergunta"]').click()`); await sleep(800);
+assert.equal((await fetch(BASE + '/api/maps/pergunta')).status, 404, 'confirmar apaga (vai para a lixeira)');
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);

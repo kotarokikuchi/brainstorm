@@ -143,6 +143,10 @@ async function route() {
   else showList(location.hash.match(/^#\/folder\/([a-z0-9-]+)$/)?.[1] ?? null);
 }
 
+// apagar documento: pergunta antes (vai para a lixeira, dá para restaurar)
+const confirmTrash = (type, title) =>
+  confirm(`Apagar ${type === 'board' ? 'o quadro' : 'o mapa'} "${title || '(sem título)'}"? Ele vai para a lixeira, de onde dá para restaurar.`);
+
 // ---------- Pastas ----------
 let tree = { version: 0, folders: [], place: {} }, listFolder = null;
 const folderHref = (id) => (id ? `#/folder/${id}` : '#/');
@@ -270,14 +274,18 @@ $('#maps').addEventListener('click', async (e) => {
   if (d?.duplicate) {
     const r = await fetch(`/api/maps/${d.duplicate}/duplicate`, { method: 'POST' });
     if (r.ok && listFolder) { const { id } = await r.json(); await saveTree(t => placeDoc(t, id, listFolder)); }  // cópia na mesma pasta
-  } else if (d?.delete) await api('DELETE', `/${d.delete}`);
+  } else if (d?.delete) {
+    const it = listData.items.find(x => x.id === d.delete);
+    if (!confirmTrash(it?.type, it?.title)) return;
+    await api('DELETE', `/${d.delete}`);
+  }
   else if (d?.moveDoc || d?.moveFolder) return openMoveMenu(d.moveDoc ? 'doc' : 'folder', d.moveDoc ?? d.moveFolder, e.target.closest('button'));
   else if (d?.renameFolder) {
     const f = tree.folders.find(x => x.id === d.renameFolder);
     if (!f || !(await renameFolder(f, prompt('Nome da pasta', f.name)))) return;
   } else if (d?.deleteFolder) {
     const f = tree.folders.find(x => x.id === d.deleteFolder);
-    if (!f || !confirm(`Apagar a pasta "${f.name}"? O que está dentro dela vai para a pasta de cima.`)) return;
+    if (!f || !confirm(`Apagar a pasta "${f.name}"? O que está dentro dela (mapas, quadros e subpastas) vai para a pasta de cima.`)) return;
     await saveTree(t => removeFolder(t, f.id));
   } else return;
   showList(listFolder);
@@ -2066,6 +2074,7 @@ mapMenu.addEventListener('click', async (e) => {
     if (r.ok) location.hash = `#/${kind}/${(await r.json()).id}`;
     else alert('Não foi possível duplicar o mapa.');
   } else if (action === 'trash') {
+    if (!confirmTrash(kind, kind === 'board' ? doc.title : doc.root.text)) return;
     dirty = false;  // o mapa vai inteiro para a lixeira; nada pendente a perguntar
     pending = null;
     await api('DELETE', `/${id}`);
