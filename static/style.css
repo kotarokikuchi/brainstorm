@@ -280,6 +280,7 @@ body[data-view="board"] #title { cursor: text; }
 #board-props .swatches button { width: 24px; height: 24px; border-radius: 6px; }
 #board-props .swatches button[data-value="transparent"] { background: linear-gradient(135deg, #fff 45%, var(--danger) 47% 53%, #fff 55%); }
 #board-props .seg button { padding: 4px 2px; font-size: 12px; }
+#board-props .seg svg { display: block; width: 20px; height: 20px; margin: auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 #board-props .seg button.active { background: #e0dfff; border-color: #4338ca; color: #4338ca; }
 #board-opacity { width: 100%; }
 .sel-item { fill: none; stroke: #6965db; stroke-dasharray: 4 3; pointer-events: none; }
