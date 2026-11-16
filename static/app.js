@@ -774,7 +774,7 @@ function drawLinks() {
   const from = boxes.find(b => b.id === (linking ? linking.from : selected));
   if (linking) {
     svg.classList.add('linking');
-    const t = boxes.find(b => b.id === linking.target);
+    const t = linking.fromSide && boxes.find(b => b.id === linking.target);
     if (t) {
       el('rect', { class: 'link-target', x: t.x - 5, y: t.y - 5, width: t.w + 10, height: t.h + 10, rx: 10, fill: '#22a55914', stroke: '#22a559', 'stroke-width': 2 }, viewport);
       // 4 pontos possíveis de chegada; o mais perto do ponteiro fica maior
@@ -782,7 +782,7 @@ function drawLinks() {
       const pts = { top: [t.x + t.w / 2, t.y], right: [t.x + t.w, t.y + t.h / 2], bottom: [t.x + t.w / 2, t.y + t.h], left: [t.x, t.y + t.h / 2] };
       for (const [side, [cx, cy]] of Object.entries(pts)) el('circle', { class: 'anchor-dot', cx, cy, r: side === near ? 6 : 3.5, fill: '#22a559' }, viewport);
     }
-    if (from && linking.x !== undefined) {
+    if (from && linking.fromSide && linking.x !== undefined) {
       const end = t ?? { x: linking.x, y: linking.y, w: 0, h: 0 };
       const toSide = t ? sideToward(t, [linking.x, linking.y]) : null;
       el('path', { d: linkPath(from, end, null, linking.fromSide, toSide), class: 'link-preview', fill: 'none', stroke: '#22a559', 'stroke-width': 2, 'stroke-dasharray': '3 4', 'marker-end': 'url(#arrow)' }, viewport);
@@ -825,7 +825,7 @@ function trackLink(e) {
 }
 
 window.addEventListener('pointermove', (e) => {
-  if (!linking) return;
+  if (!linking?.fromSide) return;  // só depois de escolher o lado de saída num dos 4 "+"
   trackLink(e);
   render();
 });
@@ -833,6 +833,11 @@ window.addEventListener('pointermove', (e) => {
 window.addEventListener('pointerup', (e) => {
   if (!linking) return;
   if (e.target.closest?.('.link-anchor')) return;  // escolheu o lado de saída; espera o destino
+  if (!linking.fromSide) {
+    // ainda escolhendo o lado: clique no fundo cancela; em nós, ignora
+    if (e.target === svg) { linking = null; render(); }
+    return;
+  }
   trackLink(e);
   const { from, target, fromSide } = linking;
   linking = null;
