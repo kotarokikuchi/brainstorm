@@ -19,6 +19,8 @@
     <symbol id="i-line" viewBox="0 0 24 24"><path d="M6 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /> <path d="M18 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /> <path d="M7.5 16.5l9 -9" /></symbol>
     <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12l14 0" /></symbol>
     <symbol id="i-oval" viewBox="0 0 24 24"><path d="M12 12m-6 0a6 9 0 1 0 12 0a6 9 0 1 0 -12 0" /></symbol>
+    <symbol id="i-photo" viewBox="0 0 24 24"><path d="M15 8h.01" /> <path d="M3 6a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v12a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-12z" /> <path d="M3 16l5 -5c.928 -.893 2.072 -.893 3 0l5 5" /> <path d="M14 14l1 -1c.928 -.893 2.072 -.893 3 0l3 3" /></symbol>
+    <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3l6.5 -6.5a3 3 0 0 0 -6 -6l-6.5 6.5a4.5 4.5 0 0 0 9 9l6.5 -6.5" /></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5l0 14" /> <path d="M5 12l14 0" /></symbol>
     <symbol id="i-square-rounded" viewBox="0 0 24 24"><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></symbol>
     <symbol id="i-square" viewBox="0 0 24 24"><path d="M3 3m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" /></symbol>
@@ -56,9 +58,19 @@
     <!-- barra flutuante sobre o nó selecionado -->
     <div id="toolbar" class="card" hidden>
       <button id="style-btn" class="icon" title="Cor e forma"><svg viewBox="0 0 24 24"><use href="#i-bucket-droplet"/></svg></button>
+      <button id="image-btn" class="icon" title="Imagem"><svg viewBox="0 0 24 24"><use href="#i-photo"/></svg></button>
       <button id="link-btn" class="icon" title="Ligar a outro nó"><svg viewBox="0 0 24 24"><use href="#i-line"/></svg></button>
       <button id="delete-btn" class="icon" title="Apagar (Del)"><svg viewBox="0 0 24 24"><use href="#i-trash"/></svg></button>
       <button id="more-btn" class="icon" title="Mais opções"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
+    </div>
+    <div id="image-pop" class="card" hidden>
+      <label id="image-drop" class="drop">
+        <svg viewBox="0 0 24 24"><use href="#i-photo"/></svg>
+        <strong>Solte a imagem aqui ou clique para escolher</strong>
+        <small>PNG, JPG, GIF ou WEBP · até 20 MB</small>
+        <input type="file" id="image-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+      </label>
+      <button id="image-remove" class="danger-link" hidden>Remover imagem</button>
     </div>
     <div id="node-menu" class="card menu" hidden>
       <button data-action="child">Novo filho <kbd>Tab</kbd></button>

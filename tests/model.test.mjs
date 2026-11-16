@@ -392,6 +392,7 @@ test('effectiveShape: defaults per depth, box when styled, explicit shape wins',
   assert.equal(effectiveShape(n({ borderWidth: 'thick' }), 0), 'rounded');
   assert.equal(effectiveShape(n({ shape: 'underline', color: '#2f5bea' }), 2), 'underline');
   assert.equal(effectiveShape(n({ shape: 'cloud' }), 2), 'cloud');
+  assert.equal(effectiveShape(n({ image: { id: 'x', w: 1, h: 1 } }), 2), 'rounded');
 });
 
 test('layout boxes carry the effective shape', () => {
@@ -433,4 +434,13 @@ test('layout passes the node width to measure', () => {
   const b = byId(res)[g1.id];
   assert.deepEqual([b.w, b.h], [150, 44]);
   assert.ok(seen.includes(150));
+});
+
+// ---- Imagem no nó ----
+test('layout passes the node image to measure', () => {
+  const { m, g1 } = sample('map');
+  g1.image = { id: 'a'.repeat(32) + '.png', w: 400, h: 200 };
+  const res = layout(m, (text, depth, width, image) => ({ w: image ? 216 : 50, h: image ? 136 : 20 }));
+  const b = byId(res)[g1.id];
+  assert.deepEqual([b.w, b.h], [216, 136]);
 });

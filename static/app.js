@@ -106,10 +106,24 @@ function linesFor(text, depth, width) {
   return width ? wrapLines(text, width - PAD[lvl(depth)], (t) => ctx.measureText(t).width) : [text];
 }
 
-function measure(text, depth, width) {
-  const lines = linesFor(text, depth, width), d = lvl(depth);
+// id de arquivo vindo do mapa só vira URL se tiver o formato gerado pelo servidor
+const FILE_ID = /^[a-f0-9]{32}(\.[a-z0-9]{1,10})?$/;
+const fileUrl = (id) => `/api/maps/${map.id}/files/${id}`;
+
+// tamanho de exibição da imagem: no máx. 200 px (ou a largura fixa do nó), sem ampliar
+function imageSize(image, width) {
+  if (!image || !FILE_ID.test(image.id) || !(image.w > 0 && image.h > 0)) return null;
+  const s = Math.min(1, ((width ?? 216) - 16) / image.w);
+  return { w: Math.round(image.w * s), h: Math.round(image.h * s) };
+}
+
+function measure(text, depth, width, image) {
+  const lines = linesFor(text, depth, width), d = lvl(depth), img = imageSize(image, width);
   const textW = Math.max(30, ...lines.map(l => ctx.measureText(l).width));
-  return { w: Math.max(width ?? 0, textW + PAD[d]), h: BASE_H[d] + (lines.length - 1) * LINE_H[d] };
+  return {
+    w: Math.max(width ?? 0, textW + PAD[d], img ? img.w + 16 : 0),
+    h: BASE_H[d] + (lines.length - 1) * LINE_H[d] + (img ? img.h + 8 : 0),
+  };
 }
 
 const el = (tag, attrs = {}, parent) => {
@@ -190,14 +204,17 @@ function drawNode(b) {
       'stroke-dasharray': line['stroke-dasharray'],
     }, g);
   }
+  const img = imageSize(n.image, n.width);
+  if (img) el('image', { href: fileUrl(n.image.id), x: b.x + (b.w - img.w) / 2, y: b.y + 8, width: img.w, height: img.h }, g);
+  const top = img ? img.h + 8 : 0, cy = b.y + top + (b.h - top) / 2;  // centro da área do texto
   const t = el('text', {
-    x: b.x + b.w / 2, y: b.y + b.h / 2, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+    x: b.x + b.w / 2, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central',
     fill: solid ? textOn(b.color) : '#1d1d2b', style: `font: ${fontFor(b.depth)}`,
   }, g);
   const lines = editing?.id === b.id ? [''] : linesFor(n.text, b.depth, n.width);
   if (lines.length === 1) t.textContent = lines[0];
   else {
-    const lh = LINE_H[lvl(b.depth)], y0 = b.y + b.h / 2 - (lines.length - 1) * lh / 2;
+    const lh = LINE_H[lvl(b.depth)], y0 = cy - (lines.length - 1) * lh / 2;
     lines.forEach((line, i) => { el('tspan', { x: b.x + b.w / 2, y: y0 + i * lh }, t).textContent = line; });
   }
   if (b.id === selected && !selectedLink) {
@@ -369,7 +386,7 @@ document.addEventListener('keydown', (ev) => {
   } else if (key === 'Escape') {
     linking = null;
     selectedLink = null;
-    nodeMenu.hidden = stylePop.hidden = true;
+    nodeMenu.hidden = stylePop.hidden = imagePop.hidden = true;
     closeLinkPops();
     render();
   } else if (key === 'Delete' || key === 'Backspace') {
@@ -451,7 +468,7 @@ window.addEventListener('beforeunload', (ev) => {
 window.addEventListener('resize', render);
 
 // ---------- Controles flutuantes: barra, estilo, "+" ----------
-const toolbar = $('#toolbar'), stylePop = $('#style-pop'), nodeMenu = $('#node-menu'), hints = $('#hints');
+const toolbar = $('#toolbar'), stylePop = $('#style-pop'), nodeMenu = $('#node-menu'), imagePop = $('#image-pop'), hints = $('#hints');
 const addChildBtn = $('#add-child'), addSiblingBtn = $('#add-sibling');
 
 // ---------- Painel de estilo: abas Forma / Borda / Linha ----------
@@ -513,7 +530,7 @@ stylePop.addEventListener('click', (e) => {
 });
 customInput.addEventListener('change', () => applyColor(customProp, customInput.value));
 $('#boundary').addEventListener('change', (e) => { e.target.blur(); setStyle({ boundary: e.target.checked || null }); });
-$('#style-btn').onclick = () => { stylePop.hidden = !stylePop.hidden; nodeMenu.hidden = true; render(); };
+$('#style-btn').onclick = () => { stylePop.hidden = !stylePop.hidden; nodeMenu.hidden = imagePop.hidden = true; render(); };
 $('#delete-btn').onclick = deleteSelected;
 addChildBtn.onclick = () => addAndEdit(() => addChild(map, selected));
 addSiblingBtn.onclick = () => addAndEdit(() => addSibling(map, selected));
@@ -523,7 +540,7 @@ $('#redo').onclick = redo;
 function placeOverlays() {
   const b = drag?.active || linking || selectedLink ? null : boxes.find(b => b.id === selected);
   toolbar.hidden = !b || !toolbarOn;
-  if (toolbar.hidden) stylePop.hidden = nodeMenu.hidden = true;
+  if (toolbar.hidden) stylePop.hidden = nodeMenu.hidden = imagePop.hidden = true;
   addChildBtn.hidden = addSiblingBtn.hidden = hints.hidden = !b || !!editing;
   if (!b) return;
   const sx = (x) => view.x + x * view.k, sy = (y) => view.y + y * view.k;
@@ -535,6 +552,9 @@ function placeOverlays() {
   const below = (pop, x) => pos(pop, x, Math.max(8, Math.min(sy(b.y + b.h) + 14, svg.clientHeight - pop.offsetHeight - 8)));
   below(stylePop, sx(b.x + b.w / 2) - 140);
   below(nodeMenu, sx(b.x + b.w / 2) - 125);
+  below(imagePop, sx(b.x + b.w / 2) - 140);
+  $('#image-btn').classList.toggle('active', !imagePop.hidden);
+  $('#image-remove').hidden = !n.image;
   $('#more-btn').classList.toggle('active', !nodeMenu.hidden);
   $('#style-btn').classList.toggle('active', !stylePop.hidden);
   for (const t of stylePop.querySelectorAll('[data-tab]')) t.classList.toggle('active', t.dataset.tab === styleTab);
@@ -562,7 +582,7 @@ function placeOverlays() {
   pos(addSiblingBtn, ...sibling);
   addSiblingBtn.hidden ||= b.depth === 0;
   // com painel/menu aberto, os "+" e as dicas sairiam por cima dele
-  if (!stylePop.hidden || !nodeMenu.hidden) addChildBtn.hidden = addSiblingBtn.hidden = hints.hidden = true;
+  if (!stylePop.hidden || !nodeMenu.hidden || !imagePop.hidden) addChildBtn.hidden = addSiblingBtn.hidden = hints.hidden = true;
   // dicas só em nó sem filhos visíveis, como num mapa recém-criado
   hints.hidden ||= left || map.layout === 'org' || (n.children.length > 0 && !n.collapsed);
   pos(hints, child[0] + 22, child[1]);
@@ -879,7 +899,7 @@ $('#more-btn').onclick = () => {
   item('delete').disabled = n === map.root;
   item('paste').disabled = !clipboard;
   nodeMenu.hidden = !nodeMenu.hidden;
-  stylePop.hidden = true;
+  stylePop.hidden = imagePop.hidden = true;
   render();
 };
 
@@ -894,7 +914,7 @@ nodeMenu.onclick = (e) => {
 // clicar fora dos controles (cabeçalho, lista...) fecha qualquer menu aberto
 document.addEventListener('pointerdown', (e) => {
   if (!map || e.target.closest('.card, .adder, .link-anchor, .node, .link-hit, .resize-handle, #editor')) return;
-  const pops = [stylePop, nodeMenu, ...document.querySelectorAll('.link-pop')];
+  const pops = [stylePop, nodeMenu, imagePop, ...document.querySelectorAll('.link-pop')];
   if (pops.every(p => p.hidden)) return;
   for (const p of pops) p.hidden = true;
   render();
@@ -1110,3 +1130,46 @@ window.addEventListener('pointerup', () => {
   resizing = null;
   render();
 });
+
+// ---------- Arquivos: envio ao servidor ----------
+async function uploadFile(file) {
+  const r = await fetch(`/api/maps/${map.id}/files`, {
+    method: 'POST', headers: { 'X-Filename': encodeURIComponent(file.name) }, body: file,
+  });
+  if (!r.ok) throw new Error(r.status === 413 ? 'arquivo maior que 20 MB' : `HTTP ${r.status}`);
+  return r.json();
+}
+
+// ---------- Imagem no nó ----------
+const naturalSize = (file) => new Promise((resolve, reject) => {
+  const url = URL.createObjectURL(file), im = new Image();
+  im.onload = () => { resolve({ w: im.naturalWidth, h: im.naturalHeight }); URL.revokeObjectURL(url); };
+  im.onerror = () => { reject(new Error('imagem inválida')); URL.revokeObjectURL(url); };
+  im.src = url;
+});
+
+async function addImage(file) {
+  if (!file) return;
+  if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) { alert('Use uma imagem PNG, JPG, GIF ou WEBP.'); return; }
+  const id = selected;
+  try {
+    const [size, info] = await Promise.all([naturalSize(file), uploadFile(file)]);
+    imagePop.hidden = true;
+    const n = findNode(map.root, id)?.node;
+    if (n) mutate(() => { n.image = { id: info.id, ...size }; });
+  } catch (e) {
+    alert(`Não foi possível adicionar a imagem: ${e.message}`);
+  }
+}
+
+$('#image-btn').onclick = () => { imagePop.hidden = !imagePop.hidden; stylePop.hidden = nodeMenu.hidden = true; render(); };
+$('#image-input').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; addImage(f); });
+const drop = $('#image-drop');
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); addImage(e.dataTransfer.files[0]); });
+$('#image-remove').onclick = () => {
+  const n = findNode(map.root, selected).node;
+  imagePop.hidden = true;
+  mutate(() => { delete n.image; });
+};

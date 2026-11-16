@@ -15,7 +15,7 @@ export const uid = () =>
 export function effectiveShape(n, depth) {
   if (n.shape) return n.shape;
   if (depth === 1) return 'pill';
-  if (n.color || n.fillNone || n.borderColor || n.borderWidth || n.borderStyle) return 'rounded';
+  if (n.color || n.fillNone || n.borderColor || n.borderWidth || n.borderStyle || n.image) return 'rounded';
   return depth === 0 ? 'none' : 'underline';
 }
 
@@ -319,7 +319,7 @@ const visible = (n) => (n.collapsed ? [] : n.children);
 export function layout(map, measure) {
   const nodes = [], edges = [];
   const box = (n, depth, color, side) => {
-    const { w, h } = measure(n.text, depth, n.width);
+    const { w, h } = measure(n.text, depth, n.width, n.image);
     const b = { id: n.id, x: 0, y: 0, w, h, depth, color, shape: effectiveShape(n, depth), side };
     nodes.push(b);
     return b;
@@ -335,7 +335,7 @@ function layoutMap(root, measure, box, colorOf, edges) {
   const heights = new Map();
   const subH = (n, depth) => {
     const kids = visible(n);
-    const own = measure(n.text, depth, n.width).h;
+    const own = measure(n.text, depth, n.width, n.image).h;
     const sum = kids.reduce((s, c) => s + subH(c, depth + 1), 0) + GAP_Y * Math.max(0, kids.length - 1);
     const h = Math.max(own, sum);
     heights.set(n.id, h);
@@ -375,7 +375,7 @@ function layoutOrg(root, measure, box, colorOf, edges) {
   const subW = (n, depth) => {
     const kids = visible(n);
     const sum = kids.reduce((s, c) => s + subW(c, depth + 1), 0) + GAP_X * Math.max(0, kids.length - 1);
-    const w = Math.max(measure(n.text, depth, n.width).w, sum);
+    const w = Math.max(measure(n.text, depth, n.width, n.image).w, sum);
     widths.set(n.id, w);
     return w;
   };
@@ -395,7 +395,7 @@ function layoutOrg(root, measure, box, colorOf, edges) {
     }
   };
   subW(root, 0);
-  place(null, root, 0, 0, -measure(root.text, 0, root.width).h / 2, '#222');
+  place(null, root, 0, 0, -measure(root.text, 0, root.width, root.image).h / 2, '#222');
 }
 
 function layoutList(root, measure, box, colorOf, edges) {

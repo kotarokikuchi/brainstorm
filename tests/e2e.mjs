@@ -439,6 +439,33 @@ await sleep(900);
 assert.ok((await timeNode()).width, 'desfazer restaura a largura');
 assert.equal(await ev(`!!document.querySelector('#viewport .link-handle')`), false, 'bolinha não cria mais ligação');
 
+// imagem no nó: botão da barra abre o painel; escolher arquivo envia ao servidor e mostra no nó; remover tira
+const orcNode = async () => (await recursos()).children.find(c => c.text === 'Orçamento');
+await clickNode('Orçamento');
+await ev(`document.querySelector('#image-btn').click()`);
+assert.equal(await ev(`!document.querySelector('#image-pop').hidden`), true, 'painel de imagem abre');
+await ev(`(async () => {
+  const c = document.createElement('canvas'); c.width = 40; c.height = 30;
+  c.getContext('2d').fillRect(0, 0, 40, 30);
+  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  const dt = new DataTransfer(); dt.items.add(new File([blob], 'quadro.png', { type: 'image/png' }));
+  const input = document.querySelector('#image-input'); input.files = dt.files; input.dispatchEvent(new Event('change'));
+})()`);
+await sleep(1500);
+const img = (await orcNode()).image;
+assert.ok(img && /^[a-f0-9]{32}\.png$/.test(img.id), 'imagem gravada no nó');
+assert.deepEqual([img.w, img.h], [40, 30], 'tamanho natural guardado');
+const href = await ev(`[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('Orçamento')).querySelector('image')?.getAttribute('href')`);
+assert.ok(href?.endsWith(img.id), 'imagem desenhada no nó');
+assert.equal(await ev(`fetch('${href}').then(r => r.status)`), 200, 'servidor entrega a imagem');
+await ev(`document.querySelector('#image-btn').click()`);
+await ev(`document.querySelector('#image-remove').click()`);
+await sleep(900);
+assert.equal((await orcNode()).image, undefined, 'remover imagem');
+await key('z', 2);
+await sleep(900);
+assert.ok((await orcNode()).image, 'desfazer volta a imagem');
+
 // conflito: outra "aba" grava antes
 await sleep(900);
 const cur = await getMap();

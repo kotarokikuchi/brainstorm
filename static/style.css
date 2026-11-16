@@ -129,3 +129,12 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 #link-markers button { height: 36px; border: none; background: transparent; border-radius: 8px; display: grid; place-items: center; color: var(--ink); padding: 0; }
 #link-markers button:hover, #link-markers button.active { background: #ececf3; }
 .link-label { cursor: pointer; }
+
+/* Imagem no nó */
+#image-pop { flex-direction: column; align-items: stretch; width: 280px; padding: 12px; }
+.drop { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 22px 12px; border: 1.5px dashed #cfcbe0; border-radius: 12px; text-align: center; cursor: pointer; color: var(--ink); }
+.drop.over, .drop:hover { border-color: var(--accent); background: #f4f6ff; }
+.drop svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.drop strong { font-size: 14px; }
+.drop small { color: var(--muted); }
+.danger-link { border: none; background: none; color: var(--danger); margin-top: 8px; }
