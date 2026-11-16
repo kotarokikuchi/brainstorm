@@ -14,18 +14,18 @@ const chrome = spawn('google-chrome', ['--headless=new', '--disable-gpu', '--rem
   '--window-size=1400,800', '--user-data-dir=' + join(tmp, 'chrome'), 'about:blank'], { stdio: 'ignore' });
 process.on('exit', () => { chrome.kill(); server.kill(); rmSync(tmp, { recursive: true, force: true }); });
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(1));
-setTimeout(() => { console.error('E2E timeout'); process.exit(1); }, 90000).unref();
+setTimeout(() => { console.error('E2E timeout'); process.exit(1); }, 150000).unref();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 let targets;
 for (let i = 0; i < 50; i++) { try { targets = await (await fetch('http://127.0.0.1:9333/json')).json(); break; } catch { await sleep(200); } }
 const page = targets.find(t => t.type === 'page');
 const ws = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise(r => ws.onopen = r);
-let seq = 0, promptAnswer = ''; const waiting = new Map(); const logs = [];
+let seq = 0, promptAnswer = '', dialogAccept = true; const waiting = new Map(); const logs = [];
 ws.onmessage = (m) => { const d = JSON.parse(m.data);
   if (d.id && waiting.has(d.id)) { waiting.get(d.id)(d); waiting.delete(d.id); }
   if (d.method === 'Runtime.exceptionThrown') logs.push(d.params.exceptionDetails.exception?.description);
-  if (d.method === 'Page.javascriptDialogOpening') cmd('Page.handleJavaScriptDialog', { accept: true, promptText: promptAnswer });
+  if (d.method === 'Page.javascriptDialogOpening') cmd('Page.handleJavaScriptDialog', { accept: dialogAccept, promptText: promptAnswer });
   if (d.method === 'Runtime.consoleAPICalled' && d.params.type === 'error') logs.push(JSON.stringify(d.params.args)); };
 const cmd = (method, params = {}) => new Promise(r => { const id = ++seq; waiting.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
 const ev = async (expr) => (await cmd('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result.result.value;
@@ -684,6 +684,40 @@ await ev(`document.querySelector('#export-menu [data-export="pdf"]').click()`);
 await sleep(300);
 assert.equal(await ev(`window.__printed`), true, 'PDF abre a impressão');
 assert.equal(await ev(`document.querySelector('#export-menu').hidden`), true, 'menu fecha');
+
+// revisão M4: Esc num nó recém-criado não deixa passo vazio no desfazer
+const q1Text = async () => (await getMap()).root.children.find(c => c.text.startsWith('Cronograma')).children[0].text;
+await clickNode('Q1');
+await key('F2'); await typeText('Q1 editado'); await key('Enter');
+await key('Tab'); await key('Escape');  // cria e descarta um filho
+await key('z', 2);
+await sleep(900);
+assert.equal(await q1Text(), 'Q1', 'primeiro Ctrl+Z desfaz a última mudança real');
+
+// revisão M6: começar a editar com tecla morta (acento) não perde o acento
+await clickNode('Q1');
+await cmd('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Dead', code: 'Quote', windowsVirtualKeyCode: 222 });
+await cmd('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Dead', code: 'Quote', windowsVirtualKeyCode: 222 });
+await typeText('á');
+assert.equal(await ev(`document.querySelector('#editor').value`), 'á', 'acento vai para a edição');
+await key('Escape');
+
+// revisão M2: com erro ao salvar, sair do mapa pergunta; cancelar mantém no mapa com a alteração pendente
+await ev(`(() => { window.__realFetch = window.fetch; window.fetch = (u, o) => (o?.method === 'PUT' ? Promise.reject(new Error('offline')) : window.__realFetch(u, o)); })()`);
+await clickNode('Q1');
+await key('F2'); await typeText('Q1 offline'); await key('Enter');
+await sleep(900);
+assert.match(await ev(`document.querySelector('#status').textContent`), /Erro ao salvar/);
+dialogAccept = false;
+await ev(`location.hash = '#/'`);
+await sleep(500);
+dialogAccept = true;
+assert.equal(await ev(`document.body.dataset.view`), 'editor', 'cancelar mantém no mapa');
+assert.match(await ev(`location.hash`), /^#\/map\//, 'endereço volta para o mapa');
+assert.ok((await texts()).includes('Q1 offline'), 'alteração continua na tela');
+await ev(`window.fetch = window.__realFetch`);
+await sleep(6000);  // nova tentativa a cada 5 s
+assert.equal(await q1Text(), 'Q1 offline', 'alteração salva quando a rede volta');
 
 // conflito: outra "aba" grava antes
 await sleep(900);

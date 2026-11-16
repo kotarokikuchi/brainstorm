@@ -24,6 +24,15 @@ FILE_RE = re.compile(r"^[a-f0-9]{32}(\.[a-z0-9]{1,10})?$")
 INLINE = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 
 
+def read_map(file):
+    # JSON do mapa como dict; None se o arquivo estiver corrompido
+    try:
+        data = json.loads(file.read_text("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self._foreign_host() or self._api("GET"):
@@ -77,7 +86,8 @@ class Handler(SimpleHTTPRequestHandler):
             if not file.exists():
                 self._send(404, {"error": "not found"})
             else:
-                self._send(200, json.loads(file.read_text("utf-8")))
+                data = read_map(file)
+                self._send(*((200, data) if data is not None else (500, {"error": "corrupt map file"})))
         elif method == "DELETE":
             if not file.exists():
                 self._send(404, {"error": "not found"})
@@ -106,7 +116,11 @@ class Handler(SimpleHTTPRequestHandler):
         # ponytail: checagem de versão sem lock; dois PUTs simultâneos no mesmo
         # mapa podem passar juntos. Aceitável para uso pessoal.
         if file.exists():
-            stored = json.loads(file.read_text("utf-8")).get("version", 0)
+            data = read_map(file)
+            if data is None:  # não sobrescreve um arquivo que não conseguimos ler
+                self._send(500, {"error": "corrupt map file"})
+                return
+            stored = data.get("version", 0)
             if body["version"] != stored:
                 self._send(409, {"version": stored})
                 return
