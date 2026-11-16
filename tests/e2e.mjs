@@ -174,8 +174,10 @@ await clickNode('Time');
 const recBox = `[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('Recursos'))`;
 await ev(`${recBox}.querySelector('.toggle').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
 assert.match(await ev(`document.querySelector('.selected-ring').parentNode.textContent`), /^Recursos/, 'seleção sobe ao recolher');
+assert.equal(await ev(`${recBox}.querySelector('.toggle text')?.textContent`), String((await getMap()).root.children.find(c => c.text.startsWith('Recursos')).children.length), 'recolhido mostra o número de filhos');
 await ev(`${recBox}.querySelector('.toggle').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
 await sleep(900);
+assert.equal(await ev(`${recBox}.querySelector('.toggle text')`), null, 'expandido: só o círculo, sem texto');
 
 // revisão M1: entrar e sair da edição sem mudar nada não grava
 const vBefore = (await getMap()).version;
