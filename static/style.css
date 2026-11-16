@@ -1,0 +1,47 @@
+:root {
+  --bg: #f6f5fb;
+  --ink: #1d1d2b;
+  --muted: #6b6b80;
+  --line: #e4e2ee;
+  --accent: #2f5bea;
+  --danger: #d63031;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { font-family: var(--font); color: var(--ink); background: var(--bg); }
+button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 12px; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.topbar { height: 52px; display: flex; align-items: center; gap: 16px; padding: 0 16px; background: #fff; border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; color: var(--ink); text-decoration: none; }
+.logo { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, #e43fa4, #8b3fd9); }
+#title { font-weight: 600; }
+#status { margin-left: auto; font-size: 13px; color: var(--muted); }
+#status.error { color: var(--danger); font-weight: 600; }
+
+body[data-view="list"] #editor-view, body[data-view="editor"] #list-view { display: none; }
+body[data-view="list"] #title, body[data-view="list"] #status { display: none; }
+
+/* Lista de mapas */
+#list-view { max-width: 760px; margin: 32px auto; padding: 0 16px; }
+.list-head { display: flex; align-items: center; justify-content: space-between; }
+#maps { list-style: none; padding: 0; display: grid; gap: 8px; }
+#maps li { display: flex; align-items: center; gap: 12px; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+#maps a { flex: 1; color: var(--ink); text-decoration: none; font-weight: 600; }
+#maps a:hover { color: var(--accent); }
+#maps time { font-size: 13px; color: var(--muted); }
+#empty { color: var(--muted); }
+
+/* Editor */
+#editor-view { position: relative; height: calc(100% - 52px); overflow: hidden; }
+#canvas { width: 100%; height: 100%; display: block; cursor: grab; user-select: none; }
+#canvas.panning { cursor: grabbing; }
+.node { cursor: pointer; }
+.selected-ring { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; }
+.toggle circle { fill: #fff; stroke-width: 1.5; }
+.toggle text { font-size: 10px; font-weight: 700; }
+#editor { position: absolute; border: 2px solid var(--accent); border-radius: 6px; padding: 0 6px; outline: none; background: #fff; color: var(--ink); text-align: center; }
+#help { position: absolute; left: 16px; bottom: 12px; font-size: 12px; color: var(--muted); background: #fffc; padding: 4px 8px; border-radius: 6px; }

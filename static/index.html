@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Galho</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-view="list">
+  <header class="topbar">
+    <a href="#/" class="brand"><span class="logo"></span>Galho</a>
+    <span id="title"></span>
+    <span id="status"></span>
+  </header>
+
+  <main id="list-view">
+    <div class="list-head">
+      <h1>Meus mapas</h1>
+      <button id="new-map" class="primary">Novo mapa</button>
+    </div>
+    <ul id="maps"></ul>
+    <p id="empty" hidden>Nenhum mapa ainda. Crie o primeiro.</p>
+  </main>
+
+  <section id="editor-view">
+    <svg id="canvas"><g id="viewport"></g></svg>
+    <input id="editor" hidden autocomplete="off" spellcheck="false">
+    <footer id="help">Tab filho · Enter irmão · Del apagar · F2 editar · Setas navegar · Espaço recolher · Ctrl+Z desfazer</footer>
+  </section>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -224,9 +224,11 @@ export function edgePath(layoutName, a, b) {
   if (layoutName === 'list') {
     return `M${a.x + 12},${a.y + a.h} V${b.y + b.h / 2} H${b.x}`;
   }
+  // nós sublinhados (profundidade ≥ 2, sem forma) ligam pela linha de baixo
+  const anchorY = (n) => (n.depth >= 2 && !n.shape ? n.y + n.h : n.y + n.h / 2);
   const right = b.x >= a.x + a.w / 2;
-  const x1 = right ? a.x + a.w : a.x, y1 = a.y + a.h / 2;
-  const x2 = right ? b.x : b.x + b.w, y2 = b.y + b.h / 2, mx = (x1 + x2) / 2;
+  const x1 = right ? a.x + a.w : a.x, y1 = anchorY(a);
+  const x2 = right ? b.x : b.x + b.w, y2 = anchorY(b), mx = (x1 + x2) / 2;
   return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
 }
 
