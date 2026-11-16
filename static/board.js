@@ -325,9 +325,9 @@ document.addEventListener('keydown', (e) => {
   else if (ctrl && k === 'a') { e.preventDefault(); setTool('select'); selection = board.elements.map(x => x.id); render(); }
   else if (ctrl && k === 'd') { e.preventDefault(); act('duplicate'); }
   else if (ctrl && k === 'k') { e.preventDefault(); act('link'); }
-  else if (ctrl && k === 'c') { if (selection.length) clipboard = JSON.stringify(board.elements.filter(x => selection.includes(x.id))); }
+  else if (ctrl && k === 'c') { if (selection.length) clipboard = clipJson(selected()); }
   // Ctrl+X: o evento "cut" (sistema) vem depois desta tecla; se ele não vier, recorta só na cópia interna
-  else if (ctrl && k === 'x') { if (selection.length) pendingCut = setTimeout(() => { clipboard = JSON.stringify(board.elements.filter(x => selection.includes(x.id))); act('delete'); }, 0); }
+  else if (ctrl && k === 'x') { if (selection.length) pendingCut = setTimeout(() => { clipboard = clipJson(selected()); act('delete'); }, 0); }
   // Ctrl+V: sem preventDefault, para o evento "paste" (que traz imagens) acontecer antes; se não houver imagem, cola os elementos
   else if (ctrl && k === 'v') { pendingPaste = setTimeout(paste, 0); }
   else if (ctrl && e.shiftKey && (e.key === ']' || e.key === '}')) { e.preventDefault(); act('front'); }
@@ -360,9 +360,28 @@ imageInput.addEventListener('change', () => { const f = imageInput.files[0]; ima
 const CLIP = 'application/x-galho-board';
 const boardKeys = (e) => board && document.body.dataset.view === 'board' && !e.target.closest?.('input, textarea, select');
 let pendingCut = 0;
+const selected = () => board.elements.filter(x => selection.includes(x.id));
+// imagens levam o quadro de origem: colando em outro quadro, o arquivo é copiado para ele
+const clipJson = (items) => JSON.stringify(items.map(x => (x.type === 'image' ? { ...x, fileSrc: board.id } : x)));
+const DOC_ID = /^[a-z0-9-]{1,64}$/;
+async function bringFiles(items) {
+  const out = [];
+  for (const x of items) {
+    if (x.type !== 'image' || !x.fileSrc || x.fileSrc === board.id) { out.push(x); continue; }
+    try {
+      if (!DOC_ID.test(x.fileSrc) || !FILE_ID.test(x.fileId ?? '')) throw new Error('arquivo inválido');
+      const r = await fetch(`/api/maps/${x.fileSrc}/files/${x.fileId}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const up = await fetch(`/api/maps/${board.id}/files`, { method: 'POST', headers: { 'X-Filename': x.fileId }, body: await r.blob() });
+      if (!up.ok) throw new Error(`HTTP ${up.status}`);
+      out.push({ ...x, fileId: (await up.json()).id });
+    } catch { /* arquivo de origem sumiu (ex.: quadro apagado): essa imagem fica de fora */ }
+  }
+  return out;
+}
 function copyTo(e) {
-  const items = board.elements.filter(x => selection.includes(x.id));
-  clipboard = JSON.stringify(items);
+  const items = selected();
+  clipboard = clipJson(items);
   e.clipboardData.setData(CLIP, clipboard);
   e.clipboardData.setData('text/plain', items.map(x => x.text).filter(Boolean).join('\n'));  // texto para outros programas
   e.preventDefault();
@@ -550,16 +569,19 @@ const okElement = (x) => !!x && typeof x === 'object' && KINDS.has(x.type)
   && [x.x, x.y, x.w ?? 0, x.h ?? 0].every(Number.isFinite)
   && (x.points === undefined || (Array.isArray(x.points) && x.points.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite))))
   && (x.text === undefined || typeof x.text === 'string');
-function paste() {
+async function paste() {
   if (!clipboard) return;
   let items;
   try { items = JSON.parse(clipboard); } catch { return; }
   if (!Array.isArray(items) || !items.every(okElement)) return;
+  const id = board.id;
+  items = await bringFiles(items);
+  if (board?.id !== id || !items.length) return;  // trocou de quadro durante a cópia dos arquivos
   const before = snapshot();
-  const copies = duplicateElements(items, items.map(x => x.id), 20);
+  const copies = duplicateElements(items, items.map(x => x.id), 20).map(({ fileSrc, ...c }) => c);
   board.elements.push(...copies);
   selection = copies.map(c => c.id);
-  clipboard = JSON.stringify(copies);  // colar de novo desloca mais
+  clipboard = clipJson(copies);  // colar de novo desloca mais
   changed(before);
 }
 

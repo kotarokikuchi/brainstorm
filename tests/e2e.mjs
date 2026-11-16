@@ -1360,6 +1360,38 @@ await clipEvent('cut');
 await sleep(900);
 assert.ok(!(await getMap()).root.children.some(c => c.text === 'Ideia B'), 'mapa: recortar apaga o ramo');
 
+// colar em outro documento leva junto os arquivos (imagem do quadro; imagem e anexo do nó)
+const pngBytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+const upTo = async (doc, name) => (await (await fetch(BASE + `/api/maps/${doc}/files`, { method: 'POST', headers: { 'X-Filename': name }, body: pngBytes })).json()).id;
+const elBase = { strokeColor: '#1e1e1e', backgroundColor: 'transparent', fillStyle: 'hachure', strokeWidth: 2, strokeStyle: 'solid', roughness: 1, opacity: 100, seed: 1 };
+await fetch(BASE + '/api/maps/qa', { method: 'PUT', body: JSON.stringify({ version: 0, type: 'board', title: 'QA', elements: [] }) });
+await fetch(BASE + '/api/maps/qb', { method: 'PUT', body: JSON.stringify({ version: 0, type: 'board', title: 'QB', elements: [] }) });
+const qaFile = await upTo('qa', 'a.png');
+await fetch(BASE + '/api/maps/qa', { method: 'PUT', body: JSON.stringify({ version: 1, type: 'board', title: 'QA', elements: [{ ...elBase, id: 'img1', type: 'image', x: 300, y: 200, w: 80, h: 80, fileId: qaFile }] }) });
+await ev(`location.hash = '#/board/qa'`); await sleep(1200);
+await key('a', 2);
+const qcopy = await clipEvent('copy');
+await ev(`location.hash = '#/board/qb'`); await sleep(1200);
+await clipEvent('paste', { 'application/x-galho-board': qcopy.json });
+await sleep(1200);
+const qbImg = (await (await fetch(BASE + '/api/maps/qb')).json()).elements[0];
+assert.ok(qbImg && qbImg.fileId !== qaFile && !('fileSrc' in qbImg), 'imagem colada ganha arquivo próprio no outro quadro');
+assert.equal((await fetch(BASE + `/api/maps/qb/files/${qbImg.fileId}`)).status, 200, 'arquivo existe no quadro de destino');
+await fetch(BASE + '/api/maps/ma', { method: 'PUT', body: JSON.stringify({ version: 0, root: { id: 'ra', text: 'Origem', children: [] } }) });
+const maImg = await upTo('ma', 'n.png'), maAtt = await upTo('ma', 'doc.png');
+await fetch(BASE + '/api/maps/ma', { method: 'PUT', body: JSON.stringify({ version: 1, root: { id: 'ra', text: 'Origem', children: [
+  { id: 'na', text: 'Com arquivos', side: 'right', children: [], image: { id: maImg, w: 1, h: 1 }, attachments: [{ id: maAtt, name: 'doc.png', size: 70 }] }] } }) });
+await ev(`location.hash = '#/map/ma'`); await sleep(1200);
+await clickNode('Com arquivos');
+const mcopy2 = await clipEvent('copy');
+await ev(`location.hash = '#/map/demo'`); await sleep(1200);
+await clickNode('Planejamento 2027');
+await clipEvent('paste', { 'application/x-galho-branch': mcopy2.json });
+await sleep(1500);
+const pasted = (await getMap()).root.children.find(c => c.text === 'Com arquivos');
+assert.ok(pasted && pasted.image.id !== maImg && pasted.attachments[0].id !== maAtt && !('src' in pasted), 'ramo colado ganha arquivos próprios');
+assert.equal((await fetch(BASE + `/api/maps/demo/files/${pasted.attachments[0].id}`)).status, 200, 'anexo existe no mapa de destino');
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);
