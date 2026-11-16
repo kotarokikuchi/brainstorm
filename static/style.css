@@ -114,3 +114,16 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 #link-ring { position: absolute; border: 2.5px solid #1fa24a; border-radius: 12px; pointer-events: none; }
 .link-anchor.active { box-shadow: 0 0 0 3px #1fa24a55; }
 .anchor-dot { pointer-events: none; }
+
+/* Barra da ligação */
+#link-toolbar { transform: translateX(-50%); }
+#link-toolbar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 4px 2px; }
+#link-color-btn .dot { width: 20px; height: 20px; border-radius: 50%; }
+.link-pop { flex-direction: column; align-items: stretch; transform: translateX(-50%); }
+#link-colors { width: 250px; padding: 12px; }
+#link-colors p { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+#link-markers { display: grid; grid-template-columns: repeat(5, 40px); gap: 4px; padding: 10px; }
+#link-markers[hidden] { display: none; }
+#link-markers button { height: 36px; border: none; background: transparent; border-radius: 8px; display: grid; place-items: center; color: var(--ink); padding: 0; }
+#link-markers button:hover, #link-markers button.active { background: #ececf3; }
+.link-label { cursor: pointer; }

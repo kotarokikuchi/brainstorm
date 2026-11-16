@@ -54,6 +54,23 @@
       <hr>
       <button data-action="delete" class="danger">Apagar <kbd>Del</kbd></button>
     </div>
+    <!-- barra da ligação selecionada -->
+    <div id="link-toolbar" class="card" hidden>
+      <button id="link-color-btn" class="icon" title="Cor"><span class="dot"></span></button>
+      <span class="sep"></span>
+      <button id="link-start-btn" class="icon" title="Ponta inicial"></button>
+      <button id="link-swap" class="icon" title="Inverter direção"><svg viewBox="0 0 24 24"><path d="M4 8h15l-3-3M20 16H5l3 3"/></svg></button>
+      <button id="link-end-btn" class="icon" title="Ponta final"></button>
+      <span class="sep"></span>
+      <button id="link-more" class="icon" title="Mais opções"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+    </div>
+    <div id="link-colors" class="card link-pop" hidden><p>Cores do tema</p><div class="swatches"></div></div>
+    <div id="link-markers" class="card link-pop" hidden></div>
+    <div id="link-menu" class="card menu link-pop" hidden>
+      <button data-action="label">Adicionar rótulo</button>
+      <hr>
+      <button data-action="delete" class="danger">Excluir ligação</button>
+    </div>
     <div id="style-pop" class="card" hidden>
       <div class="tabs">
         <button data-tab="shape" class="active">Forma</button>
