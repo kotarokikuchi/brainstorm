@@ -42,6 +42,17 @@ async function route() {
   finishEdit(true);  // navegar no meio da digitação confirma o texto
   await flushSave();
   const m = location.hash.match(/^#\/map\/([a-z0-9-]+)$/);
+  // saindo de um mapa que não conseguiu salvar: pergunta antes de abandonar as alterações
+  if (dirty && pending && pending.id !== m?.[1]) {
+    if (!confirm('Este mapa tem alterações que não foram salvas (erro ao salvar). Sair mesmo assim e perdê-las?')) {
+      window.history.replaceState(null, '', `#/map/${pending.id}`);  // volta o endereço sem nova navegação
+      return;
+    }
+    dirty = false;
+    pending = null;
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
   if (m) openMap(m[1]); else showList();
 }
 
@@ -81,7 +92,11 @@ $('#new-map').onclick = async () => {
 // ---------- Editor ----------
 async function openMap(id) {
   const r = await api('GET', `/${id}`);
-  if (!r.ok) { location.hash = '#/'; return; }
+  if (!r.ok) {
+    if (r.status === 500) alert('Não foi possível abrir este mapa: o arquivo dele está corrompido.');
+    location.hash = '#/';
+    return;
+  }
   map = await r.json();
   history = new History();
   selected = map.root.id;
@@ -351,8 +366,11 @@ function finishEdit(commit) {
       // nó novo já entrou no histórico ao ser criado
       selected = commitText(map, id, text, true);
       if (findNode(map.root, id)) scheduleSave();
-      // nó novo descartado: volta para onde o usuário estava (nada mudou, nada a salvar)
-      else if (findNode(map.root, prev)) selected = prev;
+      else {
+        // nó novo descartado: nada mudou — tira o passo do desfazer e volta para onde estava
+        history.past.pop();
+        if (findNode(map.root, prev)) selected = prev;
+      }
     } else if (commit && text.trim() && text.trim() !== node.text) {
       history.push(snapshot());
       selected = commitText(map, id, text, false);
@@ -446,6 +464,9 @@ document.addEventListener('keydown', (ev) => {
   } else if (key === ' ') {
     ev.preventDefault();
     actions.collapse();
+  } else if (key === 'Dead' || key === 'Process') {
+    // acento (tecla morta) ou IME: abre a edição vazia sem bloquear; o caractere composto cai no campo
+    startEdit(selected, false, '');
   } else if (key.length === 1) {
     // digitar sobre um nó começa a editar substituindo o texto
     ev.preventDefault();

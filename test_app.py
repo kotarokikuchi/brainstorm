@@ -160,6 +160,13 @@ class ApiTest(unittest.TestCase):
             self.assertTrue(second.startswith(b"data: "), second)
             self.assertNotEqual(first, second, "mudança em static/ gera novo carimbo")
 
+    def test_corrupt_map_file_gives_clear_500(self):
+        (self.data / "ruim.json").write_text("{")
+        self.assertEqual(self.req("GET", "/api/maps/ruim"), (500, {"error": "corrupt map file"}))
+        status, body = self.req("PUT", "/api/maps/ruim", {"version": 0, "root": {"text": "a", "children": []}})
+        self.assertEqual((status, body), (500, {"error": "corrupt map file"}))
+        self.assertEqual((self.data / "ruim.json").read_text(), "{", "arquivo corrompido não é sobrescrito")
+
     def test_deleting_map_removes_its_files(self):
         self.req("PUT", "/api/maps/abc", {"version": 0, "root": {"text": "a", "children": []}})
         _, info = self.upload("abc", "foto.png", b"x")
