@@ -1,6 +1,6 @@
 import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
-  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, sideToward, cloudPath, branchBounds,
+  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, sideToward, cloudPath, branchBounds, MARKERS, markerShape, safeColor,
 } from './model.js';
 
 const $ = (s) => document.querySelector(s);
@@ -156,11 +156,11 @@ function drawNode(b) {
   const g = el('g', { class: 'node', 'data-id': b.id }, viewport);
   if (drag?.active && drag.ids.has(b.id)) g.classList.add('dragging');
   // forma efetiva: raiz sem caixa, 1º nível pílula, demais sublinhado
-  const shape = b.shape ?? (b.depth === 0 ? 'none' : b.depth === 1 ? 'pill' : 'underline');
+  const shape = b.shape;  // forma efetiva (effectiveShape): estilo em nó sem forma vira caixa
   const boxed = ['pill', 'rect', 'rounded', 'cloud'].includes(shape);
-  const solid = boxed && !n.fillNone;
-  // borda: explícita, ou automática quando a forma está sem preenchimento
-  const border = n.borderColor || n.borderWidth || n.borderStyle || (boxed && n.fillNone);
+  const solid = boxed && !n.fillNone && !!(n.shape || b.depth === 1 || n.color);
+  // borda: explícita, ou automática quando a caixa não tem preenchimento
+  const border = n.borderColor || n.borderWidth || n.borderStyle || (boxed && !solid);
   const line = {
     stroke: border ? n.borderColor || b.color : null,
     'stroke-width': border ? WIDTHS[n.borderWidth || 'medium'] : null,
@@ -957,34 +957,25 @@ window.addEventListener('pointerup', (e) => {
 
 // ---------- Barra da ligação: cor, pontas, inverter, rótulo, excluir ----------
 const LINK_GREEN = '#22a559';
-const MARKERS = ['none', 'arrow', 'open', 'triangle', 'triangle-open', 'diamond', 'diamond-open', 'dot', 'dot-open'];
-// formas no espaço 10×10 do marcador, ponta em (10, 5); C = cor
-const MARKER_SHAPES = {
-  arrow: '<path d="M0,0 L10,5 L0,10 L3,5 z" fill="C"/>',
-  open: '<path d="M1,1 L9,5 L1,9" fill="none" stroke="C" stroke-width="1.6"/>',
-  triangle: '<path d="M0,0 L10,5 L0,10 z" fill="C"/>',
-  'triangle-open': '<path d="M1,1 L9,5 L1,9 z" fill="#fff" stroke="C" stroke-width="1.4"/>',
-  diamond: '<path d="M0,5 L5,1 L10,5 L5,9 z" fill="C"/>',
-  'diamond-open': '<path d="M1,5 L5,1.5 L9,5 L5,8.5 z" fill="#fff" stroke="C" stroke-width="1.4"/>',
-  dot: '<circle cx="5" cy="5" r="4" fill="C"/>',
-  'dot-open': '<circle cx="5" cy="5" r="3.5" fill="#fff" stroke="C" stroke-width="1.4"/>',
-};
-
 // <marker> por (tipo, cor), criado sob demanda; auto-start-reverse serve para as duas pontas
 function markerUrl(type, color) {
-  if (!type || type === 'none') return null;
-  const id = `m-${type}-${color.slice(1)}`;
+  const shape = markerShape(type, color);  // valida tipo e cor (vêm do arquivo do mapa)
+  if (!shape) return null;
+  const id = `m-${type}-${safeColor(color).slice(1)}`;
   if (!document.getElementById(id)) {
     const m = el('marker', { id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' });
-    m.innerHTML = MARKER_SHAPES[type].replaceAll('C', color);
+    m.innerHTML = shape;
     svg.querySelector('defs').append(m);
   }
   return `url(#${id})`;
 }
 
-const markerIcon = (type, flip) => `<svg viewBox="0 0 24 12" style="width:24px;height:12px${flip ? ';transform:scaleX(-1)' : ''}">`
-  + `<line x1="2" y1="6" x2="${type === 'none' ? 22 : 15}" y2="6" stroke="currentColor" stroke-width="2"/>`
-  + (type === 'none' ? '' : `<g transform="translate(13,1)">${MARKER_SHAPES[type].replaceAll('C', 'currentColor')}</g>`) + '</svg>';
+const markerIcon = (type, flip) => {
+  const shape = markerShape(type, 'currentColor');
+  return `<svg viewBox="0 0 24 12" style="width:24px;height:12px${flip ? ';transform:scaleX(-1)' : ''}">`
+    + `<line x1="2" y1="6" x2="${shape ? 15 : 22}" y2="6" stroke="currentColor" stroke-width="2"/>`
+    + (shape ? `<g transform="translate(13,1)">${shape}</g>` : '') + '</svg>';
+};
 
 // rótulo um pouco acima do ponto de controle, com halo da cor do fundo
 function drawLinkLabel(k, a, b, color) {

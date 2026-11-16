@@ -8,6 +8,39 @@ export const PALETTE = [
 export const uid = () =>
   Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 
+// ---- Estilo ----
+
+// forma desenhada: a escolhida; senão o padrão do nível (raiz sem caixa, 1º nível pílula,
+// demais sublinhado) — mas qualquer cor/borda/"sem preenchimento" num nó sem forma vira caixa
+export function effectiveShape(n, depth) {
+  if (n.shape) return n.shape;
+  if (depth === 1) return 'pill';
+  if (n.color || n.fillNone || n.borderColor || n.borderWidth || n.borderStyle) return 'rounded';
+  return depth === 0 ? 'none' : 'underline';
+}
+
+export const MARKERS = ['none', 'arrow', 'open', 'triangle', 'triangle-open', 'diamond', 'diamond-open', 'dot', 'dot-open'];
+// formas no espaço 10×10 do marcador, ponta em (10, 5); C = cor
+const MARKER_SHAPES = {
+  arrow: '<path d="M0,0 L10,5 L0,10 L3,5 z" fill="C"/>',
+  open: '<path d="M1,1 L9,5 L1,9" fill="none" stroke="C" stroke-width="1.6"/>',
+  triangle: '<path d="M0,0 L10,5 L0,10 z" fill="C"/>',
+  'triangle-open': '<path d="M1,1 L9,5 L1,9 z" fill="#fff" stroke="C" stroke-width="1.4"/>',
+  diamond: '<path d="M0,5 L5,1 L10,5 L5,9 z" fill="C"/>',
+  'diamond-open': '<path d="M1,5 L5,1.5 L9,5 L5,8.5 z" fill="#fff" stroke="C" stroke-width="1.4"/>',
+  dot: '<circle cx="5" cy="5" r="4" fill="C"/>',
+  'dot-open': '<circle cx="5" cy="5" r="3.5" fill="#fff" stroke="C" stroke-width="1.4"/>',
+};
+
+// cor vinda do arquivo do mapa só entra em marcação se for hexadecimal (ou currentColor)
+export const safeColor = (c) => (c === 'currentColor' || /^#[0-9a-fA-F]{3,8}$/.test(c ?? '') ? c : '#22a559');
+
+// marcação SVG da ponta; null para "nenhuma" ou tipo desconhecido
+export function markerShape(type, color) {
+  if (!Object.hasOwn(MARKER_SHAPES, type)) return null;
+  return MARKER_SHAPES[type].replaceAll('C', safeColor(color));
+}
+
 const node = (text = '') => ({
   id: uid(), text, color: null, shape: null, collapsed: false, side: null, children: [],
 });
@@ -286,7 +319,7 @@ export function layout(map, measure) {
   const nodes = [], edges = [];
   const box = (n, depth, color, side) => {
     const { w, h } = measure(n.text, depth);
-    const b = { id: n.id, x: 0, y: 0, w, h, depth, color, shape: n.shape, side };
+    const b = { id: n.id, x: 0, y: 0, w, h, depth, color, shape: effectiveShape(n, depth), side };
     nodes.push(b);
     return b;
   };
@@ -391,7 +424,7 @@ export function edgePath(layoutName, a, b) {
     return `M${a.x + 12},${a.y + a.h} V${b.y + b.h / 2} H${b.x}`;
   }
   // nós sublinhados (profundidade ≥ 2, sem forma) ligam pela linha de baixo
-  const anchorY = (n) => (n.depth >= 2 && !n.shape ? n.y + n.h : n.y + n.h / 2);
+  const anchorY = (n) => (n.shape === 'underline' ? n.y + n.h : n.y + n.h / 2);
   const right = b.x >= a.x + a.w / 2;
   const x1 = right ? a.x + a.w : a.x, y1 = anchorY(a);
   const x2 = right ? b.x : b.x + b.w, y2 = anchorY(b), mx = (x1 + x2) / 2;

@@ -399,6 +399,19 @@ await sleep(900);
 assert.equal((await getMap()).links.length, nLinks - 1, 'excluir ligação pelo menu');
 assert.equal(await linkBar('#link-toolbar'), false, 'barra some ao excluir');
 
+// estilo em qualquer nó: borda num nó sublinhado vira caixa vazada; cor vira caixa preenchida
+const timeG = `[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('Time'))`;
+await clickNode('Time');
+await ev(`document.querySelector('#style-btn').click()`);
+await tab('border');
+await pick('border', 'borderColor', '#8b3fd9');
+assert.equal(await ev(`(() => { const r = ${timeG}.querySelector('rect[stroke]'); return r && r.getAttribute('stroke') + ' ' + r.getAttribute('fill'); })()`), '#8b3fd9 transparent', 'borda em nó comum vira caixa');
+await tab('shape');
+await pick('shape', 'color', '#2f5bea');
+assert.equal(await ev(`${timeG}.querySelector('rect[stroke]').getAttribute('fill')`), '#2f5bea', 'cor em nó comum preenche');
+await key('Escape');
+await sleep(900);
+
 // conflito: outra "aba" grava antes
 await sleep(900);
 const cur = await getMap();
