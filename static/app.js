@@ -148,6 +148,7 @@ function render() {
   if (editing) placeInput();
   placeAnchors();
   placeOverlays();
+  placeLinkBar();
 }
 
 function drawNode(b) {
@@ -187,7 +188,7 @@ function drawNode(b) {
     fill: solid ? textOn(b.color) : '#1d1d2b', style: `font: ${fontFor(b.depth)}`,
   }, g);
   t.textContent = editing?.id === b.id ? '' : n.text;
-  if (b.id === selected) {
+  if (b.id === selected && !selectedLink) {
     el('rect', { class: 'selected-ring', x: b.x - 4, y: b.y - 4, width: b.w + 8, height: b.h + 8, rx: 8 }, g);
   }
   if (n.children.length && b.depth > 0) drawToggle(b, n, g);
@@ -352,6 +353,7 @@ document.addEventListener('keydown', (ev) => {
     linking = null;
     selectedLink = null;
     nodeMenu.hidden = stylePop.hidden = true;
+    closeLinkPops();
     render();
   } else if (key === 'Delete' || key === 'Backspace') {
     ev.preventDefault();
@@ -502,7 +504,7 @@ $('#undo').onclick = undo;
 $('#redo').onclick = redo;
 
 function placeOverlays() {
-  const b = drag?.active || linking ? null : boxes.find(b => b.id === selected);
+  const b = drag?.active || linking || selectedLink ? null : boxes.find(b => b.id === selected);
   toolbar.hidden = !b || !toolbarOn;
   if (toolbar.hidden) stylePop.hidden = nodeMenu.hidden = true;
   addChildBtn.hidden = addSiblingBtn.hidden = hints.hidden = !b || !!editing;
@@ -714,13 +716,14 @@ function drawLinks() {
     const a = boxes.find(b => b.id === k.from), b = boxes.find(b => b.id === k.to);
     if (!a || !b) continue;  // ponta escondida num ramo recolhido
     if (retarget?.link === k) { drawRetarget(k, a, b); continue; }
-    const d = linkPath(a, b, k.bend, k.fromSide, k.toSide), sel = k.id === selectedLink;
+    const d = linkPath(a, b, k.bend, k.fromSide, k.toSide), sel = k.id === selectedLink, color = k.color || LINK_GREEN;
     el('path', {
-      d, class: 'link', fill: 'none', stroke: sel ? '#2f5bea' : '#22a559', 'stroke-width': sel ? 3 : 2,
-      'stroke-dasharray': '5 5', 'marker-end': `url(#${sel ? 'arrow-sel' : 'arrow'})`,
+      d, class: 'link', fill: 'none', stroke: color, 'stroke-width': sel ? 3 : 2, 'stroke-dasharray': '5 5',
+      'marker-start': markerUrl(k.startMarker, color), 'marker-end': markerUrl(k.endMarker ?? 'arrow', color),
     }, viewport);
+    if (k.label) drawLinkLabel(k, a, b, color);
     const hit = el('path', { d, class: 'link-hit', fill: 'none', stroke: 'transparent', 'stroke-width': 14 }, viewport);
-    hit.addEventListener('click', (e) => { e.stopPropagation(); selectedLink = k.id; render(); });
+    hit.addEventListener('click', (e) => { e.stopPropagation(); if (selectedLink !== k.id) closeLinkPops(); selectedLink = k.id; render(); });
     if (sel) drawBendHandle(k, a, b, d);
   }
   const from = boxes.find(b => b.id === (linking ? linking.from : selected));
@@ -743,7 +746,7 @@ function drawLinks() {
   }
   svg.classList.remove('linking');
   // bolinha no canto do nó selecionado: arrastar dela até outro nó cria a ligação
-  if (from && !editing && !drag?.active) {
+  if (from && !editing && !drag?.active && !selectedLink) {
     const h = el('circle', { class: 'link-handle', cx: from.x + from.w + 4, cy: from.y + from.h + 4, r: 6 }, viewport);
     h.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
@@ -862,8 +865,9 @@ nodeMenu.onclick = (e) => {
 // clicar fora dos controles (cabeçalho, lista...) fecha qualquer menu aberto
 document.addEventListener('pointerdown', (e) => {
   if (!map || e.target.closest('.card, .adder, .link-anchor, .node, .link-hit, .link-handle, #editor')) return;
-  if (stylePop.hidden && nodeMenu.hidden) return;
-  stylePop.hidden = nodeMenu.hidden = true;
+  const pops = [stylePop, nodeMenu, ...document.querySelectorAll('.link-pop')];
+  if (pops.every(p => p.hidden)) return;
+  for (const p of pops) p.hidden = true;
   render();
 }, true);
 
@@ -950,3 +954,121 @@ window.addEventListener('pointerup', (e) => {
     render();
   }
 });
+
+// ---------- Barra da ligação: cor, pontas, inverter, rótulo, excluir ----------
+const LINK_GREEN = '#22a559';
+const MARKERS = ['none', 'arrow', 'open', 'triangle', 'triangle-open', 'diamond', 'diamond-open', 'dot', 'dot-open'];
+// formas no espaço 10×10 do marcador, ponta em (10, 5); C = cor
+const MARKER_SHAPES = {
+  arrow: '<path d="M0,0 L10,5 L0,10 L3,5 z" fill="C"/>',
+  open: '<path d="M1,1 L9,5 L1,9" fill="none" stroke="C" stroke-width="1.6"/>',
+  triangle: '<path d="M0,0 L10,5 L0,10 z" fill="C"/>',
+  'triangle-open': '<path d="M1,1 L9,5 L1,9 z" fill="#fff" stroke="C" stroke-width="1.4"/>',
+  diamond: '<path d="M0,5 L5,1 L10,5 L5,9 z" fill="C"/>',
+  'diamond-open': '<path d="M1,5 L5,1.5 L9,5 L5,8.5 z" fill="#fff" stroke="C" stroke-width="1.4"/>',
+  dot: '<circle cx="5" cy="5" r="4" fill="C"/>',
+  'dot-open': '<circle cx="5" cy="5" r="3.5" fill="#fff" stroke="C" stroke-width="1.4"/>',
+};
+
+// <marker> por (tipo, cor), criado sob demanda; auto-start-reverse serve para as duas pontas
+function markerUrl(type, color) {
+  if (!type || type === 'none') return null;
+  const id = `m-${type}-${color.slice(1)}`;
+  if (!document.getElementById(id)) {
+    const m = el('marker', { id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' });
+    m.innerHTML = MARKER_SHAPES[type].replaceAll('C', color);
+    svg.querySelector('defs').append(m);
+  }
+  return `url(#${id})`;
+}
+
+const markerIcon = (type, flip) => `<svg viewBox="0 0 24 12" style="width:24px;height:12px${flip ? ';transform:scaleX(-1)' : ''}">`
+  + `<line x1="2" y1="6" x2="${type === 'none' ? 22 : 15}" y2="6" stroke="currentColor" stroke-width="2"/>`
+  + (type === 'none' ? '' : `<g transform="translate(13,1)">${MARKER_SHAPES[type].replaceAll('C', 'currentColor')}</g>`) + '</svg>';
+
+// rótulo um pouco acima do ponto de controle, com halo da cor do fundo
+function drawLinkLabel(k, a, b, color) {
+  const [x, y] = linkHandle(a, b, k.bend, k.fromSide, k.toSide);
+  const t = el('text', {
+    class: 'link-label', x, y: y - 16, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: color,
+    stroke: '#f6f5fb', 'stroke-width': 4, 'paint-order': 'stroke', style: `font: 600 13px ${FONT}`,
+  }, viewport);
+  t.textContent = k.label;
+  t.addEventListener('click', (e) => { e.stopPropagation(); selectedLink = k.id; render(); });
+  t.addEventListener('dblclick', (e) => { e.stopPropagation(); selectedLink = k.id; editLinkLabel(); });
+}
+
+const linkBar = $('#link-toolbar'), linkColors = $('#link-colors'), linkMarkers = $('#link-markers'), linkMenu = $('#link-menu');
+let markerEnd = 'end';  // qual ponta o seletor de marcadores está editando
+const currentLink = () => (map?.links ?? []).find(k => k.id === selectedLink);
+const closeLinkPops = () => { linkColors.hidden = linkMarkers.hidden = linkMenu.hidden = true; };
+
+function setLink(changes) {
+  const k = currentLink();
+  if (k) mutate(() => Object.assign(k, changes));
+}
+
+function placeLinkBar() {
+  const k = !bending && !retarget && currentLink();
+  const a = k && boxes.find(b => b.id === k.from), b = k && boxes.find(b => b.id === k.to);
+  linkBar.hidden = !(a && b);
+  if (linkBar.hidden) return closeLinkPops();
+  const [hx, hy] = linkHandle(a, b, k.bend, k.fromSide, k.toSide);
+  const x = view.x + hx * view.k, y = view.y + hy * view.k + 22;
+  Object.assign(linkBar.style, { left: `${x}px`, top: `${y}px` });
+  for (const p of document.querySelectorAll('.link-pop')) Object.assign(p.style, { left: `${x}px`, top: `${y + 56}px` });
+  const color = k.color || LINK_GREEN;
+  linkBar.querySelector('.dot').style.background = color;
+  $('#link-start-btn').innerHTML = markerIcon(k.startMarker ?? 'none', true);
+  $('#link-end-btn').innerHTML = markerIcon(k.endMarker ?? 'arrow', false);
+  for (const s of linkColors.querySelectorAll('[data-value]')) s.classList.toggle('active', s.dataset.value === (k.color ?? ''));
+}
+
+function editLinkLabel() {
+  const k = currentLink();
+  if (!k) return;
+  const t = prompt('Rótulo da ligação', k.label ?? '');
+  if (t !== null && (t.trim() || null) !== (k.label ?? null)) setLink({ label: t.trim() || null });
+}
+
+linkColors.querySelector('.swatches').append(...['', ...PALETTE, ...EXTRA_COLORS].map(swatch));
+for (const p of [linkBar, ...document.querySelectorAll('.link-pop')]) {
+  p.addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
+}
+const togglePop = (pop) => { const open = pop.hidden; closeLinkPops(); pop.hidden = !open; };
+
+$('#link-color-btn').onclick = () => togglePop(linkColors);
+$('#link-more').onclick = () => togglePop(linkMenu);
+for (const [btn, end] of [['#link-start-btn', 'start'], ['#link-end-btn', 'end']]) {
+  $(btn).onclick = () => {
+    markerEnd = end;
+    const k = currentLink(), cur = end === 'start' ? k.startMarker ?? 'none' : k.endMarker ?? 'arrow';
+    linkMarkers.replaceChildren(...MARKERS.map(t => {
+      const b = document.createElement('button');
+      b.dataset.value = t;
+      b.title = t;
+      b.innerHTML = markerIcon(t, end === 'start');
+      b.classList.toggle('active', t === cur);
+      return b;
+    }));
+    togglePop(linkMarkers);
+  };
+}
+$('#link-swap').onclick = () => {
+  const k = currentLink();
+  setLink({ startMarker: k.endMarker ?? 'arrow', endMarker: k.startMarker ?? 'none' });
+};
+linkColors.onclick = (e) => {
+  const v = e.target.closest('[data-value]')?.dataset.value;
+  if (v !== undefined) { linkColors.hidden = true; setLink({ color: v || null }); }
+};
+linkMarkers.onclick = (e) => {
+  const v = e.target.closest('[data-value]')?.dataset.value;
+  if (v) { linkMarkers.hidden = true; setLink({ [markerEnd === 'start' ? 'startMarker' : 'endMarker']: v }); }
+};
+linkMenu.onclick = (e) => {
+  const a = e.target.closest('[data-action]')?.dataset.action;
+  closeLinkPops();
+  if (a === 'label') editLinkLabel();
+  if (a === 'delete') deleteSelected();
+};

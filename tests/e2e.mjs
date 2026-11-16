@@ -21,10 +21,11 @@ for (let i = 0; i < 50; i++) { try { targets = await (await fetch('http://127.0.
 const page = targets.find(t => t.type === 'page');
 const ws = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise(r => ws.onopen = r);
-let seq = 0; const waiting = new Map(); const logs = [];
+let seq = 0, promptAnswer = ''; const waiting = new Map(); const logs = [];
 ws.onmessage = (m) => { const d = JSON.parse(m.data);
   if (d.id && waiting.has(d.id)) { waiting.get(d.id)(d); waiting.delete(d.id); }
   if (d.method === 'Runtime.exceptionThrown') logs.push(d.params.exceptionDetails.exception?.description);
+  if (d.method === 'Page.javascriptDialogOpening') cmd('Page.handleJavaScriptDialog', { accept: true, promptText: promptAnswer });
   if (d.method === 'Runtime.consoleAPICalled' && d.params.type === 'error') logs.push(JSON.stringify(d.params.args)); };
 const cmd = (method, params = {}) => new Promise(r => { const id = ++seq; waiting.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
 const ev = async (expr) => (await cmd('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result.result.value;
@@ -48,6 +49,7 @@ await fetch(BASE + '/api/maps/demo', { method: 'PUT', body: JSON.stringify({ ver
   n('Cronograma', [n('Q1'), n('Q2')], 'right', '#e5383b'),
 ]) }) });
 await cmd('Runtime.enable');
+await cmd('Page.enable');
 await cmd('Page.navigate', { url: BASE + '/#/map/demo' });
 await sleep(1500);
 const v0 = (await getMap()).version;
@@ -359,6 +361,43 @@ assert.ok(first.toSide, 'lado de chegada gravado');
 await key('z', 2);
 await sleep(900);
 assert.notEqual((await getMap()).links[0].to, orc.id, 'desfazer volta ao destino antigo');
+
+// barra da ligação: cor, pontas inicial/final, inverter, rótulo e excluir
+const linkBar = (sel) => ev(`!document.querySelector('${sel}').hidden`);
+const clickSel = (sel) => ev(`document.querySelector('${sel}').click()`);
+const link0 = async () => (await getMap()).links[0];
+await ev(`document.querySelector('#viewport .link-hit').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
+assert.equal(await linkBar('#link-toolbar'), true, 'barra da ligação aparece');
+assert.equal(await visible('#toolbar'), false, 'barra do nó some');
+await clickSel('#link-color-btn');
+assert.equal(await linkBar('#link-colors'), true);
+await clickSel('#link-colors [data-value="#e5383b"]');
+await clickSel('#link-end-btn');
+assert.equal(await linkBar('#link-markers'), true);
+await clickSel('#link-markers [data-value="diamond"]');
+await clickSel('#link-start-btn');
+await clickSel('#link-markers [data-value="dot-open"]');
+await sleep(900);
+let l0 = await link0();
+assert.deepEqual([l0.color, l0.startMarker, l0.endMarker], ['#e5383b', 'dot-open', 'diamond']);
+assert.equal(await ev(`document.querySelector('#viewport path.link').getAttribute('stroke')`), '#e5383b', 'cor aplicada');
+assert.match(await ev(`document.querySelector('#viewport path.link').getAttribute('marker-start')`), /dot-open/, 'ponta inicial desenhada');
+await clickSel('#link-swap');
+await sleep(900);
+l0 = await link0();
+assert.deepEqual([l0.startMarker, l0.endMarker], ['diamond', 'dot-open'], 'inverter troca as pontas');
+promptAnswer = 'depende de';
+await clickSel('#link-more');
+await clickSel('#link-menu [data-action="label"]');
+await sleep(900);
+assert.equal((await link0()).label, 'depende de', 'rótulo gravado');
+assert.equal(await ev(`document.querySelector('#viewport .link-label')?.textContent`), 'depende de', 'rótulo desenhado');
+const nLinks = (await getMap()).links.length;
+await clickSel('#link-more');
+await clickSel('#link-menu [data-action="delete"]');
+await sleep(900);
+assert.equal((await getMap()).links.length, nLinks - 1, 'excluir ligação pelo menu');
+assert.equal(await linkBar('#link-toolbar'), false, 'barra some ao excluir');
 
 // conflito: outra "aba" grava antes
 await sleep(900);
