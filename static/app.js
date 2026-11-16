@@ -2,7 +2,7 @@ import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
   History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, toMarkdown, slides, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
 } from './model.js';
-import { folderOf, childFolders, folderPath, removeFolder, placeDoc } from './folders.js';
+import { folderOf, childFolders, folderPath, removeFolder, placeDoc, subtree, moveFolder, folderOptions } from './folders.js';
 import { initBoard, openBoard, closeBoard, currentBoard, newBoard, boardSvg, boardPlace } from './board.js';
 
 const $ = (s) => document.querySelector(s);
@@ -111,6 +111,7 @@ async function showList(folderId = null) {
     const a = document.createElement('a');
     a.href = folderHref(c.id);
     a.textContent = c.name;
+    a.dataset.drop = c.id ?? '';  // soltar aqui move para essa pasta
     return i ? [Object.assign(document.createElement('span'), { className: 'crumb-sep', textContent: '›' }), a] : [a];
   }));
   const btn = (text, data, value) => {
@@ -126,7 +127,9 @@ async function showList(folderId = null) {
     a.href = folderHref(f.id);
     a.innerHTML = '<svg viewBox="0 0 24 24"><use href="#i-folder"/></svg>';
     a.append(f.name);
-    li.append(a, btn('Renomear', 'renameFolder', f.id), btn('Apagar', 'deleteFolder', f.id));
+    Object.assign(li.dataset, { drag: `folder:${f.id}`, drop: f.id });
+    li.draggable = true;
+    li.append(a, btn('Mover', 'moveFolder', f.id), btn('Renomear', 'renameFolder', f.id), btn('Apagar', 'deleteFolder', f.id));
     return li;
   });
   const docs = items.filter(it => folderOf(tree, it.id) === listFolder);
@@ -140,7 +143,9 @@ async function showList(folderId = null) {
     a.append(it.title || '(sem título)');
     const time = document.createElement('time');
     time.textContent = new Date(it.updated).toLocaleString('pt-BR');
-    li.append(a, time, btn('Duplicar', 'duplicate', it.id), btn('Apagar', 'delete', it.id));
+    li.dataset.drag = `doc:${it.id}`;
+    li.draggable = true;
+    li.append(a, time, btn('Mover', 'moveDoc', it.id), btn('Duplicar', 'duplicate', it.id), btn('Apagar', 'delete', it.id));
     return li;
   }));
   $('#empty').hidden = subfolders.length + docs.length > 0;
@@ -165,6 +170,7 @@ $('#maps').addEventListener('click', async (e) => {
     const r = await fetch(`/api/maps/${d.duplicate}/duplicate`, { method: 'POST' });
     if (r.ok && listFolder) { const { id } = await r.json(); await saveTree(t => placeDoc(t, id, listFolder)); }  // cópia na mesma pasta
   } else if (d?.delete) await api('DELETE', `/${d.delete}`);
+  else if (d?.moveDoc || d?.moveFolder) return openMoveMenu(d.moveDoc ? 'doc' : 'folder', d.moveDoc ?? d.moveFolder, e.target.closest('button'));
   else if (d?.renameFolder) {
     const f = tree.folders.find(x => x.id === d.renameFolder);
     const name = prompt('Nome da pasta', f?.name)?.trim();
@@ -177,6 +183,58 @@ $('#maps').addEventListener('click', async (e) => {
   } else return;
   showList(listFolder);
 });
+// mover: menu "Mover para" (lista de pastas em árvore) ou arrastar e soltar sobre pasta/trilha
+const moveMenu = $('#move-menu');
+async function moveItem(kind, id, to) {
+  moveMenu.hidden = true;
+  if (kind === 'folder' && to && subtree(tree, id).has(to)) return;  // pasta dentro dela mesma
+  if (await saveTree(t => (kind === 'doc' ? placeDoc(t, id, to) : moveFolder(t, id, to) ?? t))) showList(listFolder);
+}
+function openMoveMenu(kind, id, anchor) {
+  const here = kind === 'doc' ? folderOf(tree, id) : tree.folders.find(f => f.id === id)?.parent ?? null;
+  const banned = kind === 'folder' ? subtree(tree, id) : new Set();
+  const item = (to, name, depth) => {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.dataset.to = to ?? '';
+    b.style.paddingLeft = `${10 + depth * 16}px`;
+    b.disabled = to === here || banned.has(to);
+    return b;
+  };
+  const title = Object.assign(document.createElement('p'), { textContent: 'Mover para' });
+  moveMenu.replaceChildren(title, item(null, 'Meus mapas', 0), ...folderOptions(tree).map(o => item(o.id, o.name, o.depth + 1)));
+  moveMenu.onclick = (e) => { const b = e.target.closest('button[data-to]'); if (b) moveItem(kind, id, b.dataset.to || null); };
+  const r = anchor.getBoundingClientRect();
+  Object.assign(moveMenu.style, { top: `${r.bottom + 6}px`, left: `${Math.max(8, r.right - 260)}px` });
+  moveMenu.hidden = false;
+}
+document.addEventListener('pointerdown', (e) => {
+  if (!e.target.closest('#move-menu, [data-move-doc], [data-move-folder]')) moveMenu.hidden = true;
+}, true);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') moveMenu.hidden = true; });
+window.addEventListener('scroll', () => { moveMenu.hidden = true; });
+
+const listView = $('#list-view');
+listView.addEventListener('dragstart', (e) => {
+  const src = e.target.closest?.('[data-drag]');
+  if (src) e.dataTransfer.setData('text/x-galho', src.dataset.drag);
+});
+listView.addEventListener('dragover', (e) => {
+  const target = e.target.closest?.('[data-drop]');
+  if (!target || !e.dataTransfer.types.includes('text/x-galho')) return;
+  e.preventDefault();
+  target.classList.add('drop-over');
+});
+listView.addEventListener('dragleave', (e) => e.target.closest?.('[data-drop]')?.classList.remove('drop-over'));
+listView.addEventListener('drop', (e) => {
+  const target = e.target.closest?.('[data-drop]'), data = e.dataTransfer.getData('text/x-galho');
+  if (!target || !data) return;
+  e.preventDefault();
+  target.classList.remove('drop-over');
+  const [kind, id] = data.split(':');
+  if (target.dataset.drop !== id) moveItem(kind, id, target.dataset.drop || null);
+});
+
 $('#new-folder').onclick = async () => {
   const name = prompt('Nome da nova pasta')?.trim();
   if (!name) return;

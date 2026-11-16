@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { folderOf, childFolders, folderPath, removeFolder, placeDoc } from '../static/folders.js';
+import { folderOf, childFolders, folderPath, removeFolder, placeDoc, subtree, moveFolder, folderOptions } from '../static/folders.js';
 
 const tree = {
   version: 3,
@@ -28,4 +28,13 @@ test('removeFolder moves subfolders and documents one level up', () => {
 test('placeDoc sets or clears the folder', () => {
   assert.equal(placeDoc(tree, 'm9', 'a').place.m9, 'a');
   assert.equal('m1' in placeDoc(tree, 'm1', null).place, false);
+});
+
+test('moveFolder refuses itself and descendants; folderOptions lists the tree', () => {
+  assert.deepEqual([...subtree(tree, 'w')].sort(), ['c', 'w']);
+  assert.equal(moveFolder(tree, 'w', 'c'), null, 'não entra numa subpasta dela');
+  assert.equal(moveFolder(tree, 'w', 'w'), null, 'nem nela mesma');
+  assert.equal(moveFolder(tree, 'c', 'a').folders.find(f => f.id === 'c').parent, 'a');
+  assert.equal(moveFolder(tree, 'c', null).folders.find(f => f.id === 'c').parent, null, 'para o Início');
+  assert.deepEqual(folderOptions(tree).map(o => [o.name, o.depth]), [['Arquivo', 0], ['Trabalho', 0], ['Clientes', 1]]);
 });
