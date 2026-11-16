@@ -68,6 +68,9 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _api(self, method):
         path = urlsplit(self.path).path
+        if path == "/api/trash" or path.startswith("/api/trash/"):
+            self._trash(method, path[len("/api/trash"):].strip("/"))
+            return True
         if path == "/api/events" and method == "GET":
             self._events()
             return True
@@ -79,6 +82,9 @@ class Handler(SimpleHTTPRequestHandler):
         map_id, _, sub = path[len("/api/maps/"):].partition("/")
         if not ID_RE.match(map_id):
             self._send(400, {"error": "invalid id"})
+            return True
+        if sub == "duplicate" and method == "POST":
+            self._duplicate(map_id)
             return True
         if sub == "history" or sub.startswith("history/"):
             self._history(method, map_id, sub)
@@ -97,9 +103,7 @@ class Handler(SimpleHTTPRequestHandler):
             if not file.exists():
                 self._send(404, {"error": "not found"})
             else:
-                file.unlink()
-                shutil.rmtree(self.server.data_dir / "files" / map_id, ignore_errors=True)
-                shutil.rmtree(self.server.data_dir / "history" / map_id, ignore_errors=True)
+                self._to_trash(map_id)
                 self._send(204, None)
         elif method == "PUT":
             self._put(map_id, file)
@@ -139,6 +143,73 @@ class Handler(SimpleHTTPRequestHandler):
         tmp.write_text(json.dumps(body, ensure_ascii=False), "utf-8")
         os.replace(tmp, file)
         self._send(200, {"version": body["version"]})
+
+    # ---- Lixeira: data/trash/<id>/ guarda map.json, files/ e history/ do mapa apagado ----
+    def _parts(self, map_id):
+        d = self.server.data_dir
+        return [(d / f"{map_id}.json", "map.json"), (d / "files" / map_id, "files"), (d / "history" / map_id, "history")]
+
+    def _to_trash(self, map_id):
+        box = self.server.data_dir / "trash" / map_id
+        shutil.rmtree(box, ignore_errors=True)  # apagar de novo o mesmo id substitui o anterior
+        box.mkdir(parents=True)
+        for src, name in self._parts(map_id):
+            if src.exists():
+                shutil.move(src, box / name)
+
+    def _trash(self, method, rest):
+        root = self.server.data_dir / "trash"
+        if not rest:
+            if method != "GET":
+                self._send(404, {"error": "not found"})
+                return
+            items = []
+            for box in root.glob("*") if root.exists() else []:
+                data = read_map(box / "map.json") if (box / "map.json").exists() else None
+                if data is None:
+                    continue
+                mtime = box.stat().st_mtime
+                items.append((mtime, {"id": box.name, "title": data["root"].get("text", ""),
+                                      "deleted": datetime.fromtimestamp(mtime, timezone.utc).isoformat()}))
+            self._send(200, [i for _, i in sorted(items, key=lambda x: x[0], reverse=True)])
+            return
+        map_id, _, action = rest.partition("/")
+        if not ID_RE.match(map_id):
+            self._send(400, {"error": "invalid id"})
+            return
+        box = root / map_id
+        if not box.is_dir():
+            self._send(404, {"error": "not found"})
+            return
+        if method == "DELETE" and not action:
+            shutil.rmtree(box)
+            self._send(204, None)
+        elif method == "POST" and action == "restore":
+            if (self.server.data_dir / f"{map_id}.json").exists():
+                self._send(409, {"error": "a map with this id already exists"})
+                return
+            for dst, name in self._parts(map_id):
+                if (box / name).exists():
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(box / name, dst)
+            shutil.rmtree(box)
+            self._send(200, {"id": map_id})
+        else:
+            self._send(404, {"error": "not found"})
+
+    def _duplicate(self, map_id):
+        d = self.server.data_dir
+        data = read_map(d / f"{map_id}.json") if (d / f"{map_id}.json").exists() else None
+        if data is None:
+            self._send(404, {"error": "not found"})
+            return
+        new_id = f"{map_id[:48]}-copia-{uuid.uuid4().hex[:6]}"
+        data.update(id=new_id, version=1)
+        data["root"]["text"] = f"{data['root'].get('text', '')} (cópia)"
+        (d / f"{new_id}.json").write_text(json.dumps(data, ensure_ascii=False), "utf-8")
+        if (d / "files" / map_id).exists():
+            shutil.copytree(d / "files" / map_id, d / "files" / new_id)  # imagens/anexos apontam para o mapa
+        self._send(201, {"id": new_id})
 
     def _snapshot(self, map_id, file, version):
         # guarda a versão que vai ser sobrescrita, no máximo uma a cada HISTORY_INTERVAL s

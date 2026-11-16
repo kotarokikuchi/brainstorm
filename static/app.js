@@ -60,27 +60,56 @@ async function route() {
 async function showList() {
   map = null;
   document.body.dataset.view = 'list';
-  const items = await (await api('GET')).json();
-  const ul = $('#maps');
-  ul.replaceChildren(...items.map(it => {
+  const [items, trash] = await Promise.all([api('GET').then(r => r.json()), fetch('/api/trash').then(r => r.json())]);
+  const btn = (text, data, value) => {
+    const b = document.createElement('button');
+    b.textContent = text;
+    b.dataset[data] = value;
+    return b;
+  };
+  $('#maps').replaceChildren(...items.map(it => {
     const li = document.createElement('li');
     const a = document.createElement('a');
     a.href = `#/map/${it.id}`;
     a.textContent = it.title || '(sem título)';
     const time = document.createElement('time');
     time.textContent = new Date(it.updated).toLocaleString('pt-BR');
-    const del = document.createElement('button');
-    del.textContent = 'Apagar';
-    del.onclick = async () => {
-      if (!confirm(`Apagar o mapa "${a.textContent}"?`)) return;
-      await api('DELETE', `/${it.id}`);
-      showList();
-    };
-    li.append(a, time, del);
+    li.append(a, time, btn('Duplicar', 'duplicate', it.id), btn('Apagar', 'delete', it.id));
     return li;
   }));
   $('#empty').hidden = items.length > 0;
+  $('#trash').hidden = !trash.length;
+  $('#trash summary').textContent = `Lixeira (${trash.length})`;
+  $('#trash-list').replaceChildren(...trash.map(t => {
+    const li = document.createElement('li');
+    const name = document.createElement('span');
+    name.textContent = t.title || '(sem título)';
+    const time = document.createElement('time');
+    time.textContent = `apagado em ${new Date(t.deleted).toLocaleString('pt-BR')}`;
+    li.append(name, time, btn('Restaurar', 'restore', t.id), btn('Apagar de vez', 'purge', t.id));
+    return li;
+  }));
 }
+
+// lista: duplicar / mover para a lixeira (dá para restaurar, então não pergunta)
+$('#maps').addEventListener('click', async (e) => {
+  const d = e.target.closest('button')?.dataset;
+  if (d?.duplicate) await fetch(`/api/maps/${d.duplicate}/duplicate`, { method: 'POST' });
+  else if (d?.delete) await api('DELETE', `/${d.delete}`);
+  else return;
+  showList();
+});
+$('#trash-list').addEventListener('click', async (e) => {
+  const d = e.target.closest('button')?.dataset;
+  if (d?.restore) {
+    const r = await fetch(`/api/trash/${d.restore}/restore`, { method: 'POST' });
+    if (r.status === 409) alert('Já existe um mapa com esse identificador; não foi possível restaurar.');
+  } else if (d?.purge) {
+    if (!confirm('Apagar de vez? Isso não pode ser desfeito.')) return;
+    await fetch(`/api/trash/${d.purge}`, { method: 'DELETE' });
+  } else return;
+  showList();
+});
 
 $('#new-map').onclick = async () => {
   const m = newMap(uid());
@@ -1011,7 +1040,7 @@ nodeMenu.onclick = (e) => {
 // clicar fora dos controles (cabeçalho, lista...) fecha qualquer menu aberto
 document.addEventListener('pointerdown', (e) => {
   if (!map || e.target.closest('.card, .adder, .link-anchor, .node, .link-hit, .resize-handle, #editor')) return;
-  const pops = [...nodePops, ...document.querySelectorAll('.link-pop'), $('#export-menu'), $('#history-panel')];
+  const pops = [...nodePops, ...document.querySelectorAll('.link-pop'), $('#export-menu'), $('#history-panel'), $('#map-menu')];
   if (pops.every(p => p.hidden)) return;
   for (const p of pops) p.hidden = true;
   render();
@@ -1701,4 +1730,26 @@ $('#history-list').addEventListener('click', async (e) => {
   historyPanel.hidden = true;
   // restaurar é uma mudança como outra qualquer: entra no desfazer e é salva por cima da atual
   mutate(() => { map.root = old.root; map.layout = old.layout ?? 'map'; map.links = old.links ?? []; });
+});
+
+// ---------- Menu do mapa (título): duplicar / mover para a lixeira ----------
+const mapMenu = $('#map-menu');
+$('#map-menu-btn').onclick = () => { mapMenu.hidden = !mapMenu.hidden; };
+mapMenu.addEventListener('mousedown', (e) => e.preventDefault());
+mapMenu.addEventListener('click', async (e) => {
+  const action = e.target.closest('[data-map-action]')?.dataset.mapAction;
+  if (!action) return;
+  mapMenu.hidden = true;
+  const id = map.id;
+  await flushSave();
+  if (action === 'duplicate') {
+    const r = await fetch(`/api/maps/${id}/duplicate`, { method: 'POST' });
+    if (r.ok) location.hash = `#/map/${(await r.json()).id}`;
+    else alert('Não foi possível duplicar o mapa.');
+  } else if (action === 'trash') {
+    dirty = false;  // o mapa vai inteiro para a lixeira; nada pendente a perguntar
+    pending = null;
+    await api('DELETE', `/${id}`);
+    location.hash = '#/';
+  }
 });

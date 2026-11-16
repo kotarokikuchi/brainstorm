@@ -23,7 +23,7 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 #status.error { color: var(--danger); font-weight: 600; }
 
 body[data-view="list"] #editor-view, body[data-view="editor"] #list-view { display: none; }
-body[data-view="list"] #title, body[data-view="list"] #status, body[data-view="list"] .history-btns { display: none; }
+body[data-view="list"] #title, body[data-view="list"] #status, body[data-view="list"] .history-btns, body[data-view="list"] #map-menu-btn { display: none; }
 
 /* Lista de mapas */
 #list-view { max-width: 760px; margin: 32px auto; padding: 0 16px; }
@@ -217,3 +217,14 @@ body.outline-mode #canvas { display: none; }
 #history-list li > div { flex: 1; display: grid; }
 #history-list small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #history-list button { font-size: 13px; }
+
+/* Duplicar / lixeira */
+#map-menu { position: fixed; top: 56px; left: 120px; min-width: 220px; z-index: 10; }
+#maps li button, #trash-list button { font-size: 13px; }
+#trash { margin-top: 28px; color: var(--muted); }
+#trash[hidden] { display: none; }
+#trash summary { cursor: pointer; font-weight: 600; }
+#trash-list { list-style: none; padding: 0; display: grid; gap: 6px; margin-top: 10px; }
+#trash-list li { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px; }
+#trash-list span { flex: 1; color: var(--ink); }
+#trash-list time { font-size: 13px; }
