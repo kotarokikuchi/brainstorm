@@ -85,10 +85,17 @@ function hatch(color) {
   return `url(#${id})`;
 }
 
+// linha de base igual à da caixa de edição (regra do CSS): meia sobra da altura de linha acima,
+// depois a ascendente da fonte. Com "text-before-edge" cada fonte ficava alguns px acima/abaixo.
+function baseline(e) {
+  mctx.font = `${e.fontSize}px ${fontOf(e)}`;
+  const m = mctx.measureText('Hg'), a = m.fontBoundingBoxAscent, d = m.fontBoundingBoxDescent;
+  return (lineH(e.fontSize) - (a + d)) / 2 + a;
+}
 function drawLines(g, e, lines, x, y, w) {
-  const align = ALIGN[e.textAlign] ?? ALIGN.left, ax = x + w * align[1];
-  const t = el('text', { x: ax, y, fill: e.strokeColor, 'font-size': e.fontSize, 'font-family': fontOf(e), 'dominant-baseline': 'text-before-edge', 'text-anchor': align[0] }, g);
-  lines.forEach((line, i) => { el('tspan', { x: ax, y: y + i * lineH(e.fontSize) }, t).textContent = line; });
+  const align = ALIGN[e.textAlign] ?? ALIGN.left, ax = x + w * align[1], b = baseline(e);
+  const t = el('text', { x: ax, y: y + b, fill: e.strokeColor, 'font-size': e.fontSize, 'font-family': fontOf(e), 'text-anchor': align[0] }, g);
+  lines.forEach((line, i) => { el('tspan', { x: ax, y: y + b + i * lineH(e.fontSize) }, t).textContent = line; });
 }
 
 // nota adesiva: o texto quebra por palavras na largura da nota; a nota cresce para baixo se faltar espaço

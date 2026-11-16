@@ -1393,6 +1393,38 @@ const pasted = (await getMap()).root.children.find(c => c.text === 'Com arquivos
 assert.ok(pasted && pasted.image.id !== maImg && pasted.attachments[0].id !== maAtt && !('src' in pasted), 'ramo colado ganha arquivos próprios');
 assert.equal((await fetch(BASE + `/api/maps/demo/files/${pasted.attachments[0].id}`)).status, 200, 'anexo existe no mapa de destino');
 
+// texto não se desloca ao entrar na edição: primeira linha de tinta igual (±1 px) no desenho e na caixa
+const inkTop = async (b) => {
+  const shotData = (await cmd('Page.captureScreenshot', { clip: { x: b.x - 10, y: b.y - 10, width: b.w + 20, height: b.h + 20, scale: 1 } })).result.data;
+  return ev(`(async () => { const im = new Image(); im.src = 'data:image/png;base64,${shotData}'; await im.decode();
+    const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+    const g = c.getContext('2d'); g.drawImage(im, 0, 0); const d = g.getImageData(0, 0, c.width, c.height).data;
+    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) { const p = (y * c.width + x) * 4; if (Math.max(d[p], d[p + 1], d[p + 2]) < 80) return y; }
+    return -1; })()`);
+};
+await ev(`location.hash = '#/board/qb'`); await sleep(1200);
+for (const fam of ['hand', 'normal', 'code']) {
+  await key('8');
+  await click(cv.x + 700, cv.y + 420);
+  await typeText('casasdasdasda');
+  await key('Escape');
+  await ev(`document.querySelector('#board-props [data-prop="fontSize"] [data-value="36"]').click()`);
+  await ev(`document.querySelector('#board-props [data-prop="fontFamily"] [data-value="${fam}"]').click()`);
+  await sleep(300);
+  await click(cv.x + 1250, cv.y + 120);  // solta a seleção (sem a moldura na foto)
+  await sleep(500);
+  const tid = (await ev(`[...document.querySelectorAll('#board-root .el')].at(-1).dataset.id`));
+  const tb = await elBox(tid);
+  const viewTop = await inkTop(tb);
+  await dbl(tb.x + tb.w / 2, tb.y + tb.h / 2);
+  await ev(`document.querySelector('#board-text').style.caretColor = 'transparent'`);
+  const editTop = await inkTop(tb);
+  assert.ok(viewTop >= 0 && Math.abs(editTop - viewTop) <= 1, `texto (${fam}) no mesmo lugar ao editar: ${viewTop} vs ${editTop}`);
+  await key('Escape');
+  await key('Delete');
+  await sleep(300);
+}
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);
