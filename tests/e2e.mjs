@@ -274,6 +274,31 @@ await ev(`document.querySelector('#viewport .link-bend').dispatchEvent(new Mouse
 await sleep(900);
 assert.equal(await bend(), undefined, 'duplo clique volta à curva automática');
 
+// 4 "+" ao passar o mouse: irmão antes, novo pai; raiz só tem os laterais
+const hoverOn = async (prefix) => { const [x, y] = center(await rect(prefix)); await mouse('mouseMoved', x, y); await sleep(50); };
+const shownAdders = () => ev(`[...document.querySelectorAll('.hover-add')].filter(b => !b.hidden).map(b => b.dataset.dir).sort()`);
+const rootKids = async () => (await getMap()).root.children.map(c => c.text);
+await hoverOn('Cronograma');
+assert.deepEqual(await shownAdders(), ['after', 'before', 'child', 'parent'], '4 possibilidades no nó');
+await ev(`document.querySelector('.hover-add[data-dir="before"]').click()`);
+await typeText('Antes'); await key('Enter');
+await sleep(900);
+let kids = await rootKids();
+assert.equal(kids[kids.indexOf('Cronograma') - 1], 'Antes', 'irmão antes');
+await hoverOn('Cronograma');
+await ev(`document.querySelector('.hover-add[data-dir="parent"]').click()`);
+await typeText('Fase'); await key('Enter');
+await sleep(900);
+const fase = (await getMap()).root.children.find(c => c.text === 'Fase');
+assert.deepEqual(fase?.children.map(c => c.text), ['Cronograma'], 'novo pai entre o nó e a raiz');
+await hoverOn('Cronograma');
+await ev(`document.querySelector('.hover-add[data-dir="parent"]').click()`);
+await key('Escape');  // descartar o pai novo não pode levar o ramo junto
+await sleep(900);
+assert.deepEqual((await getMap()).root.children.find(c => c.text === 'Fase')?.children.map(c => c.text), ['Cronograma'], 'Esc no pai novo preserva o ramo');
+await hoverOn('Planejamento');
+assert.deepEqual(await shownAdders(), ['child-left', 'child-right'], 'raiz: filho à esquerda e à direita');
+
 // conflito: outra "aba" grava antes
 await sleep(900);
 const cur = await getMap();
