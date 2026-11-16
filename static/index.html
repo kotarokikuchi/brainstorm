@@ -51,6 +51,8 @@
     <symbol id="i-note" viewBox="0 0 24 24"><path d="M13 20l7 -7" /><path d="M13 20v-6a1 1 0 0 1 1 -1h6v-7a2 2 0 0 0 -2 -2h-12a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7" /></symbol>
     <symbol id="i-folder" viewBox="0 0 24 24"><path d="M5 4h4l3 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2" /></symbol>
     <symbol id="i-folder-plus" viewBox="0 0 24 24"><path d="M12 19h-7a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2h4l3 3h7a2 2 0 0 1 2 2v3.5" /><path d="M16 19h6" /><path d="M19 16v6" /></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></symbol>
+    <symbol id="i-arrows-sort" viewBox="0 0 24 24"><path d="M3 9l4 -4l4 4m-4 -4v14" /><path d="M21 15l-4 4l-4 -4m4 4v-14" /></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7l16 0" /> <path d="M10 11l0 6" /> <path d="M14 11l0 6" /> <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /> <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></symbol>
   </svg>
   <header class="topbar">
@@ -91,6 +93,15 @@
         <button id="new-board"><svg viewBox="0 0 24 24"><use href="#i-brush"/></svg>Novo quadro</button>
         <button id="new-map" class="primary"><svg viewBox="0 0 24 24"><use href="#i-sitemap"/></svg>Novo mapa</button>
       </span>
+    </div>
+    <div class="list-tools">
+      <label class="search"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg><input id="search" type="search" placeholder="Buscar mapas, quadros e pastas" autocomplete="off"></label>
+      <label class="sort" title="Ordenar"><svg viewBox="0 0 24 24"><use href="#i-arrows-sort"/></svg><select id="sort">
+        <option value="recent">Modificados recentemente</option>
+        <option value="oldest">Modificados há mais tempo</option>
+        <option value="az">Nome (A–Z)</option>
+        <option value="za">Nome (Z–A)</option>
+      </select></label>
     </div>
     <ul id="maps"></ul>
     <p id="empty" hidden>Nenhum mapa ainda. Crie o primeiro.</p>

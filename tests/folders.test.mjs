@@ -38,3 +38,27 @@ test('moveFolder refuses itself and descendants; folderOptions lists the tree', 
   assert.equal(moveFolder(tree, 'c', null).folders.find(f => f.id === 'c').parent, null, 'para o Início');
   assert.deepEqual(folderOptions(tree).map(o => [o.name, o.depth]), [['Arquivo', 0], ['Trabalho', 0], ['Clientes', 1]]);
 });
+
+import { sortItems, searchItems } from '../static/folders.js';
+
+test('sortItems orders folders by name and documents by date or name', () => {
+  const docs = [
+    { id: 'd1', title: 'beta', updated: '2026-01-02T00:00:00Z' },
+    { id: 'd2', title: 'Álamo', updated: '2026-01-03T00:00:00Z' },
+    { id: 'd3', title: 'item 10', updated: '2026-01-01T00:00:00Z' },
+    { id: 'd4', title: 'item 9', updated: '2026-01-04T00:00:00Z' },
+  ];
+  const ids = (r) => [r.folders.map(f => f.id).join(''), r.docs.map(d => d.id).join(',')];
+  assert.deepEqual(ids(sortItems({ folders: tree.folders, docs }, 'recent')), ['acw', 'd4,d2,d1,d3']);
+  assert.deepEqual(ids(sortItems({ folders: tree.folders, docs }, 'oldest')), ['acw', 'd3,d1,d2,d4']);
+  assert.deepEqual(ids(sortItems({ folders: tree.folders, docs }, 'az')), ['acw', 'd2,d1,d4,d3'], 'acento e número natural');
+  assert.deepEqual(ids(sortItems({ folders: tree.folders, docs }, 'za')), ['wca', 'd3,d4,d1,d2']);
+});
+
+test('searchItems finds folders and documents anywhere, ignoring accents and case', () => {
+  const docs = [{ id: 'm1', title: 'Reunião de Sexta' }, { id: 'm2', title: 'Plano' }];
+  const r = searchItems(tree, docs, 'reuniao sex');
+  assert.deepEqual(r.docs.map(d => d.id), ['m1'], 'todas as palavras, sem acento');
+  assert.deepEqual(searchItems(tree, docs, 'CLI').folders.map(f => f.id), ['c'], 'subpasta também');
+  assert.deepEqual(searchItems(tree, docs, 'nada').docs, []);
+});
