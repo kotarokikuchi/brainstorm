@@ -109,3 +109,143 @@ export class History {
     return this.future.pop();
   }
 }
+
+// ---- Layouts ----
+// Cada layout devolve caixas (canto superior esquerdo + tamanho) e arestas pai→filho.
+// measure(text, depth) -> {w, h} é injetado: no navegador mede via SVG, nos testes é fixo.
+
+const visible = (n) => (n.collapsed ? [] : n.children);
+
+export function layout(map, measure) {
+  const nodes = [], edges = [];
+  const box = (n, depth, color, side) => {
+    const { w, h } = measure(n.text, depth);
+    const b = { id: n.id, x: 0, y: 0, w, h, depth, color, shape: n.shape, side };
+    nodes.push(b);
+    return b;
+  };
+  const colorOf = (n, parentColor, depth) => (depth > 0 && n.color) || parentColor;
+  const fn = { map: layoutMap, org: layoutOrg, list: layoutList }[map.layout] || layoutMap;
+  fn(map.root, measure, box, colorOf, edges);
+  return { nodes, edges };
+}
+
+function layoutMap(root, measure, box, colorOf, edges) {
+  const GAP_Y = 12;
+  const heights = new Map();
+  const subH = (n, depth) => {
+    const kids = visible(n);
+    const own = measure(n.text, depth).h;
+    const sum = kids.reduce((s, c) => s + subH(c, depth + 1), 0) + GAP_Y * Math.max(0, kids.length - 1);
+    const h = Math.max(own, sum);
+    heights.set(n.id, h);
+    return h;
+  };
+  // empilha filhos centrados em centerY, a partir da borda xEdge, para o lado indicado
+  const stack = (parentBox, kids, depth, side, xEdge, centerY, color) => {
+    const total = kids.reduce((s, c) => s + heights.get(c.id), 0) + GAP_Y * Math.max(0, kids.length - 1);
+    let y = centerY - total / 2;
+    for (const c of kids) {
+      const h = heights.get(c.id);
+      place(parentBox, c, depth, side, xEdge, y + h / 2, color);
+      y += h + GAP_Y;
+    }
+  };
+  const place = (parentBox, n, depth, side, xEdge, centerY, parentColor) => {
+    const color = colorOf(n, parentColor, depth);
+    const b = box(n, depth, color, side);
+    b.x = side === 'right' ? xEdge : xEdge - b.w;
+    b.y = centerY - b.h / 2;
+    edges.push({ from: parentBox, to: b, color, depth });
+    const next = side === 'right' ? b.x + b.w + 36 : b.x - 36;
+    stack(b, visible(n), depth + 1, side, next, centerY, color);
+  };
+  subH(root, 0);
+  const r = box(root, 0, '#222', null);
+  r.x = -r.w / 2;
+  r.y = -r.h / 2;
+  const kids = visible(root);
+  stack(r, kids.filter(c => c.side !== 'left'), 1, 'right', r.x + r.w + 60, 0, '#222');
+  stack(r, kids.filter(c => c.side === 'left'), 1, 'left', r.x - 60, 0, '#222');
+}
+
+function layoutOrg(root, measure, box, colorOf, edges) {
+  const GAP_X = 24, GAP_Y = 60;
+  const widths = new Map();
+  const subW = (n, depth) => {
+    const kids = visible(n);
+    const sum = kids.reduce((s, c) => s + subW(c, depth + 1), 0) + GAP_X * Math.max(0, kids.length - 1);
+    const w = Math.max(measure(n.text, depth).w, sum);
+    widths.set(n.id, w);
+    return w;
+  };
+  const place = (parentBox, n, depth, centerX, top, parentColor) => {
+    const color = depth === 0 ? '#222' : colorOf(n, parentColor, depth);
+    const b = box(n, depth, color, null);
+    b.x = centerX - b.w / 2;
+    b.y = top;
+    if (parentBox) edges.push({ from: parentBox, to: b, color, depth });
+    const kids = visible(n);
+    const total = kids.reduce((s, c) => s + widths.get(c.id), 0) + GAP_X * Math.max(0, kids.length - 1);
+    let x = centerX - total / 2;
+    for (const c of kids) {
+      const w = widths.get(c.id);
+      place(b, c, depth + 1, x + w / 2, b.y + b.h + GAP_Y, color);
+      x += w + GAP_X;
+    }
+  };
+  subW(root, 0);
+  place(null, root, 0, 0, -measure(root.text, 0).h / 2, '#222');
+}
+
+function layoutList(root, measure, box, colorOf, edges) {
+  let y = 0, x0 = 0;
+  const place = (parentBox, n, depth, parentColor) => {
+    const color = depth === 0 ? '#222' : colorOf(n, parentColor, depth);
+    const b = box(n, depth, color, null);
+    if (depth === 0) {
+      x0 = -b.w / 2;
+      y = -b.h / 2;
+    }
+    b.x = x0 + depth * 32;
+    b.y = y;
+    y += b.h + 8;
+    if (parentBox) edges.push({ from: parentBox, to: b, color, depth });
+    for (const c of visible(n)) place(b, c, depth + 1, color);
+  };
+  place(null, root, 0, '#222');
+}
+
+export function edgePath(layoutName, a, b) {
+  if (layoutName === 'org') {
+    const x1 = a.x + a.w / 2, y1 = a.y + a.h, x2 = b.x + b.w / 2, y2 = b.y, my = (y1 + y2) / 2;
+    return `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`;
+  }
+  if (layoutName === 'list') {
+    return `M${a.x + 12},${a.y + a.h} V${b.y + b.h / 2} H${b.x}`;
+  }
+  const right = b.x >= a.x + a.w / 2;
+  const x1 = right ? a.x + a.w : a.x, y1 = a.y + a.h / 2;
+  const x2 = right ? b.x : b.x + b.w, y2 = b.y + b.h / 2, mx = (x1 + x2) / 2;
+  return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+}
+
+// nó mais próximo na direção (peso 2× no eixo perpendicular); sem candidato fica parado
+export function navigate(boxes, fromId, dir) {
+  const c = (b) => [b.x + b.w / 2, b.y + b.h / 2];
+  const from = boxes.find(b => b.id === fromId);
+  if (!from) return fromId;
+  const [fx, fy] = c(from);
+  let best = fromId, bestScore = Infinity;
+  for (const b of boxes) {
+    if (b === from) continue;
+    const [x, y] = c(b);
+    const dx = x - fx, dy = y - fy;
+    const ahead = { right: dx, left: -dx, down: dy, up: -dy }[dir];
+    if (ahead <= 1) continue;
+    const side = dir === 'left' || dir === 'right' ? Math.abs(dy) : Math.abs(dx);
+    const score = ahead + 2 * side;
+    if (score < bestScore) { bestScore = score; best = b.id; }
+  }
+  return best;
+}
