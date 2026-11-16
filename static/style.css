@@ -271,6 +271,11 @@ body[data-view="board"] #title { cursor: text; }
 #board-canvas.panning { cursor: grabbing; }
 #board-canvas[data-tool="rectangle"], #board-canvas[data-tool="diamond"], #board-canvas[data-tool="ellipse"],
 #board-canvas[data-tool="arrow"], #board-canvas[data-tool="line"], #board-canvas[data-tool="freedraw"] { cursor: crosshair; }
+#board-canvas[data-tool="bucket"] { cursor: cell; }
+#board-more { top: calc(100% + 8px); right: 0; }
+#board-more button > span { display: flex; align-items: center; gap: 12px; }
+#board-more svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+#board-more kbd { font: 12px var(--font); color: var(--muted); }
 
 #board-props { left: 16px; top: 80px; width: 236px; flex-direction: column; align-items: stretch; padding: 12px; gap: 2px; max-height: calc(100% - 160px); overflow: hidden auto; }
 #board-view { user-select: none; -webkit-user-select: none; }

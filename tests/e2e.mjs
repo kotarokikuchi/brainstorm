@@ -1049,6 +1049,30 @@ await key('?');
 await click(cv.x + 1100, cv.y + 560);
 assert.equal(await shownSel('#board-help'), false, 'clicar fora fecha os atalhos');
 
+// quadro: menu "mais ferramentas" e balde de tinta
+await ev(`document.querySelector('#board-more-btn').click()`);
+assert.equal(await shownSel('#board-more'), true, 'menu mais ferramentas abre');
+await click(cv.x + 1300, cv.y + 150);  // longe do ponto anterior: o par de cliques acima abriu um texto lá
+assert.equal(await shownSel('#board-more'), false, 'clicar fora fecha o menu mais');
+await key('2');
+await dragScreen(cv.x + 1050, cv.y + 500, cv.x + 1200, cv.y + 600);
+await sleep(900);
+const emptyRect = (await boardEls()).at(-1);
+assert.equal(emptyRect.type, 'rectangle');
+await ev(`document.querySelector('#board-more-btn').click()`);
+await ev(`document.querySelector('#board-more [data-tool="bucket"]').click()`);
+assert.equal(await shownSel('#board-more'), false, 'escolher fecha o menu');
+assert.equal(await ev(`document.querySelector('#board-more-btn').classList.contains('active')`), true, 'botão ⋯ ativo com o balde');
+assert.equal(await ev(`document.querySelector('#board-more-btn use').getAttribute('href')`), '#i-bucket-droplet', '⋯ mostra o ícone do balde');
+await ev(`document.querySelector('#board-props [data-prop="backgroundColor"] [data-value="#ffec99"]').click()`);
+await click(cv.x + 1125, cv.y + 550);  // miolo vazio do retângulo
+await sleep(900);
+assert.equal((await boardEls()).find(e => e.id === emptyRect.id).backgroundColor, '#ffec99', 'balde pinta o fundo');
+await key('v');
+await key('b');
+assert.equal(await ev(`document.querySelector('#board-tools [data-tool="bucket"]').classList.contains('active')`), true, 'tecla B = balde');
+await key('v');
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);

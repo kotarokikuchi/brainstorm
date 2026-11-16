@@ -138,3 +138,17 @@ test('elementsHitBy finds what an eraser stroke crosses', () => {
   assert.deepEqual(elementsHitBy([ln, r], [150, 0], [150, 100], 4), [], 'não toca em nada');
   assert.deepEqual(elementsHitBy([ln, r], [190, 25], [260, 25], 4), [r.id], 'cruza a borda do retângulo');
 });
+
+// ---- Balde de tinta ----
+import { paint } from '../static/board-model.js';
+
+test('paint fills closed shapes and recolors lines and text; elementAt inside hits empty shapes', () => {
+  const st = { backgroundColor: '#ffc9c9', fillStyle: 'solid', strokeColor: '#e03131' };
+  const r = paint(shape('rectangle', 0, 0, 100, 50), st);
+  assert.deepEqual([r.backgroundColor, r.fillStyle, r.strokeColor], ['#ffc9c9', 'solid', '#1e1e1e'], 'forma: fundo');
+  const ln = paint({ ...createElement('line', [0, 0]), points: [[0, 0], [100, 0]] }, st);
+  assert.deepEqual([ln.backgroundColor, ln.strokeColor], ['transparent', '#e03131'], 'linha: cor do traço');
+  const empty = shape('rectangle', 0, 0, 100, 50);
+  assert.equal(elementAt([empty], [50, 25], 6), null, 'clique comum no miolo vazio não pega');
+  assert.equal(elementAt([empty], [50, 25], 6, true), empty.id, 'balde pega no miolo');
+});
