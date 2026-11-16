@@ -1062,13 +1062,22 @@ nodeMenu.onclick = (e) => {
 };
 
 // clicar fora dos controles (cabeçalho, lista...) fecha qualquer menu aberto
+// (vale também nos quadros; os botões do topo cuidam dos próprios menus)
 document.addEventListener('pointerdown', (e) => {
-  if (!map || e.target.closest('.card, .adder, .link-anchor, .node, .link-hit, .resize-handle, #editor')) return;
-  const pops = [...nodePops, ...document.querySelectorAll('.link-pop'), $('#export-menu'), $('#history-panel'), $('#map-menu')];
+  if (e.target.closest('.card, .adder, .link-anchor, .node, .link-hit, .resize-handle, #editor, .topbar-toggle')) return;
+  const pops = [...nodePops, ...document.querySelectorAll('.link-pop'), ...topPops(), $('#board-help')];
   if (pops.every(p => p.hidden)) return;
   for (const p of pops) p.hidden = true;
-  render();
+  if (map) render();
 }, true);
+
+// menus do topo: um aberto por vez; clicar de novo no botão fecha
+const topPops = () => [$('#export-menu'), $('#history-panel'), $('#map-menu')];
+function toggleTop(pop) {
+  const show = pop.hidden;
+  for (const p of topPops()) p.hidden = true;
+  pop.hidden = !show;
+}
 
 // ---------- Curvar ligações ----------
 let bending = null;  // {link, a, b, pushed} enquanto arrasta o ponto de controle
@@ -1707,7 +1716,7 @@ const EXPORTS = {
   },
 };
 
-$('#export-btn').onclick = () => { exportMenu.hidden = !exportMenu.hidden; };
+$('#export-btn').onclick = () => toggleTop(exportMenu);
 exportMenu.addEventListener('mousedown', (e) => e.preventDefault());
 exportMenu.addEventListener('click', async (e) => {
   const kind = e.target.closest('[data-export]')?.dataset.export;
@@ -1745,7 +1754,7 @@ async function loadHistory() {
 
 $('#history-btn').onclick = async () => {
   if (!historyPanel.hidden) { historyPanel.hidden = true; return; }
-  $('#export-menu').hidden = true;
+  for (const p of topPops()) p.hidden = true;
   await loadHistory();
   historyPanel.hidden = false;
 };
@@ -1763,7 +1772,7 @@ $('#history-list').addEventListener('click', async (e) => {
 
 // ---------- Menu do mapa (título): duplicar / mover para a lixeira ----------
 const mapMenu = $('#map-menu');
-$('#map-menu-btn').onclick = () => { mapMenu.hidden = !mapMenu.hidden; };
+$('#map-menu-btn').onclick = () => toggleTop(mapMenu);
 mapMenu.addEventListener('mousedown', (e) => e.preventDefault());
 mapMenu.addEventListener('click', async (e) => {
   const action = e.target.closest('[data-map-action]')?.dataset.mapAction;
