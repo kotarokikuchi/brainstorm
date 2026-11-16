@@ -713,6 +713,7 @@ function drawLinks() {
   for (const k of map.links ?? []) {
     const a = boxes.find(b => b.id === k.from), b = boxes.find(b => b.id === k.to);
     if (!a || !b) continue;  // ponta escondida num ramo recolhido
+    if (retarget?.link === k) { drawRetarget(k, a, b); continue; }
     const d = linkPath(a, b, k.bend, k.fromSide, k.toSide), sel = k.id === selectedLink;
     el('path', {
       d, class: 'link', fill: 'none', stroke: sel ? '#2f5bea' : '#22a559', 'stroke-width': sel ? 3 : 2,
@@ -754,13 +755,17 @@ function drawLinks() {
 $('#link-btn').onclick = () => { linking = { from: selected, target: null, byClick: true }; render(); };
 
 // atualiza ponteiro e nó de destino (caixa sob o ponteiro, exceto a origem)
-function trackLink(e) {
-  [linking.x, linking.y] = toWorld(e);
-  // o elemento sob o ponteiro resolve formas que passam da caixa (nuvem); senão, caixa com folga
+// nó sob o ponteiro: o elemento resolve formas que passam da caixa (nuvem); senão, caixa com folga
+function nodeUnder(e, x, y, exclude) {
   const g = e.target.closest?.('.node'), pad = 8;
   const hit = g ? boxes.find(b => b.id === g.dataset.id)
-    : boxes.find(b => linking.x >= b.x - pad && linking.x <= b.x + b.w + pad && linking.y >= b.y - pad && linking.y <= b.y + b.h + pad);
-  linking.target = hit && hit.id !== linking.from ? hit.id : null;
+    : boxes.find(b => x >= b.x - pad && x <= b.x + b.w + pad && y >= b.y - pad && y <= b.y + b.h + pad);
+  return hit && hit.id !== exclude ? hit.id : null;
+}
+
+function trackLink(e) {
+  [linking.x, linking.y] = toWorld(e);
+  linking.target = nodeUnder(e, linking.x, linking.y, linking.from);
 }
 
 window.addEventListener('pointermove', (e) => {
@@ -868,7 +873,14 @@ let bending = null;  // {link, a, b, pushed} enquanto arrasta o ponto de control
 // pontas da seta selecionada + ponto de controle arrastável (duplo clique volta ao automático)
 function drawBendHandle(k, a, b, d) {
   const [p1, p2] = [d.match(/^M([-\d.e]+),([-\d.e]+)/), d.match(/([-\d.e]+),([-\d.e]+)$/)];
-  for (const m of [p1, p2]) el('circle', { class: 'link-end', cx: m[1], cy: m[2], r: 4, fill: '#fff', stroke: '#2f5bea', 'stroke-width': 2 }, viewport);
+  // pontas arrastáveis: soltar sobre outro nó troca a origem/destino da ligação
+  for (const [m, which] of [[p1, 'from'], [p2, 'to']]) {
+    const c = el('circle', { class: 'link-end', 'data-which': which, cx: m[1], cy: m[2], r: 6, fill: '#fff', stroke: '#2f5bea', 'stroke-width': 2 }, viewport);
+    c.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      retarget = { link: k, which, x: +m[1], y: +m[2], target: null };
+    });
+  }
   const [hx, hy] = linkHandle(a, b, k.bend, k.fromSide, k.toSide);
   const h = el('circle', { class: 'link-bend', cx: hx, cy: hy, r: 6, fill: '#2f5bea', stroke: '#fff', 'stroke-width': 2 }, viewport);
   h.addEventListener('pointerdown', (e) => {
@@ -896,3 +908,45 @@ window.addEventListener('pointerup', () => {
   render();
 });
 
+
+// ---------- Mover origem/destino de uma ligação ----------
+let retarget = null;  // {link, which: 'from'|'to', x, y, target} enquanto arrasta uma ponta
+
+const targetDots = (t, x, y) => {
+  el('rect', { class: 'link-target', x: t.x - 5, y: t.y - 5, width: t.w + 10, height: t.h + 10, rx: 10, fill: '#22a55914', stroke: '#22a559', 'stroke-width': 2 }, viewport);
+  const near = sideToward(t, [x, y]);
+  const pts = { top: [t.x + t.w / 2, t.y], right: [t.x + t.w, t.y + t.h / 2], bottom: [t.x + t.w / 2, t.y + t.h], left: [t.x, t.y + t.h / 2] };
+  for (const [side, [cx, cy]] of Object.entries(pts)) el('circle', { class: 'anchor-dot', cx, cy, r: side === near ? 6 : 3.5, fill: '#22a559' }, viewport);
+};
+
+function drawRetarget(k, a, b) {
+  const { which, x, y } = retarget;
+  const t = boxes.find(bx => bx.id === retarget.target);
+  if (t) targetDots(t, x, y);
+  const loose = t ?? { x, y, w: 0, h: 0 }, side = t ? sideToward(t, [x, y]) : null;
+  const d = which === 'to' ? linkPath(a, loose, null, k.fromSide, side) : linkPath(loose, b, null, side, k.toSide);
+  el('path', { d, class: 'link-preview', fill: 'none', stroke: '#22a559', 'stroke-width': 2, 'stroke-dasharray': '3 4', 'marker-end': 'url(#arrow)' }, viewport);
+}
+
+window.addEventListener('pointermove', (e) => {
+  if (!retarget) return;
+  [retarget.x, retarget.y] = toWorld(e);
+  const other = retarget.which === 'to' ? retarget.link.from : retarget.link.to;
+  retarget.target = nodeUnder(e, retarget.x, retarget.y, other);
+  render();
+});
+
+window.addEventListener('pointerup', (e) => {
+  if (!retarget) return;
+  const { link: k, which, target } = retarget;
+  retarget = null;
+  const [x, y] = toWorld(e);
+  const from = which === 'from' ? target : k.from, to = which === 'to' ? target : k.to;
+  const dup = (map.links ?? []).some(o => o !== k && o.from === from && o.to === to);
+  if (target && !dup) {
+    const side = sideToward(boxes.find(b => b.id === target), [x, y]);
+    mutate(() => Object.assign(k, which === 'to' ? { to: target, toSide: side } : { from: target, fromSide: side }));
+  } else {
+    render();
+  }
+});
