@@ -1245,3 +1245,18 @@ $('#attach-list').addEventListener('click', (e) => {
   const n = findNode(map.root, selected).node;
   mutate(() => { n.attachments = n.attachments.filter((_, k) => k !== +i); if (!n.attachments.length) delete n.attachments; });
 });
+
+// ---------- Recarga automática ----------
+// o servidor avisa (SSE) quando static/ muda ou quando ele reinicia; a página recarrega
+// só num momento seguro: sem edição/arrasto em andamento e com tudo salvo
+let liveStamp = null, reloadWanted = false;
+new EventSource('/api/events').onmessage = (e) => {
+  if (liveStamp === null) liveStamp = e.data;
+  else if (e.data !== liveStamp) reloadWanted = true;
+};
+
+setInterval(async () => {
+  if (!reloadWanted || editing || drag?.active || linking || bending || retarget || resizing) return;
+  await flushSave();
+  if (!dirty && !saving) location.reload();  // com conflito/erro de gravação não recarrega (não perde edições)
+}, 1000);

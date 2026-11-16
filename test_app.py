@@ -144,6 +144,22 @@ class ApiTest(unittest.TestCase):
         self.assertFalse((self.data / "files" / "zzz").exists())
         self.assertEqual(self.upload("zzz", "a.png", b"x")[0], 404, "mapa inexistente")
 
+    def test_events_stream_announces_static_changes(self):
+        static = self.data / "static"
+        static.mkdir()
+        (static / "app.js").write_text("1")
+        self.server.static_dir = static
+        with urllib.request.urlopen(self.base + "/api/events", timeout=5) as resp:
+            self.assertEqual(resp.headers["Content-Type"], "text/event-stream")
+            first = resp.readline()
+            self.assertTrue(first.startswith(b"data: "), first)
+            resp.readline()  # linha em branco que fecha o evento
+            st = (static / "app.js").stat()
+            os.utime(static / "app.js", (st.st_atime, st.st_mtime + 5))
+            second = resp.readline()
+            self.assertTrue(second.startswith(b"data: "), second)
+            self.assertNotEqual(first, second, "mudança em static/ gera novo carimbo")
+
     def test_deleting_map_removes_its_files(self):
         self.req("PUT", "/api/maps/abc", {"version": 0, "root": {"text": "a", "children": []}})
         _, info = self.upload("abc", "foto.png", b"x")
