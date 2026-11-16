@@ -1024,6 +1024,11 @@ await key('Enter', 2);  // Ctrl+Enter também confirma
 await sleep(900);
 assert.equal((await boardEls()).at(-1).text, 'Linha um\nlinha dois\nlinha três!', 'Ctrl+Enter confirma');
 
+// quadro: cada ferramenta mostra a letra do atalho no canto do botão
+const hint = (t) => ev(`getComputedStyle(document.querySelector('#board-tools [data-tool="${t}"]'), '::after').content`);
+assert.deepEqual(await Promise.all(['hand', 'select', 'rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw', 'text', 'eraser'].map(hint)),
+  ['"H"', '"V"', '"R"', '"D"', '"O"', '"A"', '"L"', '"P"', '"T"', '"E"'], 'letras de atalho nos botões');
+
 // quadro: menus do topo fecham ao clicar fora e ao clicar de novo no próprio botão
 const shownSel = (sel) => ev(`!document.querySelector('${sel}').hidden`);
 await ev(`document.querySelector('#map-menu-btn').click()`);
