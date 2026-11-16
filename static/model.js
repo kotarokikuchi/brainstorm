@@ -130,6 +130,23 @@ export function moveNode(map, nodeId, parentId, index, side = null) {
   return true;
 }
 
+// cola uma cópia profunda (ids novos) do ramo como último filho de parentId
+export function pasteBranch(map, parentId, branch) {
+  const clone = (n) => ({ ...n, id: uid(), children: n.children.map(clone) });
+  const n = clone(branch);
+  const parent = findNode(map.root, parentId).node;
+  if (parent === map.root) {
+    n.side = balancedSide(parent);
+    n.color ||= PALETTE[parent.children.length % PALETTE.length];
+  } else {
+    if (branch.side) n.color = null;  // era 1º nível: passa a herdar a cor do novo ramo
+    n.side = null;
+  }
+  parent.collapsed = false;
+  parent.children.push(n);
+  return n;
+}
+
 // onde um ramo arrastado cairia com o ponteiro em (px, py): {parentId, index, side} ou null
 export function dropTarget(map, boxes, dragId, px, py) {
   const drag = findNode(map.root, dragId)?.node;

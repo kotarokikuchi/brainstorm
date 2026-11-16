@@ -1,6 +1,6 @@
 import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
-  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath,
+  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, pasteBranch,
 } from './model.js';
 
 const $ = (s) => document.querySelector(s);
@@ -109,7 +109,9 @@ function render() {
   const res = layout(map, measure);
   boxes = res.nodes;
   // seleção nunca fica num nó invisível (recolhido/apagado): sobe ao ancestral visível
-  while (!boxes.some(b => b.id === selected)) selected = findNode(map.root, selected)?.parent?.id ?? map.root.id;
+  if (selected !== null) {
+    while (!boxes.some(b => b.id === selected)) selected = findNode(map.root, selected)?.parent?.id ?? map.root.id;
+  }
   viewport.setAttribute('transform', `translate(${view.x} ${view.y}) scale(${view.k})`);
   viewport.replaceChildren();
   // na lista, arestas longas primeiro: o tronco fica segmentado com a cor de cada ramo
@@ -178,6 +180,7 @@ function drawToggle(b, n, g) {
 function select(id) {
   selected = id;
   selectedLink = null;
+  nodeMenu.hidden = true;
   render();
 }
 
@@ -201,7 +204,7 @@ function deleteSelected() {
     mutate(() => removeLink(map, id));
     return;
   }
-  if (selected === map.root.id) return;
+  if (!selected || selected === map.root.id) return;
   mutate(() => { selected = removeNode(map, selected); });
 }
 
@@ -212,7 +215,7 @@ function restore(state) {
   map.layout = s.layout;
   map.links = s.links ?? [];
   if (!map.links.some(k => k.id === selectedLink)) selectedLink = null;
-  if (!findNode(map.root, selected)) selected = map.root.id;
+  if (selected !== null && !findNode(map.root, selected)) selected = map.root.id;
   render();
   scheduleSave();
 }
@@ -292,6 +295,16 @@ document.addEventListener('keydown', (ev) => {
   } else if (ctrl && key.toLowerCase() === 'y') {
     ev.preventDefault();
     redo();
+  } else if (!selected && !ctrl) {
+    // nada selecionado: setas/Tab/Enter voltam a selecionar a raiz; o resto é ignorado
+    if (key.startsWith('Arrow') || key === 'Tab' || key === 'Enter') { ev.preventDefault(); select(map.root.id); }
+  } else if (!selected) {
+    return;
+  } else if (ctrl && key.toLowerCase() === 'c') {
+    actions.copy();
+  } else if (ctrl && key.toLowerCase() === 'v') {
+    ev.preventDefault();
+    actions.paste();
   } else if (ctrl || ev.altKey) {
     return;
   } else if (key === 'Tab') {
@@ -303,6 +316,7 @@ document.addEventListener('keydown', (ev) => {
   } else if (key === 'Escape') {
     linking = null;
     selectedLink = null;
+    nodeMenu.hidden = stylePop.hidden = true;
     render();
   } else if (key === 'Delete' || key === 'Backspace') {
     ev.preventDefault();
@@ -315,8 +329,7 @@ document.addEventListener('keydown', (ev) => {
     select(navigate(boxes, selected, key.slice(5).toLowerCase()));
   } else if (key === ' ') {
     ev.preventDefault();
-    const n = findNode(map.root, selected).node;
-    if (n.children.length && n !== map.root) mutate(() => { n.collapsed = !n.collapsed; });
+    actions.collapse();
   } else if (key.length === 1) {
     // digitar sobre um nó começa a editar substituindo o texto
     ev.preventDefault();
@@ -384,7 +397,7 @@ window.addEventListener('beforeunload', (ev) => {
 window.addEventListener('resize', render);
 
 // ---------- Controles flutuantes: barra, estilo, "+" ----------
-const toolbar = $('#toolbar'), stylePop = $('#style-pop'), hints = $('#hints');
+const toolbar = $('#toolbar'), stylePop = $('#style-pop'), nodeMenu = $('#node-menu'), hints = $('#hints');
 const addChildBtn = $('#add-child'), addSiblingBtn = $('#add-sibling');
 
 $('#swatches').append(...['', ...PALETTE].map(c => {
@@ -411,7 +424,7 @@ $('#shapes').onclick = (e) => {
   const n = findNode(map.root, selected).node;
   setStyle('shape', n.shape === btn.dataset.shape ? null : btn.dataset.shape);
 };
-$('#style-btn').onclick = () => { stylePop.hidden = !stylePop.hidden; render(); };
+$('#style-btn').onclick = () => { stylePop.hidden = !stylePop.hidden; nodeMenu.hidden = true; render(); };
 $('#delete-btn').onclick = deleteSelected;
 addChildBtn.onclick = () => addAndEdit(() => addChild(map, selected));
 addSiblingBtn.onclick = () => addAndEdit(() => addSibling(map, selected));
@@ -421,7 +434,7 @@ $('#redo').onclick = redo;
 function placeOverlays() {
   const b = drag?.active || linking ? null : boxes.find(b => b.id === selected);
   toolbar.hidden = !b;
-  if (!b) stylePop.hidden = true;
+  if (!b) stylePop.hidden = nodeMenu.hidden = true;
   addChildBtn.hidden = addSiblingBtn.hidden = hints.hidden = !b || !!editing;
   if (!b) return;
   const sx = (x) => view.x + x * view.k, sy = (y) => view.y + y * view.k;
@@ -430,6 +443,8 @@ function placeOverlays() {
 
   pos(toolbar, sx(b.x + b.w / 2), sy(b.y));
   pos(stylePop, sx(b.x + b.w / 2) - 114, sy(b.y + b.h) + 14);
+  pos(nodeMenu, sx(b.x + b.w / 2) - 125, sy(b.y + b.h) + 14);
+  $('#more-btn').classList.toggle('active', !nodeMenu.hidden);
   $('#style-btn').classList.toggle('active', !stylePop.hidden);
   for (const s of $('#swatches').children) s.classList.toggle('active', (n.color || '') === s.dataset.color);
   for (const s of $('#shapes').children) s.classList.toggle('active', n.shape === s.dataset.shape);
@@ -517,7 +532,11 @@ svg.addEventListener('pointermove', (e) => {
   render();
 });
 svg.addEventListener('pointerup', () => {
-  if (pan && !pan.moved && !stylePop.hidden) { stylePop.hidden = true; render(); }
+  if (pan && !pan.moved) {
+    selected = selectedLink = null;
+    stylePop.hidden = nodeMenu.hidden = true;
+    render();
+  }
   pan = null;
   svg.classList.remove('panning');
 });
@@ -673,3 +692,48 @@ window.addEventListener('pointerup', (e) => {
     render();
   }
 });
+
+// ---------- Menu "⋯" do nó + copiar/colar ----------
+let clipboard = null;  // JSON do ramo copiado (vale entre mapas na mesma aba)
+
+const actions = {
+  child: () => addAndEdit(() => addChild(map, selected)),
+  sibling: () => addAndEdit(() => addSibling(map, selected)),
+  collapse: () => {
+    const n = findNode(map.root, selected).node;
+    if (n.children.length && n !== map.root) mutate(() => { n.collapsed = !n.collapsed; });
+  },
+  link: () => { linking = { from: selected, target: null, byClick: true }; render(); },
+  copy: () => { clipboard = JSON.stringify(findNode(map.root, selected).node); },
+  paste: () => {
+    if (clipboard) mutate(() => { selected = pasteBranch(map, selected, JSON.parse(clipboard)).id; });
+  },
+  delete: deleteSelected,
+};
+
+$('#more-btn').onclick = () => {
+  const n = findNode(map.root, selected).node;
+  const item = (a) => nodeMenu.querySelector(`[data-action="${a}"]`);
+  item('collapse').disabled = !n.children.length || n === map.root;
+  item('delete').disabled = n === map.root;
+  item('paste').disabled = !clipboard;
+  nodeMenu.hidden = !nodeMenu.hidden;
+  stylePop.hidden = true;
+  render();
+};
+
+nodeMenu.onclick = (e) => {
+  const b = e.target.closest('[data-action]');
+  if (!b || b.disabled) return;
+  nodeMenu.hidden = true;
+  render();
+  actions[b.dataset.action]();
+};
+
+// clicar fora dos controles (cabeçalho, lista...) fecha qualquer menu aberto
+document.addEventListener('pointerdown', (e) => {
+  if (!map || e.target.closest('.card, .adder, .node, .link-hit, .link-handle, #editor')) return;
+  if (stylePop.hidden && nodeMenu.hidden) return;
+  stylePop.hidden = nodeMenu.hidden = true;
+  render();
+}, true);
