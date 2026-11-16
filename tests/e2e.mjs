@@ -1448,6 +1448,24 @@ assert.ok(await selH() > h0 + 15, 'moldura cresce com o Enter');
 await typeText('linha 2');
 await key('Escape');
 
+// lista: busca em todas as pastas (sem acento/maiúscula) e ordenação lembrada
+await ev(`location.hash = '#/'`); await sleep(1000);
+await ev(`document.querySelector('#search').focus()`);
+await typeText('clientes vip');
+await sleep(300);
+assert.deepEqual(await ev(`[...document.querySelectorAll('#maps li')].map(li => [li.classList.contains('folder'), li.querySelector('a').firstChild.nextSibling.textContent, li.querySelector('.where')?.textContent])`),
+  [[true, 'Clientes VIP', 'Meus mapas › Projetos']], 'busca acha a subpasta e mostra onde ela está');
+await key('Escape');
+assert.equal(await ev(`document.querySelector('#search').value`), '', 'Esc limpa a busca');
+assert.equal(await ev(`document.querySelectorAll('#maps .where').length`), 0, 'sem busca, volta a lista da pasta');
+const folderOrder = () => ev(`[...document.querySelectorAll('#maps li.folder > a')].map(a => a.textContent)`);
+await ev(`(() => { const s = document.querySelector('#sort'); s.value = 'za'; s.dispatchEvent(new Event('change')); })()`);
+const za = await folderOrder();
+assert.deepEqual(za, [...za].sort((a, b) => b.localeCompare(a, 'pt-BR')), 'Nome (Z–A)');
+await cmd('Page.reload'); await sleep(1500);
+assert.equal(await ev(`document.querySelector('#sort').value`), 'za', 'ordenação lembrada depois de recarregar');
+await ev(`(() => { const s = document.querySelector('#sort'); s.value = 'recent'; s.dispatchEvent(new Event('change')); })()`);
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);

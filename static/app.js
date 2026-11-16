@@ -2,7 +2,7 @@ import {
   PALETTE, uid, newMap, branchToText, textToBranches, findNode, addChild, addSibling, removeNode, commitText,
   History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, toMarkdown, slides, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
 } from './model.js';
-import { folderOf, childFolders, folderPath, removeFolder, placeDoc, subtree, moveFolder, folderOptions } from './folders.js';
+import { folderOf, childFolders, folderPath, removeFolder, placeDoc, subtree, moveFolder, folderOptions, sortItems, searchItems } from './folders.js';
 import { initBoard, openBoard, closeBoard, currentBoard, newBoard, boardSvg, boardPlace, renameBoard } from './board.js';
 
 const $ = (s) => document.querySelector(s);
@@ -138,6 +138,7 @@ async function route() {
   }
   closeBoard();
   if (m) { await loadTree(); $('.brand').href = folderHref(folderOf(tree, m[2])); }  // voltar cai na pasta do documento
+  searchInput.value = '';  // navegar (abrir pasta, voltar) limpa a busca
   if (m?.[1] === 'board') { map = null; openBoard(m[2]); } else if (m) openMap(m[2]);
   else showList(location.hash.match(/^#\/folder\/([a-z0-9-]+)$/)?.[1] ?? null);
 }
@@ -162,12 +163,27 @@ async function saveTree(change) {
 }
 
 // ---------- Lista de mapas ----------
+// ordenação (lembrada neste navegador) e busca (em todas as pastas, pelo nome)
+const searchInput = $('#search'), sortSelect = $('#sort');
+try { sortSelect.value = localStorage.getItem('galho:sort') || 'recent'; } catch { /* sem armazenamento */ }
+if (!sortSelect.value) sortSelect.value = 'recent';
+sortSelect.onchange = () => { try { localStorage.setItem('galho:sort', sortSelect.value); } catch { /* idem */ } renderList(); sortSelect.blur(); };
+searchInput.addEventListener('input', () => renderList());
+searchInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') { searchInput.value = ''; renderList(); } });
+let listData = { items: [], trash: [] };
+
 async function showList(folderId = null) {
   map = null;
   document.body.dataset.view = 'list';
   $('.brand').href = '#/';
   const [items, trash] = await Promise.all([api('GET').then(r => r.json()), fetch('/api/trash').then(r => r.json()), loadTree()]);
   listFolder = tree.folders.some(f => f.id === folderId) ? folderId : null;
+  listData = { items, trash };
+  renderList();
+}
+
+function renderList() {
+  const { items, trash } = listData, query = searchInput.value.trim();
   // trilha: Meus mapas › Trabalho › Clientes
   const crumbs = [{ id: null, name: 'Meus mapas' }, ...folderPath(tree, listFolder)];
   $('#list-title').replaceChildren(...crumbs.flatMap((c, i) => {
@@ -191,7 +207,16 @@ async function showList(folderId = null) {
     b.dataset[data] = value;
     return b;
   };
-  const subfolders = childFolders(tree, listFolder).map(f => {
+  // buscando: resultados de todas as pastas, com o lugar de cada um; senão, o conteúdo da pasta aberta
+  const found = query ? searchItems(tree, items, query) : { folders: childFolders(tree, listFolder), docs: items.filter(it => folderOf(tree, it.id) === listFolder) };
+  const sorted = sortItems(found, sortSelect.value);
+  const where = (folderId) => {
+    const s = document.createElement('small');
+    s.className = 'where';
+    s.textContent = ['Meus mapas', ...folderPath(tree, folderId).map(f => f.name)].join(' › ');
+    return query ? [s] : [];
+  };
+  const subfolders = sorted.folders.map(f => {
     const li = document.createElement('li');
     li.classList.add('folder');
     const a = document.createElement('a');
@@ -200,10 +225,11 @@ async function showList(folderId = null) {
     a.append(f.name);
     Object.assign(li.dataset, { drag: `folder:${f.id}`, drop: f.id });
     li.draggable = true;
+    a.append(...where(f.parent ?? null));
     li.append(a, btn('Mover', 'moveFolder', f.id), btn('Renomear', 'renameFolder', f.id), btn('Apagar', 'deleteFolder', f.id));
     return li;
   });
-  const docs = items.filter(it => folderOf(tree, it.id) === listFolder);
+  const docs = sorted.docs;
   $('#maps').replaceChildren(...subfolders, ...docs.map(it => {
     const li = document.createElement('li');
     const a = document.createElement('a');
@@ -216,12 +242,13 @@ async function showList(folderId = null) {
     time.textContent = new Date(it.updated).toLocaleString('pt-BR');
     li.dataset.drag = `doc:${it.id}`;
     li.draggable = true;
+    a.append(...where(folderOf(tree, it.id)));
     li.append(a, time, btn('Mover', 'moveDoc', it.id), btn('Duplicar', 'duplicate', it.id), btn('Apagar', 'delete', it.id));
     return li;
   }));
   $('#empty').hidden = subfolders.length + docs.length > 0;
-  $('#empty').textContent = listFolder ? 'Pasta vazia.' : 'Nenhum mapa ainda. Crie o primeiro.';
-  $('#trash').hidden = !trash.length || !!listFolder;  // lixeira só no Início
+  $('#empty').textContent = query ? `Nada encontrado para “${query}”.` : listFolder ? 'Pasta vazia.' : 'Nenhum mapa ainda. Crie o primeiro.';
+  $('#trash').hidden = !trash.length || !!listFolder || !!query;  // lixeira só no Início
   $('#trash summary').textContent = `Lixeira (${trash.length})`;
   $('#trash-list').replaceChildren(...trash.map(t => {
     const li = document.createElement('li');

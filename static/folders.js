@@ -59,3 +59,25 @@ export function moveFolder(tree, id, parent) {
 export function folderOptions(tree, parent = null, depth = 0) {
   return childFolders(tree, parent).flatMap(f => [{ id: f.id, name: f.name, depth }, ...folderOptions(tree, f.id, depth + 1)]);
 }
+
+// ---- Ordenar e buscar na lista ----
+const fold = (s) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();  // sem acento, sem maiúscula
+const byName = (a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base', numeric: true });
+
+// pastas sempre por nome (Z–A inverte); documentos por data de modificação ou por nome
+export function sortItems({ folders, docs }, mode) {
+  const fs = [...folders].sort((a, b) => byName(a.name, b.name));
+  const ds = [...docs];
+  if (mode === 'az' || mode === 'za') ds.sort((a, b) => byName(a.title || '', b.title || ''));
+  else ds.sort((a, b) => (a.updated < b.updated ? 1 : a.updated > b.updated ? -1 : 0));  // mais recentes primeiro
+  if (mode === 'za') { fs.reverse(); ds.reverse(); }
+  if (mode === 'oldest') ds.reverse();
+  return { folders: fs, docs: ds };
+}
+
+// busca em todas as pastas, pelo nome; cada palavra precisa aparecer (sem diferença de acento/maiúscula)
+export function searchItems(tree, docs, query) {
+  const words = fold(query).split(/\s+/).filter(Boolean);
+  const hit = (s) => words.every(w => fold(s).includes(w));
+  return { folders: tree.folders.filter(f => hit(f.name)), docs: docs.filter(d => hit(d.title || '')) };
+}
