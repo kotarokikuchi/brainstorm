@@ -228,3 +228,11 @@ body.outline-mode #canvas { display: none; }
 #trash-list li { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px; }
 #trash-list span { flex: 1; color: var(--ink); }
 #trash-list time { font-size: 13px; }
+
+/* Apresentação */
+body.presenting .topbar, body.presenting #dock, body.presenting #focus-bar, body.presenting #toolbar,
+body.presenting .adder, body.presenting #hints, body.presenting .resize-handle { display: none !important; }
+body.presenting #editor-view { height: 100vh; }
+body.presenting #canvas { cursor: default; }
+#present-bar { left: 50%; bottom: 18px; transform: translateX(-50%); }
+#present-count { min-width: 64px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }

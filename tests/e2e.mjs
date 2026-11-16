@@ -747,6 +747,26 @@ assert.match(await status(), /outra aba/, 'conflito detectado');
 await key('F2'); await typeText(' depois'); await key('Enter');
 assert.equal(await unloadBlocked(), true, 'beforeunload avisa após conflito');
 
+// apresentação: ▶ entra; → avança para o ramo; ← volta; Esc sai
+const nSlides = (await getMap()).root.children.length + 1;
+await ev(`document.querySelector('#present-btn').click()`);
+await sleep(400);
+assert.equal(await ev(`document.body.classList.contains('presenting')`), true, 'entra na apresentação');
+assert.equal(await ev(`document.querySelector('#present-count').textContent`), `1 / ${nSlides}`);
+await key('ArrowRight');
+await sleep(300);
+assert.equal(await ev(`document.querySelector('#present-count').textContent`), `2 / ${nSlides}`, '→ avança');
+const firstBranch = (await getMap()).root.children[0].text;
+const onSlide = await texts();
+assert.ok(onSlide.includes(firstBranch) && !onSlide.includes((await getMap()).root.text), 'slide mostra só o ramo');
+assert.equal(await ev(`!!document.querySelector('.selected-ring')`), false, 'sem seleção na apresentação');
+await key('ArrowLeft');
+await sleep(300);
+assert.equal(await ev(`document.querySelector('#present-count').textContent`), `1 / ${nSlides}`, '← volta');
+await key('Escape');
+await sleep(300);
+assert.equal(await ev(`document.body.classList.contains('presenting')`), false, 'Esc sai');
+
 // duplicar e lixeira: menu do mapa duplica e abre a cópia; mover para a lixeira; restaurar; duplicar/apagar pela lista; apagar de vez
 dialogAccept = true;
 const mapIds = async () => (await (await fetch(BASE + '/api/maps')).json()).map(m => m.id);
