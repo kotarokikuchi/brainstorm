@@ -656,6 +656,35 @@ await key('Escape');
 assert.equal(await ev(`document.querySelector('#outline-view').hidden`), true, 'Esc volta ao mapa');
 assert.ok((await texts()).includes('Q3 revisado'), 'mapa mostra o item novo');
 
+// exportar: Markdown, PNG (imagem de verdade) e PDF (impressão do navegador)
+await ev(`(() => {
+  window.__downloads = [];
+  HTMLAnchorElement.prototype.click = function () { if (this.download) window.__downloads.push([this.download, this.href]); };
+  window.print = () => { window.__printed = true; };
+})()`);
+await ev(`document.querySelector('#export-btn').click()`);
+assert.equal(await ev(`!document.querySelector('#export-menu').hidden`), true, 'menu exportar abre');
+await ev(`document.querySelector('#export-menu [data-export="md"]').click()`);
+await sleep(300);
+let dl = await ev(`window.__downloads.at(-1)`);
+assert.match(dl[0], /\.md$/, 'arquivo .md');
+const md = await ev(`fetch('${dl[1]}').then(r => r.text())`);
+assert.match(md, /^# Planejamento/, 'título no Markdown');
+assert.match(md, /\n- Recursos/, 'ramos no Markdown');
+await ev(`document.querySelector('#export-btn').click()`);
+await ev(`document.querySelector('#export-menu [data-export="png"]').click()`);
+await sleep(2500);
+dl = await ev(`window.__downloads.at(-1)`);
+assert.match(dl[0], /\.png$/, 'arquivo .png');
+const png = await ev(`fetch('${dl[1]}').then(r => r.arrayBuffer()).then(b => [b.byteLength, [...new Uint8Array(b.slice(0, 4))]])`);
+assert.ok(png[0] > 5000, `PNG com conteúdo (${png[0]} bytes)`);
+assert.deepEqual(png[1], [137, 80, 78, 71], 'assinatura PNG');
+await ev(`document.querySelector('#export-btn').click()`);
+await ev(`document.querySelector('#export-menu [data-export="pdf"]').click()`);
+await sleep(300);
+assert.equal(await ev(`window.__printed`), true, 'PDF abre a impressão');
+assert.equal(await ev(`document.querySelector('#export-menu').hidden`), true, 'menu fecha');
+
 // conflito: outra "aba" grava antes
 await sleep(900);
 const cur = await getMap();

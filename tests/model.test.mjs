@@ -505,3 +505,25 @@ test('outdentNode moves a node after its parent, one level up', () => {
   assert.ok(g1.side && PALETTE.includes(g1.color), 'virou 1º nível: lado e cor');
   assert.deepEqual(r1.children.map(n => n.id), [g2.id]);
 });
+
+// ---- Exportar: Markdown ----
+import { toMarkdown } from '../static/model.js';
+
+test('toMarkdown writes the root as title and branches as nested lists', () => {
+  const { m, r1, g1 } = sample('map');
+  m.root.text = 'Plano';
+  g1.url = 'https://exemplo.com/';
+  g1.text = 'Neto [um]';
+  r1.collapsed = true;  // exporta tudo, mesmo recolhido
+  const md = toMarkdown(m);
+  assert.equal(md, [
+    '# Plano',
+    '',
+    '- Direita',
+    '  - [Neto \\[um\\]](https://exemplo.com/)',
+    '  - Neto dois',
+    '- Esquerda',
+    '- Outra',
+    '',
+  ].join('\n'));
+});

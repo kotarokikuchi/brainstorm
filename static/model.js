@@ -525,3 +525,21 @@ export function outdentNode(map, nodeId) {
   const grand = findNode(map.root, hit.parent.id).parent;
   return moveNode(map, nodeId, grand.id, grand.children.indexOf(hit.parent) + 1, hit.parent.side);
 }
+
+// ---- Exportar: Markdown (raiz = título, ramos = lista com recuo; tudo, mesmo recolhido) ----
+export function toMarkdown(map) {
+  const esc = (t) => t.replace(/([\\[\]*_`#])/g, '\\$1');
+  const item = (n) => {
+    const url = safeUrl(n.url);
+    return url ? `[${esc(n.text)}](${url})` : esc(n.text);
+  };
+  const lines = [`# ${item(map.root)}`, ''];
+  const walk = (n, depth) => {
+    for (const c of n.children) {
+      lines.push(`${'  '.repeat(depth)}- ${item(c)}`);
+      walk(c, depth + 1);
+    }
+  };
+  walk(map.root, 0);
+  return lines.join('\n') + '\n';
+}

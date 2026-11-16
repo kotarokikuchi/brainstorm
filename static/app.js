@@ -1,6 +1,6 @@
 import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
-  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
+  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, toMarkdown, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
 } from './model.js';
 
 const $ = (s) => document.querySelector(s);
@@ -989,7 +989,7 @@ nodeMenu.onclick = (e) => {
 // clicar fora dos controles (cabeçalho, lista...) fecha qualquer menu aberto
 document.addEventListener('pointerdown', (e) => {
   if (!map || e.target.closest('.card, .adder, .link-anchor, .node, .link-hit, .resize-handle, #editor')) return;
-  const pops = [...nodePops, ...document.querySelectorAll('.link-pop')];
+  const pops = [...nodePops, ...document.querySelectorAll('.link-pop'), $('#export-menu')];
   if (pops.every(p => p.hidden)) return;
   for (const p of pops) p.hidden = true;
   render();
@@ -1556,3 +1556,82 @@ outlineList.addEventListener('click', (e) => {
   if (n?.children.length) mutate(() => { n.collapsed = !n.collapsed; });
 });
 $('#outline-btn').onclick = () => setOutline(!outlineOn);
+
+// ---------- Exportar: PNG, PDF (impressão) e Markdown ----------
+const exportMenu = $('#export-menu');
+const fileBase = () => (map.root.text.replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'mapa').slice(0, 60);
+
+function download(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+const toDataUrl = async (url) => {
+  const blob = await (await fetch(url)).blob();
+  return new Promise((resolve) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(blob); });
+};
+
+// SVG do mapa como arquivo solto: sem elementos de seleção, com CSS, ícones e imagens embutidos
+async function standaloneSvg() {
+  const bb = viewport.getBBox(), pad = 40;
+  const clone = svg.cloneNode(true);
+  clone.removeAttribute('id');
+  clone.querySelector('#viewport').removeAttribute('transform');
+  const uiOnly = '.selected-ring, .resize-handle, .link-bend, .link-end, .link-hit, .anchor-dot, .link-preview, .link-target, .drop-placeholder, .drag-ghost';
+  for (const e of clone.querySelectorAll(uiOnly)) e.remove();
+  const defs = clone.querySelector('defs');
+  for (const id of new Set([...clone.querySelectorAll('use')].map(u => u.getAttribute('href')))) {
+    const sym = document.querySelector(id);
+    if (sym) defs.append(sym.cloneNode(true));
+  }
+  const style = document.createElementNS(SVG, 'style');
+  style.textContent = `.toggle circle{fill:#fff;stroke-width:1.5}.toggle .hit{fill:transparent;stroke:none}.toggle .open{stroke-width:2.5}`
+    + `.toggle text{font:700 10px ${FONT}}.attach-badge text{font:700 11px ${FONT}}`;
+  defs.append(style);
+  for (const im of clone.querySelectorAll('image')) im.setAttribute('href', await toDataUrl(im.getAttribute('href')));
+  const w = bb.width + 2 * pad, h = bb.height + 2 * pad;
+  clone.setAttribute('xmlns', SVG);
+  clone.setAttribute('viewBox', `${bb.x - pad} ${bb.y - pad} ${w} ${h}`);
+  clone.setAttribute('width', w);
+  clone.setAttribute('height', h);
+  return { xml: new XMLSerializer().serializeToString(clone), w, h };
+}
+
+async function exportPng() {
+  const { xml, w, h } = await standaloneSvg(), scale = 2;
+  const img = new Image();
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+  await img.decode();
+  const c = document.createElement('canvas');
+  c.width = Math.ceil(w * scale);
+  c.height = Math.ceil(h * scale);
+  const g = c.getContext('2d');
+  g.fillStyle = '#f6f5fb';
+  g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(img, 0, 0, c.width, c.height);
+  download(await new Promise((r) => c.toBlob(r, 'image/png')), `${fileBase()}.png`);
+}
+
+const EXPORTS = {
+  png: exportPng,
+  md: () => download(new Blob([toMarkdown(map)], { type: 'text/markdown' }), `${fileBase()}.md`),
+  pdf: () => {
+    if (outlineOn) setOutline(false);
+    closeNodePops();
+    selectedLink = null;
+    fitView();
+    window.print();  // o navegador oferece "Salvar como PDF"
+  },
+};
+
+$('#export-btn').onclick = () => { exportMenu.hidden = !exportMenu.hidden; };
+exportMenu.addEventListener('mousedown', (e) => e.preventDefault());
+exportMenu.addEventListener('click', async (e) => {
+  const kind = e.target.closest('[data-export]')?.dataset.export;
+  if (!kind) return;
+  exportMenu.hidden = true;
+  try { await EXPORTS[kind](); } catch (err) { alert(`Não foi possível exportar: ${err.message}`); }
+});
