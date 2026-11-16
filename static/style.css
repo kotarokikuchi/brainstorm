@@ -67,3 +67,8 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 #dock { right: 16px; bottom: 16px; }
 #dock select { font: inherit; border: none; background: #f0f0f6; border-radius: 8px; padding: 6px 8px; }
 #zoom-reset { border: none; min-width: 56px; }
+
+/* Arrastar ramos */
+.node.dragging { opacity: 0.3; }
+.drag-ghost { pointer-events: none; opacity: 0.9; }
+.drop-placeholder { pointer-events: none; }

@@ -1,6 +1,6 @@
 import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
-  History, layout, edgePath, navigate,
+  History, layout, edgePath, navigate, moveNode, dropTarget,
 } from './model.js';
 
 const $ = (s) => document.querySelector(s);
@@ -121,6 +121,7 @@ function render() {
     }, viewport);
   }
   for (const b of boxes) drawNode(b);
+  if (drag?.active) drawDrop();
   if (editing) placeInput();
   placeOverlays();
 }
@@ -128,6 +129,7 @@ function render() {
 function drawNode(b) {
   const n = findNode(map.root, b.id).node;
   const g = el('g', { class: 'node', 'data-id': b.id }, viewport);
+  if (drag?.active && drag.ids.has(b.id)) g.classList.add('dragging');
   // forma efetiva: raiz sem caixa, 1º nível pílula, demais sublinhado
   const shape = b.shape ?? (b.depth === 0 ? 'none' : b.depth === 1 ? 'pill' : 'underline');
   const filled = shape === 'pill' || shape === 'rect' || shape === 'rounded';
@@ -403,7 +405,7 @@ $('#undo').onclick = undo;
 $('#redo').onclick = redo;
 
 function placeOverlays() {
-  const b = boxes.find(b => b.id === selected);
+  const b = drag?.active ? null : boxes.find(b => b.id === selected);
   toolbar.hidden = !b;
   if (!b) stylePop.hidden = true;
   addChildBtn.hidden = addSiblingBtn.hidden = hints.hidden = !b || !!editing;
@@ -505,3 +507,85 @@ svg.addEventListener('pointerup', () => {
   pan = null;
   svg.classList.remove('panning');
 });
+
+// ---------- Arrastar ramos ----------
+let drag = null;  // {id, ids, sx, sy, active, x, y, target}
+
+viewport.addEventListener('pointerdown', (e) => {
+  const g = e.target.closest('.node');
+  if (!g || e.button !== 0 || editing || e.target.closest('.toggle') || g.dataset.id === map.root.id) return;
+  const ids = new Set();
+  const collect = (n) => { ids.add(n.id); n.children.forEach(collect); };
+  collect(findNode(map.root, g.dataset.id).node);
+  drag = { id: g.dataset.id, ids, sx: e.clientX, sy: e.clientY, active: false, target: null };
+});
+
+window.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  // só vira arrasto depois de 5 px: clique simples continua selecionando
+  if (!drag.active && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 5) return;
+  drag.active = true;
+  svg.classList.add('panning');
+  const r = svg.getBoundingClientRect();
+  drag.x = (e.clientX - r.left - view.x) / view.k;
+  drag.y = (e.clientY - r.top - view.y) / view.k;
+  drag.target = dropTarget(map, boxes, drag.id, drag.x, drag.y);
+  render();
+});
+
+window.addEventListener('pointerup', () => {
+  if (!drag) return;
+  const { id, active, target } = drag;
+  drag = null;
+  svg.classList.remove('panning');
+  if (!active) return;
+  if (target) {
+    history.push(snapshot());
+    if (moveNode(map, id, target.parentId, target.index, target.side)) {
+      selected = id;
+      scheduleSave();
+    } else {
+      history.undo(snapshot());  // movimento recusado: descarta o passo de histórico
+      history.future = [];
+    }
+  }
+  render();
+});
+
+// caixa cinza onde o ramo vai cair + nó "fantasma" seguindo o ponteiro
+function drawDrop() {
+  const W = 64, H = 24, t = drag.target;
+  if (t) {
+    const p = boxes.find(b => b.id === t.parentId);
+    const ph = placeholderBox(t, p, W, H);
+    el('path', { d: edgePath(map.layout, p, ph), fill: 'none', stroke: '#d4d2de', 'stroke-width': 3, class: 'drop-placeholder' }, viewport);
+    el('rect', { ...ph, x: ph.x, y: ph.y, width: W, height: H, rx: 6, fill: '#e2e0ea', class: 'drop-placeholder' }, viewport);
+  }
+  const text = findNode(map.root, drag.id).node.text;
+  const g = el('g', { class: 'drag-ghost' }, viewport);
+  el('rect', { x: drag.x + 8, y: drag.y - 14, width: Math.max(60, text.length * 8 + 20), height: 28, rx: 8, fill: '#fff', stroke: '#2f80ff', 'stroke-width': 2 }, g);
+  el('text', { x: drag.x + 18, y: drag.y, 'dominant-baseline': 'central', style: `font: ${fontFor(2)}` }, g).textContent = text;
+}
+
+function placeholderBox(t, p, W, H) {
+  const box = (x, y) => ({ x, y, w: W, h: H, depth: p.depth + 1, shape: 'box' });
+  const parent = findNode(map.root, t.parentId).node;
+  const left = map.layout === 'map' && (t.side === 'left' || (!t.side && p.side === 'left'));
+  // irmãos visíveis do mesmo lado: encosta acima do que será empurrado ou abaixo do último
+  const kids = parent.collapsed ? [] : parent.children
+    .filter(c => c.id !== drag.id && (map.layout !== 'map' || parent !== map.root || (c.side === 'left') === left));
+  const all = parent.children.filter(c => c.id !== drag.id);
+  const next = boxes.find(b => b.id === all[t.index - (all.length < parent.children.length && parent.children.findIndex(c => c.id === drag.id) < t.index ? 1 : 0)]?.id);
+  const sameSide = next && kids.some(c => c.id === next.id);
+  const last = boxes.find(b => b.id === kids[kids.length - 1]?.id);
+  const alignX = (b) => (left ? b.x + b.w - W : b.x);
+  if (map.layout === 'org') {
+    if (sameSide) return box(next.x - W - 6, next.y);
+    if (last) return box(last.x + last.w + 6, last.y);
+    return box(p.x + p.w / 2 - W / 2, p.y + p.h + 40);
+  }
+  if (sameSide) return box(alignX(next), next.y - H - 4);
+  if (last) return box(alignX(last), last.y + last.h + 4);
+  if (map.layout === 'list') return box(p.x + 32, p.y + p.h + 4);
+  return box(left ? p.x - 36 - W : p.x + p.w + 36, p.y + p.h / 2 - H / 2);
+}

@@ -25,13 +25,17 @@ export function findNode(root, id, parent = null, depth = 0) {
   return null;
 }
 
+// lado da raiz com menos filhos (empate → direita)
+function balancedSide(root) {
+  const right = root.children.filter(c => c.side === 'right').length;
+  return root.children.length - right < right ? 'left' : 'right';
+}
+
 export function addChild(map, parentId) {
   const parent = findNode(map.root, parentId).node;
   const n = node();
   if (parent === map.root) {
-    const right = parent.children.filter(c => c.side === 'right').length;
-    const left = parent.children.length - right;
-    n.side = left < right ? 'left' : 'right';
+    n.side = balancedSide(parent);
     n.color = PALETTE[parent.children.length % PALETTE.length];
   }
   parent.collapsed = false;
@@ -56,6 +60,62 @@ export function removeNode(map, nodeId) {
   const kids = hit.parent.children;
   kids.splice(kids.indexOf(hit.node), 1);
   return hit.parent.id;
+}
+
+// move o ramo para parentId na posição index; recusa raiz, o próprio nó e descendentes
+export function moveNode(map, nodeId, parentId, index, side = null) {
+  const hit = findNode(map.root, nodeId);
+  if (!hit || !hit.parent || findNode(hit.node, parentId)) return false;
+  const target = findNode(map.root, parentId)?.node;
+  if (!target) return false;
+  const n = hit.node, from = hit.parent.children, oldIdx = from.indexOf(n);
+  from.splice(oldIdx, 1);
+  if (hit.parent === target && oldIdx < index) index--;
+  index = Math.max(0, Math.min(index, target.children.length));
+  if (target === map.root) {
+    n.side = side || n.side || balancedSide(target);
+    if (!n.color) n.color = PALETTE[target.children.length % PALETTE.length];
+  } else {
+    if (hit.parent === map.root) n.color = null;  // cor era do ramo de 1º nível: passa a herdar
+    n.side = null;
+  }
+  target.collapsed = false;
+  target.children.splice(index, 0, n);
+  return true;
+}
+
+// onde um ramo arrastado cairia com o ponteiro em (px, py): {parentId, index, side} ou null
+export function dropTarget(map, boxes, dragId, px, py) {
+  const drag = findNode(map.root, dragId)?.node;
+  if (!drag) return null;
+  const banned = new Set();
+  const ban = (n) => { banned.add(n.id); n.children.forEach(ban); };
+  ban(drag);
+  let best = null, bestD = Infinity;
+  for (const b of boxes) {
+    if (banned.has(b.id)) continue;
+    const dx = Math.max(b.x - px, 0, px - b.x - b.w), dy = Math.max(b.y - py, 0, py - b.y - b.h);
+    const d = Math.hypot(dx, dy);
+    if (d < bestD) { bestD = d; best = b; }
+  }
+  if (!best || bestD > 120) return null;
+  const root = map.root;
+  // ponytail: soltar perto da raiz sempre anexa no fim; ordenar por posição se fizer falta
+  if (best.id === root.id) {
+    const side = map.layout === 'map' ? (px < best.x + best.w / 2 ? 'left' : 'right') : null;
+    return { parentId: root.id, index: root.children.length, side };
+  }
+  const hit = findNode(root, best.id);
+  const outer = map.layout === 'org' ? py > best.y + best.h * 0.75
+    : best.side === 'left' && map.layout === 'map' ? px < best.x + best.w * 0.25
+      : px > best.x + best.w * 0.75;
+  if (outer) return { parentId: best.id, index: hit.node.children.length, side: null };
+  const after = map.layout === 'org' ? px > best.x + best.w / 2 : py > best.y + best.h / 2;
+  return {
+    parentId: hit.parent.id,
+    index: hit.parent.children.indexOf(hit.node) + (after ? 1 : 0),
+    side: hit.parent === root ? best.side : null,
+  };
 }
 
 export function commitText(map, nodeId, text, isNew) {
