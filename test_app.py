@@ -286,6 +286,25 @@ class ApiTest(unittest.TestCase):
         status, _ = self.req("PUT", "/api/maps/abc", raw=b"x", headers={"Content-Length": "5000001"})
         self.assertEqual(status, 413)
 
+    def test_folders_roundtrip_version_and_validation(self):
+        self.assertEqual(self.req("GET", "/api/folders"), (200, {"version": 0, "folders": [], "place": {}}))
+        tree = {"version": 0, "folders": [{"id": "f1", "name": "Trabalho", "parent": None},
+                                          {"id": "f2", "name": "Clientes", "parent": "f1"}], "place": {"abc": "f2"}}
+        status, saved = self.req("PUT", "/api/folders", tree)
+        self.assertEqual((status, saved["version"]), (200, 1))
+        self.assertEqual(self.req("GET", "/api/folders")[1]["place"], {"abc": "f2"})
+        self.assertEqual(self.req("PUT", "/api/folders", tree)[0], 409, "versão velha")
+        bad = [
+            {**tree, "version": 1, "folders": [{"id": "f1", "name": "  ", "parent": None}], "place": {}},
+            {**tree, "version": 1, "folders": [{"id": "f1", "name": "a", "parent": "zz"}], "place": {}},
+            {**tree, "version": 1, "folders": [{"id": "f1", "name": "a", "parent": "f2"}, {"id": "f2", "name": "b", "parent": "f1"}], "place": {}},
+            {**tree, "version": 1, "place": {"abc": "nao-existe"}},
+            {**tree, "version": 1, "folders": [{"id": "../x", "name": "a", "parent": None}], "place": {}},
+        ]
+        for b in bad:
+            self.assertEqual(self.req("PUT", "/api/folders", b)[0], 400, b)
+        self.assertEqual([m["id"] for m in self.req("GET", "/api/maps")[1]], [], "pastas não aparecem como documento")
+
 
 class WatchTest(unittest.TestCase):
     def test_watch_calls_back_when_file_changes(self):
