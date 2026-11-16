@@ -168,6 +168,25 @@ export function elementsInBox(elements, box) {
   }).map(el => el.id);
 }
 
+// laço: só o que fica inteiro dentro do contorno livre (pontos de referência de cada forma)
+function insidePolygon([px, py], poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function outlinePoints(el) {
+  const { x, y, w, h } = el;
+  if (el.points) return el.points.map(([qx, qy]) => [x + qx, y + qy]);
+  if (el.type === 'diamond') return [[x + w / 2, y], [x + w, y + h / 2], [x + w / 2, y + h], [x, y + h / 2]];
+  if (el.type === 'ellipse') return Array.from({ length: 16 }, (_, i) => [x + w / 2 + Math.cos(i * Math.PI / 8) * w / 2, y + h / 2 + Math.sin(i * Math.PI / 8) * h / 2]);
+  return [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+}
+export const elementsInPolygon = (elements, poly) =>
+  poly.length < 3 ? [] : elements.filter(el => outlinePoints(el).every(p => insidePolygon(p, poly))).map(el => el.id);
+
 export function moveElements(elements, ids, dx, dy) {
   const sel = new Set(ids);
   for (const el of elements) if (sel.has(el.id)) { el.x += dx; el.y += dy; }

@@ -152,3 +152,16 @@ test('paint fills closed shapes and recolors lines and text; elementAt inside hi
   assert.equal(elementAt([empty], [50, 25], 6), null, 'clique comum no miolo vazio não pega');
   assert.equal(elementAt([empty], [50, 25], 6, true), empty.id, 'balde pega no miolo');
 });
+
+// ---- Laço ----
+import { elementsInPolygon } from '../static/board-model.js';
+
+test('elementsInPolygon keeps only elements fully inside the free outline', () => {
+  const a = shape('rectangle', 10, 10, 20, 20), b = shape('ellipse', 100, 10, 40, 40);
+  const ln = { ...createElement('line', [10, 60]), points: [[0, 0], [30, 0]] };
+  const tri = [[0, 0], [80, 0], [0, 80]];  // triângulo: pega a e a linha? a linha vai até x=40 em y=60 (fora)
+  assert.deepEqual(elementsInPolygon([a, b, ln], tri), [a.id]);
+  const all = [[0, 0], [200, 0], [200, 100], [0, 100]];
+  assert.deepEqual(elementsInPolygon([a, b, ln], all), [a.id, b.id, ln.id]);
+  assert.deepEqual(elementsInPolygon([a], [[0, 0], [50, 50]]), [], 'contorno com menos de 3 pontos');
+});

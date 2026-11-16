@@ -1044,15 +1044,16 @@ await ev(`document.querySelector('#export-btn').click()`);
 await click(mb[0], mb[1]);
 assert.equal(await shownSel('#export-menu'), false, 'abrir um menu do topo fecha o outro');
 assert.equal(await shownSel('#map-menu'), true);
-await click(cv.x + 1100, cv.y + 560);
+await click(cv.x + 1300, cv.y + 150);  // outro ponto: dois cliques no mesmo lugar viram duplo clique (texto novo)
 await key('?');
+assert.equal(await shownSel('#board-help'), true);
 await click(cv.x + 1100, cv.y + 560);
 assert.equal(await shownSel('#board-help'), false, 'clicar fora fecha os atalhos');
 
 // quadro: menu "mais ferramentas" e balde de tinta
 await ev(`document.querySelector('#board-more-btn').click()`);
 assert.equal(await shownSel('#board-more'), true, 'menu mais ferramentas abre');
-await click(cv.x + 1300, cv.y + 150);  // longe do ponto anterior: o par de cliques acima abriu um texto lá
+await click(cv.x + 1300, cv.y + 150);
 assert.equal(await shownSel('#board-more'), false, 'clicar fora fecha o menu mais');
 await key('2');
 await dragScreen(cv.x + 1050, cv.y + 500, cv.x + 1200, cv.y + 600);
@@ -1072,6 +1073,18 @@ await key('v');
 await key('b');
 assert.equal(await ev(`document.querySelector('#board-tools [data-tool="bucket"]').classList.contains('active')`), true, 'tecla B = balde');
 await key('v');
+
+// quadro: seleção de laço (contorno livre em volta do retângulo pintado)
+await key('q');
+assert.equal(await ev(`document.querySelector('#board-more-btn use').getAttribute('href')`), '#i-lasso', 'tecla Q = laço');
+const loop = [[1030, 480], [1220, 480], [1220, 620], [1030, 620], [1030, 490]];
+await mouse('mousePressed', cv.x + loop[0][0], cv.y + loop[0][1]);
+for (const [x, y] of loop.slice(1)) await mouse('mouseMoved', cv.x + x, cv.y + y);
+assert.equal(await ev(`document.querySelectorAll('#board-root path.marquee').length`), 1, 'contorno do laço aparece');
+await mouse('mouseReleased', cv.x + 1030, cv.y + 490);
+assert.equal(await selCount(), 1, 'laço seleciona o que fica dentro');
+assert.equal(await ev(`document.querySelector('#board-canvas').dataset.tool`), 'select', 'depois do laço volta para seleção');
+await key('Escape');
 
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
