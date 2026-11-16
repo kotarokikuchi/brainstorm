@@ -51,6 +51,7 @@ await cmd('Runtime.enable');
 await cmd('Page.navigate', { url: BASE + '/#/map/demo' });
 await sleep(1500);
 const v0 = (await getMap()).version;
+assert.equal(await ev(`document.querySelector('#toolbar').hidden`), true, 'barra só aparece depois de clicar no nó');
 
 // Tab cria filho da raiz e abre o input; texto + Enter confirma
 await key('Tab');
@@ -292,6 +293,7 @@ assert.equal(await ev(`!!document.querySelector('.selected-ring')`), false, 'nad
 await key('Delete');  // sem seleção: não faz nada nem quebra
 await key('ArrowRight');
 assert.equal(await ev(`!!document.querySelector('.selected-ring')`), true, 'seta seleciona de novo');
+assert.equal(await ev(`document.querySelector('#toolbar').hidden`), true, 'navegar pelo teclado não abre a barra');
 await sleep(900);
 
 // curvar ligação: seta selecionada mostra o ponto de controle; arrastar curva; desfazer/refazer; duplo clique volta ao automático

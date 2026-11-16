@@ -9,7 +9,8 @@ const svg = $('#canvas'), viewport = $('#viewport'), input = $('#editor'), statu
 
 let map = null;          // mapa aberto
 let selected = null;     // id do nó selecionado
-let editing = null;      // {id, isNew} enquanto o input está ativo
+let editing = null;
+let toolbarOn = false;   // barra flutuante visível (só depois de clicar num nó)      // {id, isNew} enquanto o input está ativo
 let boxes = [];          // caixas do último render
 let history = new History();
 const view = { x: 0, y: 0, k: 1 };  // translação + escala do viewport
@@ -82,6 +83,7 @@ async function openMap(id) {
   map = await r.json();
   history = new History();
   selected = map.root.id;
+  toolbarOn = false;
   if (conflict) dirty = false;  // edições do mapa em conflito foram abandonadas ao sair dele
   conflict = false;
   document.body.dataset.view = 'editor';
@@ -188,7 +190,7 @@ function drawNode(b) {
     el('rect', { class: 'selected-ring', x: b.x - 4, y: b.y - 4, width: b.w + 8, height: b.h + 8, rx: 8 }, g);
   }
   if (n.children.length && b.depth > 0) drawToggle(b, n, g);
-  g.addEventListener('click', (ev) => { ev.stopPropagation(); select(b.id); });
+  g.addEventListener('click', (ev) => { ev.stopPropagation(); select(b.id, true); });
   g.addEventListener('dblclick', (ev) => { ev.stopPropagation(); startEdit(b.id, false); });
 }
 
@@ -207,8 +209,10 @@ function drawToggle(b, n, g) {
   });
 }
 
-function select(id) {
+// a barra flutuante só aparece quando o nó foi clicado (não ao abrir nem ao navegar pelo teclado)
+function select(id, byClick = false) {
   selected = id;
+  toolbarOn = byClick;
   selectedLink = null;
   nodeMenu.hidden = true;
   render();
@@ -506,8 +510,8 @@ $('#redo').onclick = redo;
 
 function placeOverlays() {
   const b = drag?.active || linking ? null : boxes.find(b => b.id === selected);
-  toolbar.hidden = !b;
-  if (!b) stylePop.hidden = nodeMenu.hidden = true;
+  toolbar.hidden = !b || !toolbarOn;
+  if (toolbar.hidden) stylePop.hidden = nodeMenu.hidden = true;
   addChildBtn.hidden = addSiblingBtn.hidden = hints.hidden = !b || !!editing;
   if (!b) return;
   const sx = (x) => view.x + x * view.k, sy = (y) => view.y + y * view.k;
