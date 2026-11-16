@@ -1086,6 +1086,19 @@ assert.equal(await selCount(), 1, 'laço seleciona o que fica dentro');
 assert.equal(await ev(`document.querySelector('#board-canvas').dataset.tool`), 'select', 'depois do laço volta para seleção');
 await key('Escape');
 
+// quadro: ponteiro laser deixa um rastro que some e não vira elemento
+const nBeforeLaser = (await boardEls()).length;
+await key('k');
+assert.equal(await ev(`document.querySelector('#board-more-btn use').getAttribute('href')`), '#i-laser', 'tecla K = laser');
+await mouse('mousePressed', cv.x + 700, cv.y + 560);
+for (let i = 1; i <= 5; i++) await mouse('mouseMoved', cv.x + 700 + i * 30, cv.y + 560 + (i % 2) * 20);
+assert.equal(await ev(`document.querySelectorAll('#board-root path.laser').length`), 1, 'rastro do laser aparece');
+await mouse('mouseReleased', cv.x + 850, cv.y + 560);
+await sleep(1400);
+assert.equal(await ev(`document.querySelectorAll('#board-root path.laser').length`), 0, 'rastro some sozinho');
+assert.equal((await boardEls()).length, nBeforeLaser, 'laser não cria elementos');
+await key('v');
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);

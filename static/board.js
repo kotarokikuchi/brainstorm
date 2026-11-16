@@ -158,6 +158,10 @@ svg.addEventListener('pointerdown', (e) => {
     board.elements.push(drawing.el);
   } else if (tool === 'select' && e.button === 0) {
     selectDown(e);
+  } else if (tool === 'laser' && e.button === 0) {
+    laserDown = true;
+    laser.push([...toWorld(e), performance.now(), true]);
+    if (!laserRaf) drawLaser();
   } else if (tool === 'lasso' && e.button === 0) {
     gesture = { kind: 'lasso', pts: [toWorld(e)], keep: e.shiftKey ? [...selection] : [] };
   } else if (tool === 'text' && e.button === 0) {
@@ -179,6 +183,7 @@ svg.addEventListener('pointermove', (e) => {
   if (panning) { view.x = e.clientX - panning.x; view.y = e.clientY - panning.y; render(); }
   else if (drawing) { resizeTo(drawing.el, toWorld(e)); render(); }
   else if (gesture) selectMove(e);
+  else if (laserDown) laser.push([...toWorld(e), performance.now(), false]);
   else if (erasing) {
     const p = toWorld(e);
     for (const id of elementsHitBy(board.elements, erasing.last, p, 4 / view.k)) erasing.ids.add(id);
@@ -189,6 +194,7 @@ svg.addEventListener('pointermove', (e) => {
 svg.addEventListener('pointerup', (e) => {
   if (panning) { panning = null; svg.classList.remove('panning'); return; }
   if (gesture) { selectUp(e); return; }
+  if (laserDown) { laserDown = false; return; }
   if (erasing) {
     const { ids, before } = erasing;
     erasing = null;
@@ -206,6 +212,17 @@ svg.addEventListener('pointerup', (e) => {
   if (board.elements.includes(created)) selection = [created.id];
   render();
 });
+
+// ponteiro laser: rastro vermelho que some em 1 s; fica fora de board.elements (nunca salvo)
+let laser = [], laserDown = false, laserRaf = 0;  // pontos [x, y, instante, começa traço novo?]
+function drawLaser() {
+  const now = performance.now();
+  laser = laser.filter(p => now - p[2] < 1000);
+  root.querySelector('.laser')?.remove();
+  const d = laser.map((p, i) => `${i === 0 || p[3] ? 'M' : 'L'}${p[0]},${p[1]}`).join(' ');
+  if (laser.length) el('path', { class: 'laser', d, 'stroke-width': 4 / view.k }, root);
+  laserRaf = laser.length || laserDown ? requestAnimationFrame(drawLaser) : 0;
+}
 
 function zoomAt(factor, cx, cy) {
   const k = Math.min(30, Math.max(0.1, view.k * factor));
@@ -238,7 +255,7 @@ for (const b of document.querySelectorAll('#board-view button')) b.addEventListe
 const TOOL_KEYS = {
   h: 'hand', v: 'select', 1: 'select', r: 'rectangle', 2: 'rectangle', d: 'diamond', 3: 'diamond',
   o: 'ellipse', 4: 'ellipse', a: 'arrow', 5: 'arrow', l: 'line', 6: 'line', p: 'freedraw', 7: 'freedraw',
-  t: 'text', 8: 'text', e: 'eraser', 0: 'eraser', b: 'bucket', q: 'lasso',
+  t: 'text', 8: 'text', e: 'eraser', 0: 'eraser', b: 'bucket', q: 'lasso', k: 'laser',
 };
 document.addEventListener('keydown', (e) => {
   if (!board || document.body.dataset.view !== 'board' || e.target.closest?.('input, textarea, select')) return;
@@ -543,7 +560,7 @@ export async function boardSvg() {
   clone.removeAttribute('class');
   const r = clone.querySelector('#board-root');
   r.removeAttribute('transform');
-  for (const x of r.querySelectorAll('.sel-item, .handle, .marquee')) x.remove();
+  for (const x of r.querySelectorAll('.sel-item, .handle, .marquee, .laser')) x.remove();
   const w = Math.max(1, bb.width) + 2 * pad, h = Math.max(1, bb.height) + 2 * pad;
   const bg = document.createElementNS(SVG, 'rect');
   Object.entries({ x: bb.x - pad, y: bb.y - pad, width: w, height: h, fill: '#ffffff' }).forEach(([k, v]) => bg.setAttribute(k, v));
