@@ -13,7 +13,7 @@ const node = (text = '') => ({
 });
 
 export function newMap(id) {
-  return { id, version: 0, layout: 'map', root: node('Mapa central') };
+  return { id, version: 0, layout: 'map', root: node('Mapa central'), links: [] };
 }
 
 export function findNode(root, id, parent = null, depth = 0) {
@@ -59,7 +59,53 @@ export function removeNode(map, nodeId) {
   if (!hit || !hit.parent) return null;
   const kids = hit.parent.children;
   kids.splice(kids.indexOf(hit.node), 1);
+  // ligações que tocam qualquer nó do ramo apagado somem junto
+  if (map.links?.length) {
+    const gone = new Set();
+    const walk = (n) => { gone.add(n.id); n.children.forEach(walk); };
+    walk(hit.node);
+    map.links = map.links.filter(k => !gone.has(k.from) && !gone.has(k.to));
+  }
   return hit.parent.id;
+}
+
+// ---- Ligações (setas livres entre dois nós) ----
+export function addLink(map, from, to) {
+  if (from === to || !findNode(map.root, from) || !findNode(map.root, to)) return null;
+  map.links ??= [];
+  if (map.links.some(k => k.from === from && k.to === to)) return null;
+  const link = { id: uid(), from, to };
+  map.links.push(link);
+  return link;
+}
+
+export function removeLink(map, linkId) {
+  const before = map.links?.length ?? 0;
+  map.links = (map.links ?? []).filter(k => k.id !== linkId);
+  return map.links.length < before;
+}
+
+// curva entre os lados mais próximos das duas caixas (horizontal ou vertical)
+export function linkPath(a, b) {
+  const ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by = b.y + b.h / 2;
+  let p1, p2, c1, c2;
+  if (Math.abs(bx - ax) >= Math.abs(by - ay)) {
+    const s = Math.sign(bx - ax) || 1;
+    p1 = [ax + s * a.w / 2, ay];
+    p2 = [bx - s * b.w / 2, by];
+    const d = Math.max(40, Math.abs(p2[0] - p1[0]) / 2) * s;
+    c1 = [p1[0] + d, p1[1]];
+    c2 = [p2[0] - d, p2[1]];
+  } else {
+    // nós empilhados: sai e chega pelo lado de fora (longe da raiz) num arco
+    const s = Math.sign(ax + bx) || 1;
+    p1 = [s > 0 ? a.x + a.w : a.x, ay];
+    p2 = [s > 0 ? b.x + b.w : b.x, by];
+    const d = Math.max(50, Math.abs(by - ay) / 3) * s;
+    c1 = [p1[0] + d, p1[1]];
+    c2 = [p2[0] + d, p2[1]];
+  }
+  return `M${p1} C${c1} ${c2} ${p2}`;
 }
 
 // move o ramo para parentId na posição index; recusa raiz, o próprio nó e descendentes

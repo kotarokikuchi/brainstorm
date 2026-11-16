@@ -240,3 +240,45 @@ test('dropTarget ignores the dragged branch itself', () => {
   assert.notEqual(t?.parentId, g1.id);
   assert.notEqual(t?.parentId, r1.id);
 });
+
+// ---- Ligações entre nós ----
+import { addLink, removeLink, linkPath } from '../static/model.js';
+
+test('newMap starts with no links', () => {
+  assert.deepEqual(newMap('a').links, []);
+});
+
+test('addLink connects two nodes and refuses self, duplicates and unknown ids', () => {
+  const { m, r1, l1 } = sample('map');
+  const link = addLink(m, r1.id, l1.id);
+  assert.deepEqual([link.from, link.to], [r1.id, l1.id]);
+  assert.equal(m.links.length, 1);
+  assert.equal(addLink(m, r1.id, l1.id), null);
+  assert.equal(addLink(m, r1.id, r1.id), null);
+  assert.equal(addLink(m, r1.id, 'nope'), null);
+  // mapa antigo sem a lista de links também funciona
+  delete m.links;
+  assert.ok(addLink(m, l1.id, r1.id));
+});
+
+test('removeLink and removeNode clean up links', () => {
+  const { m, r1, l1, g1, r2 } = sample('map');
+  const a = addLink(m, g1.id, l1.id);
+  addLink(m, r2.id, l1.id);
+  assert.equal(removeLink(m, a.id), true);
+  assert.equal(removeLink(m, a.id), false);
+  addLink(m, g1.id, r2.id);
+  removeNode(m, r1.id);  // leva g1 junto: ligação g1→r2 some
+  assert.deepEqual(m.links.map(k => [k.from, k.to]), [[r2.id, l1.id]]);
+});
+
+test('linkPath draws a curve between the nearest sides', () => {
+  const a = { x: 0, y: 0, w: 40, h: 20 }, b = { x: 200, y: 10, w: 40, h: 20 };
+  assert.match(linkPath(a, b), /^M40,10 C/);           // sai pela direita de a
+  assert.match(linkPath(a, b), / 200,20$/);            // chega pela esquerda de b
+  // empilhados: arco pelo lado de fora (longe da raiz em x=0), sem cruzar os nós do meio
+  const c = { x: 0, y: 200, w: 40, h: 20 };
+  assert.match(linkPath(a, c), /^M40,10 C.* 40,210$/);
+  const l1 = { x: -80, y: 0, w: 40, h: 20 }, l2 = { x: -80, y: 200, w: 40, h: 20 };
+  assert.match(linkPath(l1, l2), /^M-80,10 C.* -80,210$/);
+});
