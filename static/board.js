@@ -3,7 +3,7 @@
 
 import {
   createElement, resizeTo, elementPaths, fillPath, elementBounds, DEFAULTS, elementAt, elementsInBox,
-  moveElements, resizeElement, bringToFront, sendToBack, duplicateElements, elementsHitBy,
+  moveElements, resizeElement, bringToFront, sendToBack, duplicateElements, elementsHitBy, paint,
 } from './board-model.js';
 import { History } from './model.js';
 
@@ -22,7 +22,7 @@ const lineH = (fs) => fs * 1.25;
 const mctx = document.createElement('canvas').getContext('2d');
 const view = { x: 0, y: 0, k: 1 };
 const SHAPES = new Set(['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw']);
-const STYLED = new Set([...SHAPES, 'text']);  // ferramentas que mostram o painel de estilo
+const STYLED = new Set([...SHAPES, 'text', 'bucket']);  // ferramentas que mostram o painel de estilo
 
 export function initBoard(d) { deps = d; }
 export const currentBoard = () => board;
@@ -108,8 +108,16 @@ function setTool(t) {
   if (t !== 'select') selection = [];
   svg.dataset.tool = t;
   for (const b of document.querySelectorAll('#board-tools [data-tool]')) b.classList.toggle('active', b.dataset.tool === t);
+  // ferramenta do menu "mais": o botão ⋯ fica ativo e mostra o ícone dela
+  const extra = more.querySelector(`[data-tool="${t}"] use`)?.getAttribute('href');
+  moreBtn.classList.toggle('active', !!extra);
+  moreBtn.querySelector('use').setAttribute('href', extra ?? '#i-dots');
+  more.hidden = true;
   render();  // painel de estilo aparece/some conforme a ferramenta
 }
+const more = $('#board-more'), moreBtn = $('#board-more-btn');
+moreBtn.onclick = () => { more.hidden = !more.hidden; };
+document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#board-more, #board-more-btn')) more.hidden = true; }, true);
 document.querySelector('#board-tools').addEventListener('click', (e) => {
   const t = e.target.closest('[data-tool]')?.dataset.tool;
   if (t) setTool(t);
@@ -153,6 +161,10 @@ svg.addEventListener('pointerdown', (e) => {
   } else if (tool === 'text' && e.button === 0) {
     e.preventDefault();
     startText(createElement('text', toWorld(e), { ...style, text: '' }), true);
+    return;
+  } else if (tool === 'bucket' && e.button === 0) {
+    const id = elementAt(board.elements, toWorld(e), 6 / view.k, true);
+    if (id) { const before = snapshot(); paint(board.elements.find(x => x.id === id), style); changed(before); }
     return;
   } else if (tool === 'eraser' && e.button === 0) {
     const p = toWorld(e);
@@ -224,7 +236,7 @@ for (const b of document.querySelectorAll('#board-view button')) b.addEventListe
 const TOOL_KEYS = {
   h: 'hand', v: 'select', 1: 'select', r: 'rectangle', 2: 'rectangle', d: 'diamond', 3: 'diamond',
   o: 'ellipse', 4: 'ellipse', a: 'arrow', 5: 'arrow', l: 'line', 6: 'line', p: 'freedraw', 7: 'freedraw',
-  t: 'text', 8: 'text', e: 'eraser', 0: 'eraser',
+  t: 'text', 8: 'text', e: 'eraser', 0: 'eraser', b: 'bucket',
 };
 document.addEventListener('keydown', (e) => {
   if (!board || document.body.dataset.view !== 'board' || e.target.closest?.('input, textarea, select')) return;
@@ -241,7 +253,7 @@ document.addEventListener('keydown', (e) => {
   else if (ctrl && e.shiftKey && (e.key === '[' || e.key === '{')) { e.preventDefault(); act('back'); }
   else if ((e.key === 'Delete' || e.key === 'Backspace') && selection.length) { e.preventDefault(); act('delete'); }
   else if (e.key === '?') { help.hidden = !help.hidden; }
-  else if (e.key === 'Escape') { help.hidden = true; selection = []; setTool('select'); render(); }
+  else if (e.key === 'Escape') { help.hidden = true; more.hidden = true; selection = []; setTool('select'); render(); }
   else if (e.key.startsWith('Arrow') && selection.length) {
     e.preventDefault();
     const d = e.shiftKey ? 10 : 1, before = snapshot();

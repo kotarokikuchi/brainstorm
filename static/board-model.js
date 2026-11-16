@@ -133,10 +133,10 @@ function distToSeg([px, py], [ax, ay], [bx, by]) {
 }
 const polyDist = (pts, p) => Math.min(...pts.slice(1).map((q, i) => distToSeg(p, pts[i], q)));
 
-// o ponto acerta o elemento? forma vazia só pela borda; preenchida também pelo miolo
-export function hitTest(el, p, tol = 6) {
+// o ponto acerta o elemento? forma vazia só pela borda; preenchida (ou inside: balde) também pelo miolo
+export function hitTest(el, p, tol = 6, inside = false) {
   const [px, py] = p, t = tol + (el.strokeWidth ?? 2) / 2;
-  const filled = el.backgroundColor && el.backgroundColor !== 'transparent';
+  const filled = inside || (el.backgroundColor && el.backgroundColor !== 'transparent');
   const { x, y, w, h } = el, cx = x + w / 2, cy = y + h / 2;
   if (el.type === 'rectangle') {
     if (filled && px >= x && px <= x + w && py >= y && py <= y + h) return true;
@@ -155,8 +155,8 @@ export function hitTest(el, p, tol = 6) {
 }
 
 // elemento mais em cima (último desenhado) sob o ponto
-export function elementAt(elements, p, tol = 6) {
-  for (let i = elements.length - 1; i >= 0; i--) if (hitTest(elements[i], p, tol)) return elements[i].id;
+export function elementAt(elements, p, tol = 6, inside = false) {
+  for (let i = elements.length - 1; i >= 0; i--) if (hitTest(elements[i], p, tol, inside)) return elements[i].id;
   return null;
 }
 
@@ -205,6 +205,14 @@ export function resizeElement(el, handle, [px, py], start) {
   el.x = abs[0][0];
   el.y = abs[0][1];
   el.points = abs.map(([ax, ay]) => [f(ax - el.x), f(ay - el.y)]);
+  return el;
+}
+
+// balde de tinta: forma fechada recebe o fundo atual; linha, traço e texto recebem a cor do traço
+const CLOSED = new Set(['rectangle', 'diamond', 'ellipse']);
+export function paint(el, { backgroundColor, fillStyle, strokeColor }) {
+  if (CLOSED.has(el.type)) Object.assign(el, { backgroundColor, fillStyle });
+  else el.strokeColor = strokeColor;
   return el;
 }
 
