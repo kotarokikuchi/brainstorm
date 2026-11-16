@@ -309,3 +309,22 @@ test('pasteBranch under root gets side and color', () => {
   assert.ok(n.side === 'left' || n.side === 'right');
   assert.ok(PALETTE.includes(n.color));
 });
+
+// ---- Curvar ligações ----
+import { linkHandle } from '../static/model.js';
+
+test('linkHandle: no bend → curve midpoint; with bend → centers midpoint + offset', () => {
+  const a = { x: 0, y: 0, w: 40, h: 20 }, b = { x: 200, y: 0, w: 40, h: 20 };
+  assert.deepEqual(linkHandle(a, b), [120, 10]);
+  assert.deepEqual(linkHandle(a, b, [0, 100]), [120, 110]);
+});
+
+test('linkPath with bend passes through the handle and leaves by the nearest sides', () => {
+  const a = { x: 0, y: 0, w: 40, h: 20 }, b = { x: 200, y: 0, w: 40, h: 20 };
+  const d = linkPath(a, b, [0, 300]);
+  // ponto de controle abaixo: sai pela base de a e chega pela base de b
+  assert.match(d, /^M20,20 Q/);
+  assert.match(d, / 220,20$/);
+  // quadrática passa pelo handle em t=0.5: controle = 2H - (p1+p2)/2
+  assert.match(d, /Q120,600 /);
+});

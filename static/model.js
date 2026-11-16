@@ -85,8 +85,8 @@ export function removeLink(map, linkId) {
   return map.links.length < before;
 }
 
-// curva entre os lados mais próximos das duas caixas (horizontal ou vertical)
-export function linkPath(a, b) {
+// curva automática entre os lados mais próximos das duas caixas: [p1, c1, c2, p2]
+function autoCurve(a, b) {
   const ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by = b.y + b.h / 2;
   let p1, p2, c1, c2;
   if (Math.abs(bx - ax) >= Math.abs(by - ay)) {
@@ -105,7 +105,32 @@ export function linkPath(a, b) {
     c1 = [p1[0] + d, p1[1]];
     c2 = [p2[0] + d, p2[1]];
   }
-  return `M${p1} C${c1} ${c2} ${p2}`;
+  return [p1, c1, c2, p2];
+}
+
+// meio de um lado da caixa (direita, esquerda, topo, base) mais perto do ponto h
+function nearestSide(b, [hx, hy]) {
+  const sides = [[b.x + b.w, b.y + b.h / 2], [b.x, b.y + b.h / 2], [b.x + b.w / 2, b.y], [b.x + b.w / 2, b.y + b.h]];
+  return sides.reduce((best, p) => (Math.hypot(p[0] - hx, p[1] - hy) < Math.hypot(best[0] - hx, best[1] - hy) ? p : best));
+}
+
+// ponto de controle arrastável: meio da curva automática, ou meio dos centros + bend [dx, dy]
+export function linkHandle(a, b, bend) {
+  if (bend) return [(a.x + a.w / 2 + b.x + b.w / 2) / 2 + bend[0], (a.y + a.h / 2 + b.y + b.h / 2) / 2 + bend[1]];
+  const [p1, c1, c2, p2] = autoCurve(a, b);
+  return [0, 1].map(i => (p1[i] + 3 * c1[i] + 3 * c2[i] + p2[i]) / 8);
+}
+
+// atributo d da seta; com bend vira quadrática que passa pelo ponto de controle
+export function linkPath(a, b, bend) {
+  if (!bend) {
+    const [p1, c1, c2, p2] = autoCurve(a, b);
+    return `M${p1} C${c1} ${c2} ${p2}`;
+  }
+  const h = linkHandle(a, b, bend);
+  const p1 = nearestSide(a, h), p2 = nearestSide(b, h);
+  const c = [0, 1].map(i => 2 * h[i] - (p1[i] + p2[i]) / 2);
+  return `M${p1} Q${c} ${p2}`;
 }
 
 // move o ramo para parentId na posição index; recusa raiz, o próprio nó e descendentes

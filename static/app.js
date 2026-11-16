@@ -1,6 +1,6 @@
 import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
-  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, pasteBranch,
+  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch,
 } from './model.js';
 
 const $ = (s) => document.querySelector(s);
@@ -636,13 +636,14 @@ function drawLinks() {
   for (const k of map.links ?? []) {
     const a = boxes.find(b => b.id === k.from), b = boxes.find(b => b.id === k.to);
     if (!a || !b) continue;  // ponta escondida num ramo recolhido
-    const d = linkPath(a, b), sel = k.id === selectedLink;
+    const d = linkPath(a, b, k.bend), sel = k.id === selectedLink;
     el('path', {
       d, class: 'link', fill: 'none', stroke: sel ? '#2f5bea' : '#22a559', 'stroke-width': sel ? 3 : 2,
       'stroke-dasharray': '5 5', 'marker-end': `url(#${sel ? 'arrow-sel' : 'arrow'})`,
     }, viewport);
     const hit = el('path', { d, class: 'link-hit', fill: 'none', stroke: 'transparent', 'stroke-width': 14 }, viewport);
     hit.addEventListener('click', (e) => { e.stopPropagation(); selectedLink = k.id; render(); });
+    if (sel) drawBendHandle(k, a, b, d);
   }
   const from = boxes.find(b => b.id === (linking ? linking.from : selected));
   if (linking) {
@@ -737,3 +738,37 @@ document.addEventListener('pointerdown', (e) => {
   stylePop.hidden = nodeMenu.hidden = true;
   render();
 }, true);
+
+// ---------- Curvar ligações ----------
+let bending = null;  // {link, a, b, pushed} enquanto arrasta o ponto de controle
+
+// pontas da seta selecionada + ponto de controle arrastável (duplo clique volta ao automático)
+function drawBendHandle(k, a, b, d) {
+  const [p1, p2] = [d.match(/^M([-\d.e]+),([-\d.e]+)/), d.match(/([-\d.e]+),([-\d.e]+)$/)];
+  for (const m of [p1, p2]) el('circle', { class: 'link-end', cx: m[1], cy: m[2], r: 4, fill: '#fff', stroke: '#2f5bea', 'stroke-width': 2 }, viewport);
+  const [hx, hy] = linkHandle(a, b, k.bend);
+  const h = el('circle', { class: 'link-bend', cx: hx, cy: hy, r: 6, fill: '#2f5bea', stroke: '#fff', 'stroke-width': 2 }, viewport);
+  h.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    bending = { link: k, a, b, pushed: false };
+  });
+  h.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    if (k.bend) mutate(() => { delete k.bend; });
+  });
+}
+
+window.addEventListener('pointermove', (e) => {
+  if (!bending) return;
+  const [wx, wy] = toWorld(e), { a, b } = bending;
+  if (!bending.pushed) { history.push(snapshot()); bending.pushed = true; }
+  bending.link.bend = [wx - (a.x + a.w / 2 + b.x + b.w / 2) / 2, wy - (a.y + a.h / 2 + b.y + b.h / 2) / 2];
+  render();
+});
+
+window.addEventListener('pointerup', () => {
+  if (!bending) return;
+  if (bending.pushed) scheduleSave();
+  bending = null;
+  render();
+});
