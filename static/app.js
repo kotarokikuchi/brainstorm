@@ -82,9 +82,38 @@ document.addEventListener('paste', (e) => {
   clearTimeout(pendingMapPaste);
   e.preventDefault();
   if (json) clipboard = json;
-  const parent = selected;
-  mutate(() => { for (const b of branches) selected = pasteBranch(map, parent, b).id; });
+  pasteBranches(branches);
 });
+
+// cola os ramos sob o tópico selecionado; vindos de outro mapa, imagens e anexos são copiados para este
+async function pasteBranches(branches) {
+  const id = map.id, parent = selected, ready = [];
+  for (const { src, ...b } of branches) {
+    if (src && src !== id) await bringNodeFiles(b, src);
+    ready.push(b);
+  }
+  if (map?.id !== id || !findNode(map.root, parent)) return;  // trocou de mapa (ou o tópico sumiu) durante a cópia
+  mutate(() => { for (const b of ready) selected = pasteBranch(map, parent, b).id; });
+}
+async function copyFile(src, fileId, name) {
+  if (!/^[a-z0-9-]{1,64}$/.test(src)) throw new Error('origem inválida');
+  const r = await fetch(`/api/maps/${src}/files/${encodeURIComponent(fileId)}`);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return (await uploadFile(new File([await r.blob()], name || fileId))).id;
+}
+async function bringNodeFiles(n, src) {
+  if (n.image) {
+    try { n.image = { ...n.image, id: await copyFile(src, n.image.id, n.image.id) }; } catch { delete n.image; }
+  }
+  if (Array.isArray(n.attachments)) {
+    const kept = [];
+    for (const a of n.attachments) {
+      try { kept.push({ ...a, id: await copyFile(src, a.id, a.name) }); } catch { /* arquivo sumiu: fica de fora */ }
+    }
+    if (kept.length) n.attachments = kept; else delete n.attachments;
+  }
+  for (const c of n.children) await bringNodeFiles(c, src);
+}
 
 // ---------- Rotas ----------
 window.addEventListener('hashchange', route);
@@ -1255,11 +1284,10 @@ const actions = {
     if (n.children.length && n !== map.root) mutate(() => { n.collapsed = !n.collapsed; });
   },
   link: () => { linking = { from: selected, target: null, byClick: true }; render(); },
-  copy: () => { clipboard = JSON.stringify(findNode(map.root, selected).node); },  // sistema: ver "Área de transferência do mapa"
+  // src: mapa de origem (imagens e anexos são copiados ao colar em outro mapa); sistema: ver "Área de transferência do mapa"
+  copy: () => { clipboard = JSON.stringify({ ...findNode(map.root, selected).node, src: map.id }); },
   cut: () => { if (selected === map.root.id) return; actions.copy(); deleteSelected(); },
-  paste: () => {
-    if (clipboard) mutate(() => { selected = pasteBranch(map, selected, JSON.parse(clipboard)).id; });
-  },
+  paste: () => { if (clipboard) pasteBranches([JSON.parse(clipboard)]); },
   delete: deleteSelected,
 };
 
