@@ -1030,6 +1030,18 @@ await typeText('!');
 await key('Enter', 2);  // Ctrl+Enter também confirma
 await sleep(900);
 assert.equal((await boardEls()).at(-1).text, 'Linha um\nlinha dois\nlinha três!', 'Ctrl+Enter confirma');
+// texto grande: a caixa de edição cabe as letras da Kalam e não rola (antes o texto "pulava" para cima)
+await ev(`document.querySelector('#board-props [data-prop="fontSize"] [data-value="36"]').click()`);
+const big = await elBox(lastTxt.id);
+assert.ok(big.x > 0 && big.y + big.h < 700, 'texto continua na tela');
+assert.equal(await ev(`document.querySelector('#board-text').hidden`), true);
+await dbl(big.x + 10, big.y + big.h / 2);
+assert.equal(await ev(`document.querySelector('#board-text').value`), lastTxt.text.replace(/!?$/, '!'), 'editando o texto grande');
+assert.ok(await ev(`(() => { const t = document.querySelector('#board-text'); return t.scrollHeight <= t.clientHeight; })()`), 'caixa cabe o texto grande');
+assert.equal(await ev(`(() => { const t = document.querySelector('#board-text'); t.scrollTop = 30; t.dispatchEvent(new Event('scroll')); return t.scrollTop; })()`), 0, 'caixa não rola');
+await key('Escape');
+await ev(`document.querySelector('#board-props [data-prop="fontSize"] [data-value="20"]').click()`);
+await sleep(900);
 await ev(`document.querySelector('#board-props [data-prop="textAlign"] [data-value="center"]').click()`);
 await sleep(900);
 assert.equal((await boardEls()).at(-1).textAlign, 'center', 'alinhamento salvo');

@@ -594,7 +594,9 @@ function placeTextArea() {
     fontFamily: fontOf(e), fontSize: `${e.fontSize * k}px`, lineHeight: `${lineH(e.fontSize) * k}px`,
     whiteSpace: note ? 'pre-wrap' : 'pre',  // na nota, a caixa quebra na largura dela
     width: note ? `${(e.w - 2 * pad) * k}px` : `${(Math.max(20, ...lines.map(l => mctx.measureText(l).width)) + 20) * k}px`,
-    height: `${lines.length * lineH(e.fontSize) * k + 4}px`,
+    // folga proporcional: as letras da Kalam passam da altura de linha; sem ela o navegador
+    // rola o texto para cima para mostrar o cursor (o texto "pula" ao clicar)
+    height: `${(lines.length * lineH(e.fontSize) + e.fontSize * 0.5) * k}px`,
   });
   textArea.scrollTop = 0;  // cresce antes de rolar: a primeira linha não some
 }
@@ -646,6 +648,7 @@ textArea.addEventListener('keydown', (e) => {
   }
 });
 textArea.addEventListener('blur', commitText);
+textArea.addEventListener('scroll', () => { textArea.scrollTop = 0; });  // a caixa já cabe tudo: rolar só desalinharia
 
 // duplo clique: edita o texto sob o ponteiro, ou cria um texto novo no vazio.
 // Detectado no pointerdown: a lousa redesenha a cada toque, então o navegador não gera dblclick.
