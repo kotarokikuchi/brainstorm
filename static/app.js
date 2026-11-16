@@ -225,9 +225,10 @@ function render() {
     }, viewport);
   }
   for (const e of edges) {
-    const n = findNode(map.root, e.to.id).node;  // a linha até o pai é estilizada pelo filho
+    // a linha até o pai é estilizada pelo filho; ramo com sub-layout usa o estilo dele (e.kind)
+    const n = findNode(map.root, e.to.id).node;
     el('path', {
-      class: 'edge', d: edgePath(map.layout, e.from, e.to), fill: 'none', stroke: n.lineColor || e.color,
+      class: 'edge', d: edgePath(e.kind ?? map.layout, e.from, e.to), fill: 'none', stroke: n.lineColor || e.color,
       'stroke-width': n.lineWidth ? WIDTHS[n.lineWidth] : Math.max(2, 6 - e.depth),
       'stroke-dasharray': n.lineStyle === 'dashed' ? DASHES.dashed : null, 'stroke-linecap': 'round',
     }, viewport);
@@ -301,8 +302,9 @@ function drawNode(b) {
 // bolinha de recolher/expandir na borda externa do nó
 function drawToggle(b, n, g) {
   let cx = b.x + b.w + 12, cy = b.y + b.h / 2;
-  if (map.layout === 'map' && b.side === 'left') cx = b.x - 12;
-  if (map.layout === 'org') { cx = b.x + b.w / 2; cy = b.y + b.h + 12; }
+  const lay = b.kind ?? map.layout;
+  if (lay === 'map' && b.side === 'left') cx = b.x - 12;
+  if (lay === 'org') { cx = b.x + b.w / 2; cy = b.y + b.h + 12; }
   // expandido: círculo vazado pequeno; recolhido: círculo com o número de filhos escondidos
   const tg = el('g', { class: 'toggle' }, g);
   el('circle', { class: 'hit', cx, cy, r: 12 }, tg);  // área de clique
@@ -692,9 +694,10 @@ function placeOverlays() {
 
   // "+ filho" do lado de fora do nó; afasta da bolinha de recolher quando existe
   const gap = n.children.length && b.depth > 0 ? 40 : 20;
-  const left = map.layout === 'map' && b.side === 'left';
+  const lay = b.kind ?? map.layout;
+  const left = lay === 'map' && b.side === 'left';
   let child, sibling;
-  if (map.layout === 'org') {
+  if (lay === 'org') {
     child = [sx(b.x + b.w / 2), sy(b.y + b.h) + gap];
     sibling = [sx(b.x + b.w) + 20, sy(b.y + b.h / 2)];
   } else {
@@ -834,7 +837,7 @@ function drawDrop() {
   if (t) {
     const p = boxes.find(b => b.id === t.parentId);
     const ph = placeholderBox(t, p, W, H);
-    el('path', { d: edgePath(map.layout, p, ph), fill: 'none', stroke: '#d4d2de', 'stroke-width': 3, class: 'drop-placeholder' }, viewport);
+    el('path', { d: edgePath(p.kind ?? map.layout, p, ph), fill: 'none', stroke: '#d4d2de', 'stroke-width': 3, class: 'drop-placeholder' }, viewport);
     el('rect', { ...ph, x: ph.x, y: ph.y, width: W, height: H, rx: 6, fill: '#e2e0ea', class: 'drop-placeholder' }, viewport);
   }
   const text = findNode(map.root, drag.id).node.text;
@@ -844,25 +847,26 @@ function drawDrop() {
 }
 
 function placeholderBox(t, p, W, H) {
+  const lay = p.kind ?? map.layout;  // ramo com sub-layout: regras do tipo dele
   const box = (x, y) => ({ x, y, w: W, h: H, depth: p.depth + 1, shape: 'box' });
   const parent = findNode(map.root, t.parentId).node;
-  const left = map.layout === 'map' && (t.side === 'left' || (!t.side && p.side === 'left'));
+  const left = lay === 'map' && (t.side === 'left' || (!t.side && p.side === 'left'));
   // irmãos visíveis do mesmo lado: encosta acima do que será empurrado ou abaixo do último
   const kids = parent.collapsed ? [] : parent.children
-    .filter(c => c.id !== drag.id && (map.layout !== 'map' || parent !== map.root || (c.side === 'left') === left));
+    .filter(c => c.id !== drag.id && (lay !== 'map' || parent !== map.root || (c.side === 'left') === left));
   const all = parent.children.filter(c => c.id !== drag.id);
   const next = boxes.find(b => b.id === all[t.index - (all.length < parent.children.length && parent.children.findIndex(c => c.id === drag.id) < t.index ? 1 : 0)]?.id);
   const sameSide = next && kids.some(c => c.id === next.id);
   const last = boxes.find(b => b.id === kids[kids.length - 1]?.id);
   const alignX = (b) => (left ? b.x + b.w - W : b.x);
-  if (map.layout === 'org') {
+  if (lay === 'org') {
     if (sameSide) return box(next.x - W - 6, next.y);
     if (last) return box(last.x + last.w + 6, last.y);
     return box(p.x + p.w / 2 - W / 2, p.y + p.h + 40);
   }
   if (sameSide) return box(alignX(next), next.y - H - 4);
   if (last) return box(alignX(last), last.y + last.h + 4);
-  if (map.layout === 'list') return box(p.x + 32, p.y + p.h + 4);
+  if (lay === 'list') return box(p.x + 32, p.y + p.h + 4);
   return box(left ? p.x - 36 - W : p.x + p.w + 36, p.y + p.h / 2 - H / 2);
 }
 
@@ -1028,6 +1032,10 @@ $('#more-btn').onclick = () => {
   item('collapse').disabled = !n.children.length || n === map.root;
   item('delete').disabled = n === map.root;
   item('paste').disabled = !clipboard;
+  // "mostrar ramo como": só para ramos (não a raiz) e quando o mapa está no layout mapa
+  const row = $('#branch-layout-row');
+  row.hidden = n === map.root || map.layout !== 'map';
+  for (const b of row.querySelectorAll('[data-value]')) b.classList.toggle('active', b.dataset.value === (n.branchLayout ?? ''));
   openNodePop(nodeMenu);
 };
 
@@ -1802,3 +1810,11 @@ $('#present-next').onclick = () => showSlide(presenting.i + 1);
 $('#present-exit').onclick = stopPresentation;
 // saiu da tela cheia pelo navegador (Esc do próprio navegador): encerra a apresentação também
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && presenting) stopPresentation(); });
+
+// ---------- Mostrar este ramo como (menu ⋯) ----------
+$('#branch-layout-row').addEventListener('click', (e) => {
+  const v = e.target.closest('[data-value]')?.dataset.value;
+  if (v === undefined) return;
+  nodeMenu.hidden = true;
+  setStyle({ branchLayout: v || null });
+});

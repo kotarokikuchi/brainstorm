@@ -735,6 +735,29 @@ await key('z', 2);
 await sleep(900);
 assert.deepEqual(await recKids(), recBefore, 'Ctrl+Z desfaz a restauração');
 
+// mostrar este ramo como: organograma / lista / mapa pelo menu ⋯ do nó
+const recNow = async () => (await getMap()).root.children.find(c => c.text.startsWith('Recursos'));
+const branchAs = async (v) => {
+  await clickNode('Recursos');
+  await ev(`document.querySelector('#more-btn').click()`);
+  assert.equal(await ev(`!document.querySelector('#branch-layout-row').hidden`), true, 'opção no menu');
+  await ev(`document.querySelector('#branch-layout-row [data-value="${v}"]').click()`);
+  await sleep(900);
+};
+await branchAs('org');
+assert.equal((await recNow()).branchLayout, 'org');
+const recR2 = await rect('Recursos'), orcR2 = await rect('Orçamento');
+assert.ok(orcR2.y > recR2.y + recR2.h - 4, 'filhos abaixo do ramo (organograma)');
+assert.ok(await ev(`[...document.querySelectorAll('#viewport path.edge')].some(p => / C/.test(p.getAttribute('d')) && p.getAttribute('d').split(' ').length > 2)`));
+await branchAs('list');
+assert.equal((await recNow()).branchLayout, 'list');
+await branchAs('');
+assert.equal((await recNow()).branchLayout, null, 'Mapa volta ao padrão');
+await clickNode('Planejamento');
+await ev(`document.querySelector('#more-btn').click()`);
+assert.equal(await ev(`document.querySelector('#branch-layout-row').hidden`), true, 'raiz não tem a opção');
+await key('Escape');
+
 // conflito: outra "aba" grava antes
 await sleep(900);
 const cur = await getMap();

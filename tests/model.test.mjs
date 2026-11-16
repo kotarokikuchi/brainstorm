@@ -536,3 +536,40 @@ test('slides: overview first, then one per main branch in order', () => {
   assert.deepEqual(slides(m), [null, r1.id, l1.id, r2.id]);
   assert.deepEqual(slides(newMap('x')), [null]);
 });
+
+// ---- Mostrar este ramo como (sub-layout dentro do mapa) ----
+test('branchLayout org draws a branch as an org chart inside the map', () => {
+  const { m, r1, r2, g1, g2 } = sample('map');
+  r1.branchLayout = 'org';
+  const res = layout(m, measure);
+  const b = byId(res);
+  const root = b[m.root.id];
+  assert.ok(b[r1.id].x >= root.x + root.w, 'continua à direita da raiz');
+  assert.ok(b[g1.id].y >= b[r1.id].y + b[r1.id].h, 'filhos abaixo');
+  assert.ok(b[g1.id].x + b[g1.id].w <= b[g2.id].x, 'filhos lado a lado');
+  assert.equal(b[g1.id].depth, 2, 'profundidade real');
+  assert.equal(b[g1.id].kind, 'org');
+  const inner = res.edges.find(e => e.to.id === g1.id), outer = res.edges.find(e => e.to.id === r1.id);
+  assert.equal(inner.kind, 'org', 'linha interna no estilo organograma');
+  assert.equal(outer.kind ?? 'map', 'map');
+  // o bloco do organograma não invade o irmão de baixo
+  assert.ok(Math.max(b[g1.id].y + b[g1.id].h, b[g2.id].y + b[g2.id].h) <= b[r2.id].y);
+});
+
+test('branchLayout list on the left side stays left of the root', () => {
+  const { m, l1 } = sample('map');
+  const a = addChild(m, l1.id); a.text = 'Item A';
+  const c = addChild(m, l1.id); c.text = 'Item B';
+  l1.branchLayout = 'list';
+  const b = byId(layout(m, measure));
+  assert.ok(Math.max(b[l1.id].x + b[l1.id].w, b[a.id].x + b[a.id].w, b[c.id].x + b[c.id].w) <= b[m.root.id].x);
+  assert.equal(b[a.id].x - b[l1.id].x, 32, 'recuo da lista');
+  assert.ok(b[c.id].y > b[a.id].y);
+});
+
+test('branchLayout is ignored when the whole map is not in map layout', () => {
+  const { m, r1 } = sample('org');
+  const plain = layout(m, measure).nodes.map(n => [n.id, n.x, n.y]);
+  r1.branchLayout = 'list';
+  assert.deepEqual(layout(m, measure).nodes.map(n => [n.id, n.x, n.y]), plain);
+});
