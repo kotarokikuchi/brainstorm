@@ -1,5 +1,5 @@
 import {
-  PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
+  PALETTE, uid, newMap, branchToText, textToBranches, findNode, addChild, addSibling, removeNode, commitText,
   History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, toMarkdown, slides, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
 } from './model.js';
 import { folderOf, childFolders, folderPath, removeFolder, placeDoc, subtree, moveFolder, folderOptions } from './folders.js';
@@ -51,6 +51,40 @@ function loadPlace(id) {
   } catch { return null; }
 }
 window.addEventListener('pagehide', savePlace);  // recarregar (F5 ou automática) e fechar a aba
+
+// ---------- Área de transferência do mapa (sistema): entre abas, depois de recarregar e com outros programas ----------
+const BRANCH = 'application/x-galho-branch';
+let pendingMapPaste = 0, pendingMapCut = 0;
+// o que vem colado pode ter sido posto por outro site: só ramos com texto e filhos bem formados
+const okBranch = (b, depth = 0) => !!b && typeof b === 'object' && typeof b.text === 'string'
+  && Array.isArray(b.children) && depth < 100 && b.children.every(c => okBranch(c, depth + 1));
+const mapKeys = (e) => map && !editing && !presenting && document.body.dataset.view === 'editor' && !e.target.closest?.('input, textarea, select');
+function copyBranchTo(e) {
+  actions.copy();
+  e.clipboardData.setData(BRANCH, clipboard);
+  e.clipboardData.setData('text/plain', branchToText(JSON.parse(clipboard)));  // lista com recuo para outros programas
+  e.preventDefault();
+}
+document.addEventListener('copy', (e) => { if (mapKeys(e) && selected) copyBranchTo(e); });
+document.addEventListener('cut', (e) => {  // recortar = copiar e apagar (o nó central não sai)
+  if (!mapKeys(e) || !selected || selected === map.root.id) return;
+  clearTimeout(pendingMapCut);
+  copyBranchTo(e);
+  deleteSelected();
+});
+// colar: ramo do Galho > texto (cada linha vira um tópico, recuo vira filho) — sob o tópico selecionado
+document.addEventListener('paste', (e) => {
+  if (!mapKeys(e) || !e.clipboardData || !selected) return;
+  const json = e.clipboardData.getData(BRANCH), text = e.clipboardData.getData('text/plain');
+  let branches = [];
+  try { branches = json ? [JSON.parse(json)] : textToBranches(text.slice(0, 100000)); } catch { /* ramo inválido: ignora */ }
+  if (!branches.length || !branches.every(b => okBranch(b))) return;
+  clearTimeout(pendingMapPaste);
+  e.preventDefault();
+  if (json) clipboard = json;
+  const parent = selected;
+  mutate(() => { for (const b of branches) selected = pasteBranch(map, parent, b).id; });
+});
 
 // ---------- Rotas ----------
 window.addEventListener('hashchange', route);
@@ -661,9 +695,11 @@ document.addEventListener('keydown', (ev) => {
     toggleText(key.toLowerCase() === 'b' ? 'textBold' : 'textItalic');
   } else if (ctrl && key.toLowerCase() === 'c') {
     actions.copy();
+  } else if (ctrl && key.toLowerCase() === 'x') {
+    pendingMapCut = setTimeout(actions.cut, 0);  // o evento "cut" (sistema) vem antes; sem ele, recorta só na cópia interna
   } else if (ctrl && key.toLowerCase() === 'v') {
-    ev.preventDefault();
-    actions.paste();
+    // sem preventDefault: o evento "paste" (área de transferência do sistema) vem antes; sem nada nele, cola a cópia interna
+    pendingMapPaste = setTimeout(actions.paste, 0);
   } else if (ev.altKey && ev.shiftKey && ev.code === 'KeyC') {
     ev.preventDefault();
     toolbarOn = true;
@@ -1219,7 +1255,8 @@ const actions = {
     if (n.children.length && n !== map.root) mutate(() => { n.collapsed = !n.collapsed; });
   },
   link: () => { linking = { from: selected, target: null, byClick: true }; render(); },
-  copy: () => { clipboard = JSON.stringify(findNode(map.root, selected).node); },
+  copy: () => { clipboard = JSON.stringify(findNode(map.root, selected).node); },  // sistema: ver "Área de transferência do mapa"
+  cut: () => { if (selected === map.root.id) return; actions.copy(); deleteSelected(); },
   paste: () => {
     if (clipboard) mutate(() => { selected = pasteBranch(map, selected, JSON.parse(clipboard)).id; });
   },
@@ -1230,7 +1267,7 @@ $('#more-btn').onclick = () => {
   const n = findNode(map.root, selected).node;
   const item = (a) => nodeMenu.querySelector(`[data-action="${a}"]`);
   item('collapse').disabled = !n.children.length || n === map.root;
-  item('delete').disabled = n === map.root;
+  item('delete').disabled = item('cut').disabled = n === map.root;
   item('paste').disabled = !clipboard;
   // "mostrar ramo como": só para ramos (não a raiz) e quando o mapa está no layout mapa
   const row = $('#branch-layout-row');
