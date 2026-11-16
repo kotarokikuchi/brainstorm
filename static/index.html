@@ -39,6 +39,9 @@
     <symbol id="i-circle" viewBox="0 0 24 24"><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /></symbol>
     <symbol id="i-arrow-narrow-right" viewBox="0 0 24 24"><path d="M5 12l14 0" /> <path d="M15 16l4 -4" /> <path d="M15 8l4 4" /></symbol>
     <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" /> <path d="M13.5 6.5l4 4" /></symbol>
+    <symbol id="i-letter-t" viewBox="0 0 24 24"><path d="M6 4l12 0" /> <path d="M12 4l0 16" /></symbol>
+    <symbol id="i-eraser" viewBox="0 0 24 24"><path d="M19 20h-10.5l-4.21 -4.3a1 1 0 0 1 0 -1.41l10 -10a1 1 0 0 1 1.41 0l5 5a1 1 0 0 1 0 1.41l-9.2 9.3" /> <path d="M18 13.3l-6.3 -6.3" /></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /> <path d="M12 17l0 .01" /> <path d="M12 13.5a1.5 1.5 0 0 1 1 -1.5a2.6 2.6 0 1 0 -3 -4" /></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5l0 14" /> <path d="M5 12l14 0" /></symbol>
     <symbol id="i-square-rounded" viewBox="0 0 24 24"><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></symbol>
     <symbol id="i-square" viewBox="0 0 24 24"><path d="M3 3m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" /></symbol>
@@ -71,6 +74,7 @@
   <div id="export-menu" class="card menu" hidden>
     <button data-export="png">Imagem (PNG)</button>
     <button data-export="pdf">PDF (imprimir / salvar)</button>
+    <button data-export="svg">Vetor (SVG)</button>
     <button data-export="md">Texto (Markdown)</button>
   </div>
 
@@ -280,6 +284,9 @@
       <button data-tool="arrow" class="icon" title="Seta (A ou 5)"><svg viewBox="0 0 24 24"><use href="#i-arrow-narrow-right"/></svg></button>
       <button data-tool="line" class="icon" title="Linha (L ou 6)"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
       <button data-tool="freedraw" class="icon" title="Lápis (P ou 7)"><svg viewBox="0 0 24 24"><use href="#i-pencil"/></svg></button>
+      <button data-tool="text" class="icon" title="Texto (T ou 8)"><svg viewBox="0 0 24 24"><use href="#i-letter-t"/></svg></button>
+      <span class="sep"></span>
+      <button data-tool="eraser" class="icon" title="Borracha (E ou 0)"><svg viewBox="0 0 24 24"><use href="#i-eraser"/></svg></button>
     </div>
     <div id="board-props" class="card" hidden>
       <p>Traço</p><div class="swatches" data-prop="strokeColor"></div>
@@ -288,6 +295,7 @@
       <p>Espessura</p><div class="seg" data-prop="strokeWidth"><button data-value="1">Fina</button><button data-value="2">Média</button><button data-value="4">Grossa</button></div>
       <p>Estilo do traço</p><div class="seg" data-prop="strokeStyle"><button data-value="solid">Sólido</button><button data-value="dashed">Tracejado</button><button data-value="dotted">Pontilhado</button></div>
       <p>Desleixo</p><div class="seg" data-prop="roughness"><button data-value="0">Arquiteto</button><button data-value="1">Artista</button><button data-value="2">Cartunista</button></div>
+      <div id="board-font-row"><p>Tamanho do texto</p><div class="seg" data-prop="fontSize"><button data-value="16">P</button><button data-value="20">M</button><button data-value="28">G</button><button data-value="36">XG</button></div></div>
       <p>Opacidade</p><input type="range" id="board-opacity" min="0" max="100" step="10">
       <div id="board-sel-actions">
         <p>Camadas</p><div class="seg"><button data-act="back">Para trás</button><button data-act="front">Para frente</button></div>
@@ -301,6 +309,22 @@
       <span class="sep"></span>
       <button id="board-undo" class="icon" title="Desfazer (Ctrl+Z)"><svg viewBox="0 0 24 24"><use href="#i-arrow-back-up"/></svg></button>
       <button id="board-redo" class="icon" title="Refazer (Ctrl+Shift+Z)"><svg viewBox="0 0 24 24"><use href="#i-arrow-forward-up"/></svg></button>
+      <span class="sep"></span>
+      <button id="board-help-btn" class="icon" title="Atalhos (?)"><svg viewBox="0 0 24 24"><use href="#i-help"/></svg></button>
+    </div>
+    <textarea id="board-text" hidden spellcheck="false" wrap="off"></textarea>
+    <div id="board-help" class="card" hidden>
+      <strong>Atalhos do quadro</strong>
+      <dl>
+        <dt>H / Espaço</dt><dd>Mover a tela</dd><dt>V ou 1</dt><dd>Selecionar</dd>
+        <dt>R ou 2</dt><dd>Retângulo</dd><dt>D ou 3</dt><dd>Losango</dd><dt>O ou 4</dt><dd>Elipse</dd>
+        <dt>A ou 5</dt><dd>Seta</dd><dt>L ou 6</dt><dd>Linha</dd><dt>P ou 7</dt><dd>Lápis</dd>
+        <dt>T ou 8</dt><dd>Texto (ou duplo clique)</dd><dt>E ou 0</dt><dd>Borracha</dd>
+        <dt>Ctrl+Z / Ctrl+Shift+Z</dt><dd>Desfazer / refazer</dd><dt>Ctrl+D</dt><dd>Duplicar</dd>
+        <dt>Ctrl+C / Ctrl+V</dt><dd>Copiar / colar</dd><dt>Ctrl+A</dt><dd>Selecionar tudo</dd>
+        <dt>Delete</dt><dd>Apagar</dd><dt>Setas</dt><dd>Mover 1 px (Shift: 10)</dd>
+        <dt>Ctrl+Shift+] / [</dt><dd>Para frente / para trás</dd><dt>Ctrl+rodinha, Ctrl ±</dt><dd>Zoom</dd>
+      </dl>
     </div>
   </section>
 

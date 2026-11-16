@@ -3,7 +3,7 @@
 
 import {
   createElement, resizeTo, elementPaths, fillPath, elementBounds, DEFAULTS, elementAt, elementsInBox,
-  moveElements, resizeElement, bringToFront, sendToBack, duplicateElements,
+  moveElements, resizeElement, bringToFront, sendToBack, duplicateElements, elementsHitBy,
 } from './board-model.js';
 import { History } from './model.js';
 
@@ -15,9 +15,14 @@ let board = null;  // quadro aberto
 let tool = 'select', history = new History();
 let drawing = null, panning = null, spaceDown = false;
 let selection = [], gesture = null, clipboard = null;  // gesture: mover / redimensionar / seleção por área
-const style = { ...DEFAULTS };  // estilo para os próximos elementos (o painel muda)
+const style = { ...DEFAULTS, fontSize: 20 };  // estilo para os próximos elementos (o painel muda)
+let editingText = null, erasing = null;
+const HAND_FONT = 'Kalam, "Segoe Print", "Comic Sans MS", cursive';  // Kalam vem junto (static/fonts)
+const lineH = (fs) => fs * 1.25;
+const mctx = document.createElement('canvas').getContext('2d');
 const view = { x: 0, y: 0, k: 1 };
 const SHAPES = new Set(['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw']);
+const STYLED = new Set([...SHAPES, 'text']);  // ferramentas que mostram o painel de estilo
 
 export function initBoard(d) { deps = d; }
 export const currentBoard = () => board;
@@ -34,6 +39,7 @@ export async function openBoard(id) {
   }
   const doc = await r.json();
   if (doc.type !== 'board') { location.hash = `#/map/${id}`; return; }
+  await document.fonts.load('20px Kalam').catch(() => {});  // medir texto só com a fonte carregada
   board = doc;
   history = new History();
   selection = [];
@@ -68,6 +74,13 @@ function hatch(color) {
 
 function drawElement(e) {
   const g = el('g', { class: 'el', 'data-id': e.id, opacity: (e.opacity ?? 100) / 100 });
+  if (erasing?.ids.has(e.id)) g.classList.add('erasing');
+  if (e.type === 'text') {
+    if (editingText?.el === e) return g;
+    const t = el('text', { x: e.x, y: e.y, fill: e.strokeColor, 'font-size': e.fontSize, 'font-family': HAND_FONT, 'dominant-baseline': 'text-before-edge' }, g);
+    e.text.split('\n').forEach((line, i) => { el('tspan', { x: e.x, y: e.y + i * lineH(e.fontSize) }, t).textContent = line; });
+    return g;
+  }
   const bg = HEX.test(e.backgroundColor ?? '') && fillPath(e);
   if (bg) el('path', { d: bg, fill: e.fillStyle === 'solid' ? e.backgroundColor : hatch(e.backgroundColor), stroke: 'none' }, g);
   for (const d of elementPaths(e)) {
@@ -124,6 +137,11 @@ const toWorld = (e) => {
 
 svg.addEventListener('pointerdown', (e) => {
   if (!board) return;
+  if (isDoubleClick(e) && tool === 'select' && e.button === 0 && onDoubleClick(e)) {
+    e.preventDefault();  // sem os eventos de mouse depois, o foco fica no campo de texto
+    gesture = null;
+    return;
+  }
   if (tool === 'hand' || spaceDown || e.button === 1) {
     panning = { x: e.clientX - view.x, y: e.clientY - view.y };
     svg.classList.add('panning');
@@ -132,6 +150,14 @@ svg.addEventListener('pointerdown', (e) => {
     board.elements.push(drawing.el);
   } else if (tool === 'select' && e.button === 0) {
     selectDown(e);
+  } else if (tool === 'text' && e.button === 0) {
+    e.preventDefault();
+    startText(createElement('text', toWorld(e), { ...style, text: '' }), true);
+    return;
+  } else if (tool === 'eraser' && e.button === 0) {
+    const p = toWorld(e);
+    erasing = { last: p, ids: new Set(elementsHitBy(board.elements, p, p, 4 / view.k)), before: snapshot() };
+    render();
   } else return;
   svg.setPointerCapture(e.pointerId);
 });
@@ -139,10 +165,22 @@ svg.addEventListener('pointermove', (e) => {
   if (panning) { view.x = e.clientX - panning.x; view.y = e.clientY - panning.y; render(); }
   else if (drawing) { resizeTo(drawing.el, toWorld(e)); render(); }
   else if (gesture) selectMove(e);
+  else if (erasing) {
+    const p = toWorld(e);
+    for (const id of elementsHitBy(board.elements, erasing.last, p, 4 / view.k)) erasing.ids.add(id);
+    erasing.last = p;
+    render();
+  }
 });
 svg.addEventListener('pointerup', (e) => {
   if (panning) { panning = null; svg.classList.remove('panning'); return; }
   if (gesture) { selectUp(e); return; }
+  if (erasing) {
+    const { ids, before } = erasing;
+    erasing = null;
+    if (ids.size) { board.elements = board.elements.filter(x => !ids.has(x.id)); changed(before); } else render();
+    return;
+  }
   if (!drawing) return;
   const { el: created, before } = drawing;
   drawing = null;
@@ -186,6 +224,7 @@ for (const b of document.querySelectorAll('#board-view button')) b.addEventListe
 const TOOL_KEYS = {
   h: 'hand', v: 'select', 1: 'select', r: 'rectangle', 2: 'rectangle', d: 'diamond', 3: 'diamond',
   o: 'ellipse', 4: 'ellipse', a: 'arrow', 5: 'arrow', l: 'line', 6: 'line', p: 'freedraw', 7: 'freedraw',
+  t: 'text', 8: 'text', e: 'eraser', 0: 'eraser',
 };
 document.addEventListener('keydown', (e) => {
   if (!board || document.body.dataset.view !== 'board' || e.target.closest?.('input, textarea, select')) return;
@@ -201,7 +240,8 @@ document.addEventListener('keydown', (e) => {
   else if (ctrl && e.shiftKey && (e.key === ']' || e.key === '}')) { e.preventDefault(); act('front'); }
   else if (ctrl && e.shiftKey && (e.key === '[' || e.key === '{')) { e.preventDefault(); act('back'); }
   else if ((e.key === 'Delete' || e.key === 'Backspace') && selection.length) { e.preventDefault(); act('delete'); }
-  else if (e.key === 'Escape') { selection = []; setTool('select'); render(); }
+  else if (e.key === '?') { help.hidden = !help.hidden; }
+  else if (e.key === 'Escape') { help.hidden = true; selection = []; setTool('select'); render(); }
   else if (e.key.startsWith('Arrow') && selection.length) {
     e.preventDefault();
     const d = e.shiftKey ? 10 : 1, before = snapshot();
@@ -328,7 +368,7 @@ function paste() {
 const props = $('#board-props');
 const STROKES = ['#1e1e1e', '#e03131', '#2f9e44', '#1971c2', '#f08c00', '#6741d9'];
 const FILLS = ['transparent', '#ffc9c9', '#b2f2bb', '#a5d8ff', '#ffec99', '#d0bfff'];
-const NUMERIC = new Set(['strokeWidth', 'roughness', 'opacity']);
+const NUMERIC = new Set(['strokeWidth', 'roughness', 'opacity', 'fontSize']);
 for (const [prop, colors] of [['strokeColor', STROKES], ['backgroundColor', FILLS]]) {
   props.querySelector(`[data-prop="${prop}"]`).append(...colors.map((c) => {
     const b = document.createElement('button');
@@ -341,7 +381,8 @@ for (const [prop, colors] of [['strokeColor', STROKES], ['backgroundColor', FILL
 
 function renderProps() {
   const sel = board.elements.filter(x => selection.includes(x.id));
-  props.hidden = !(sel.length || SHAPES.has(tool));
+  props.hidden = !(sel.length || STYLED.has(tool));
+  $('#board-font-row').hidden = !(sel.some(x => x.type === 'text') || tool === 'text');
   $('#board-sel-actions').hidden = !sel.length;
   if (props.hidden) return;
   const cur = sel[0] ?? style;
@@ -357,7 +398,7 @@ function setProp(prop, value) {
   const sel = board.elements.filter(x => selection.includes(x.id));
   if (!sel.length) { renderProps(); return; }
   const before = snapshot();
-  for (const item of sel) item[prop] = value;
+  for (const item of sel) { item[prop] = value; if (item.type === 'text') measureText(item); }
   changed(before);
 }
 
@@ -370,3 +411,121 @@ props.addEventListener('click', (e) => {
   if (prop) setProp(prop, NUMERIC.has(prop) ? Number(btn.dataset.value) : btn.dataset.value);
 });
 $('#board-opacity').addEventListener('change', (e) => { setProp('opacity', Number(e.target.value)); e.target.blur(); });
+
+// ---------- Texto ----------
+const textArea = $('#board-text');
+
+// largura/altura do texto (linhas × altura de linha), guardadas no elemento
+function measureText(e) {
+  mctx.font = `${e.fontSize}px ${HAND_FONT}`;
+  const lines = e.text.split('\n');
+  e.w = Math.max(4, ...lines.map(l => mctx.measureText(l).width));
+  e.h = lines.length * lineH(e.fontSize);
+}
+
+function placeTextArea() {
+  const e = editingText.el, k = view.k;
+  mctx.font = `${e.fontSize}px ${HAND_FONT}`;
+  const lines = textArea.value.split('\n');
+  Object.assign(textArea.style, {
+    left: `${view.x + e.x * k}px`, top: `${view.y + e.y * k}px`, color: e.strokeColor,
+    font: `${e.fontSize * k}px ${HAND_FONT}`,
+    width: `${(Math.max(20, ...lines.map(l => mctx.measureText(l).width)) + 20) * k}px`,
+    height: `${lines.length * lineH(e.fontSize) * k + 4}px`,
+  });
+}
+
+function startText(e, isNew) {
+  editingText = { el: e, isNew, before: snapshot(), old: e.text };
+  textArea.value = e.text;
+  textArea.hidden = false;
+  placeTextArea();
+  render();
+  textArea.focus();
+  textArea.setSelectionRange(textArea.value.length, textArea.value.length);
+}
+
+function commitText() {
+  if (!editingText) return;
+  const { el: e, isNew, before, old } = editingText;
+  editingText = null;
+  textArea.blur();  // tira o foco antes de esconder: senão as próximas teclas iriam para o campo
+  textArea.hidden = true;
+  const text = textArea.value.replace(/\s+$/, '');
+  if (!text) {
+    if (!isNew) { board.elements = board.elements.filter(x => x !== e); changed(before); }  // apagou o texto todo
+  } else if (isNew || text !== old) {
+    e.text = text;
+    measureText(e);
+    if (isNew) board.elements.push(e);
+    changed(before);
+  }
+  setTool('select');
+  if (text) selection = [e.id];
+  render();
+}
+
+textArea.addEventListener('input', placeTextArea);
+textArea.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Escape' || (e.key === 'Enter' && (e.ctrlKey || e.metaKey))) { e.preventDefault(); commitText(); }
+});
+textArea.addEventListener('blur', commitText);
+
+// duplo clique: edita o texto sob o ponteiro, ou cria um texto novo no vazio.
+// Detectado no pointerdown: a lousa redesenha a cada toque, então o navegador não gera dblclick.
+let lastDown = null;
+function isDoubleClick(e) {
+  const now = performance.now();
+  const dbl = lastDown && now - lastDown.t < 400 && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < 6;
+  lastDown = dbl ? null : { t: now, x: e.clientX, y: e.clientY };
+  return dbl;
+}
+function onDoubleClick(e) {
+  const p = toWorld(e), id = elementAt(board.elements, p, 6 / view.k);
+  const hit = id && board.elements.find(x => x.id === id);
+  if (hit?.type === 'text') startText(hit, false);
+  else if (!hit) startText(createElement('text', p, { ...style, text: '' }), true);
+  else return false;  // duplo clique numa forma: segue como clique normal (selecionar/arrastar)
+  return true;
+}
+
+// ---------- Ajuda ----------
+const help = $('#board-help');
+$('#board-help-btn').onclick = () => { help.hidden = !help.hidden; };
+
+// ---------- Exportar (o app.js chama): SVG solto do quadro, sem seleção, com fundo branco ----------
+// fonte embutida no arquivo exportado (a imagem solta não enxerga os arquivos do app)
+async function fontCss() {
+  const parts = await Promise.all(['latin', 'latin-ext'].map(async (sub) => {
+    const blob = await (await fetch(`fonts/kalam-${sub}-400-normal.woff2`)).blob();
+    const url = await new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob); });
+    return `@font-face{font-family:Kalam;src:url(${url}) format("woff2")}`;
+  }));
+  return parts.join('');
+}
+
+export async function boardSvg() {
+  const pad = 30, bb = root.getBBox();
+  const clone = svg.cloneNode(true);
+  clone.removeAttribute('id');
+  clone.removeAttribute('data-tool');
+  clone.removeAttribute('class');
+  const r = clone.querySelector('#board-root');
+  r.removeAttribute('transform');
+  for (const x of r.querySelectorAll('.sel-item, .handle, .marquee')) x.remove();
+  const w = Math.max(1, bb.width) + 2 * pad, h = Math.max(1, bb.height) + 2 * pad;
+  const bg = document.createElementNS(SVG, 'rect');
+  Object.entries({ x: bb.x - pad, y: bb.y - pad, width: w, height: h, fill: '#ffffff' }).forEach(([k, v]) => bg.setAttribute(k, v));
+  r.prepend(bg);
+  if (board.elements.some(x => x.type === 'text')) {
+    const st = document.createElementNS(SVG, 'style');
+    st.textContent = await fontCss();
+    clone.prepend(st);
+  }
+  clone.setAttribute('xmlns', SVG);
+  clone.setAttribute('viewBox', `${bb.x - pad} ${bb.y - pad} ${w} ${h}`);
+  clone.setAttribute('width', w);
+  clone.setAttribute('height', h);
+  return { xml: new XMLSerializer().serializeToString(clone), w, h, title: board.title };
+}
