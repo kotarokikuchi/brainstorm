@@ -34,6 +34,7 @@ const NOTE_PAD = 12, NOTE_SIZE = 200, NOTE_COLOR = '#ffec99';  // ferramentas qu
 
 export function initBoard(d) { deps = d; }
 export const currentBoard = () => board;
+export const boardPlace = () => ({ view: { ...view }, selection: [...selection] });
 export function closeBoard() { board = null; }
 
 export const newBoard = (id) => ({ id, version: 0, type: 'board', title: 'Quadro sem título', elements: [] });
@@ -50,9 +51,10 @@ export async function openBoard(id) {
   await document.fonts.load('20px Kalam').catch(() => {});  // medir texto só com a fonte carregada
   board = doc;
   history = new History();
-  selection = [];
-  Object.assign(view, { x: 0, y: 0, k: 1 });
+  const place = deps.loadPlace(id);  // volta onde parou (posição, zoom, seleção)
+  Object.assign(view, place?.view ?? { x: 0, y: 0, k: 1 });
   setTool('select');
+  selection = (Array.isArray(place?.selection) ? place.selection : []).filter(s => board.elements.some(x => x.id === s));
   deps.resetSave();
   document.body.dataset.view = 'board';
   deps.setStatus('Salvo');
