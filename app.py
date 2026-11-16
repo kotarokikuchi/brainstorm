@@ -17,6 +17,7 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parent
 ID_RE = re.compile(r"^[a-z0-9-]{1,64}$")
 MAX_BODY = 5_000_000
+START = f"{os.getpid()}-{time.time()}"  # muda a cada partida/reinício do servidor
 MAX_FILE = 20_000_000
 FILE_RE = re.compile(r"^[a-f0-9]{32}(\.[a-z0-9]{1,10})?$")
 # só estes tipos abrem no navegador; o resto (inclusive SVG/HTML) sempre baixa como anexo
@@ -56,6 +57,9 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _api(self, method):
         path = urlsplit(self.path).path
+        if path == "/api/events" and method == "GET":
+            self._events()
+            return True
         if path == "/api/maps" and method == "GET":
             self._send(200, self._list())
             return True
@@ -163,6 +167,34 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _static_stamp(self):
+        # carimbo = partida do servidor + arquivo mais recente de static/
+        try:
+            newest = max((p.stat().st_mtime for p in self.server.static_dir.rglob("*") if p.is_file()), default=0)
+        except FileNotFoundError:
+            return None  # editor trocando o arquivo neste instante: tenta no próximo ciclo
+        return f"{START}-{newest}"
+
+    def _events(self):
+        # Server-Sent Events: a página recarrega quando o carimbo muda (static/ editado ou servidor reiniciado)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        last, beat = None, time.monotonic()
+        try:
+            while True:
+                stamp = self._static_stamp()
+                if stamp and stamp != last:
+                    self.wfile.write(f"data: {stamp}\n\n".encode())
+                    last, beat = stamp, time.monotonic()
+                elif time.monotonic() - beat > 15:
+                    self.wfile.write(b": ping\n\n")  # detecta aba fechada e libera a thread
+                    beat = time.monotonic()
+                time.sleep(0.5)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     def _list(self):
         items = []
         for f in self.server.data_dir.glob("*.json"):
@@ -190,6 +222,7 @@ def make_server(data_dir: Path, port: int) -> ThreadingHTTPServer:
     data_dir.mkdir(parents=True, exist_ok=True)
     server = ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=str(ROOT / "static")))
     server.data_dir = data_dir
+    server.static_dir = ROOT / "static"
     return server
 
 
