@@ -509,3 +509,19 @@ export function safeUrl(input) {
     return null;
   }
 }
+
+// ---- Outline: recuar (vira último filho do irmão anterior) / desrecuar (sobe para depois do pai) ----
+export function indentNode(map, nodeId) {
+  const hit = findNode(map.root, nodeId);
+  const i = hit?.parent ? hit.parent.children.indexOf(hit.node) : -1;
+  if (i < 1) return false;
+  const prev = hit.parent.children[i - 1];
+  return moveNode(map, nodeId, prev.id, prev.children.length);
+}
+
+export function outdentNode(map, nodeId) {
+  const hit = findNode(map.root, nodeId);
+  if (!hit?.parent || hit.parent === map.root) return false;
+  const grand = findNode(map.root, hit.parent.id).parent;
+  return moveNode(map, nodeId, grand.id, grand.children.indexOf(hit.parent) + 1, hit.parent.side);
+}

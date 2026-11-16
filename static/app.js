@@ -1,6 +1,6 @@
 import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
-  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
+  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
 } from './model.js';
 
 const $ = (s) => document.querySelector(s);
@@ -11,7 +11,8 @@ let map = null;          // mapa aberto
 let selected = null;     // id do nó selecionado
 let editing = null;
 let toolbarOn = false;   // barra flutuante visível (só depois de clicar num nó)
-let focusId = null;      // modo foco: id do ramo mostrado como centro (null = mapa inteiro)      // {id, isNew} enquanto o input está ativo
+let focusId = null;      // modo foco: id do ramo mostrado como centro (null = mapa inteiro)
+let outlineOn = false;   // modo outline: lista editável no lugar do mapa      // {id, isNew} enquanto o input está ativo
 let boxes = [];          // caixas do último render
 let history = new History();
 const view = { x: 0, y: 0, k: 1 };  // translação + escala do viewport
@@ -86,6 +87,9 @@ async function openMap(id) {
   selected = map.root.id;
   toolbarOn = false;
   focusId = null;
+  outlineOn = false;
+  document.body.classList.remove('outline-mode');
+  $('#outline-view').hidden = true;
   if (conflict) dirty = false;  // edições do mapa em conflito foram abandonadas ao sair dele
   conflict = false;
   document.body.dataset.view = 'editor';
@@ -186,6 +190,7 @@ function render() {
   drawLinks();
   if (drag?.active) drawDrop();
   if (editing) placeInput();
+  if (outlineOn) renderOutline();
   placeAnchors();
   placeOverlays();
   placeLinkBar();
@@ -393,6 +398,9 @@ document.addEventListener('keydown', (ev) => {
     if (key.startsWith('Arrow') || key === 'Tab' || key === 'Enter') { ev.preventDefault(); select(map.root.id); }
   } else if (!selected) {
     return;
+  } else if (ev.altKey && ev.shiftKey && ev.code === 'KeyO') {
+    ev.preventDefault();
+    setOutline(true);
   } else if (ctrl && key === '.') {
     ev.preventDefault();
     actions.focus();
@@ -586,7 +594,7 @@ $('#undo').onclick = undo;
 $('#redo').onclick = redo;
 
 function placeOverlays() {
-  const b = drag?.active || linking || selectedLink ? null : boxes.find(b => b.id === selected);
+  const b = drag?.active || linking || selectedLink || outlineOn ? null : boxes.find(b => b.id === selected);
   toolbar.hidden = !b || !toolbarOn;
   if (toolbar.hidden) closeNodePops();
   addChildBtn.hidden = addSiblingBtn.hidden = hints.hidden = !b || !!editing;
@@ -1116,7 +1124,7 @@ function setLink(changes) {
 }
 
 function placeLinkBar() {
-  const k = !bending && !retarget && currentLink();
+  const k = !bending && !retarget && !outlineOn && currentLink();
   const a = k && boxes.find(b => b.id === k.from), b = k && boxes.find(b => b.id === k.to);
   linkBar.hidden = !(a && b);
   if (linkBar.hidden) return closeLinkPops();
@@ -1433,3 +1441,118 @@ function setFocus(id) {
   fitView();
 }
 $('#focus-exit').onclick = () => setFocus(null);
+
+// ---------- Modo outline ----------
+const outlineList = $('#outline-view .outline');
+const rowInput = (id) => $(`#outline-view li[data-id="${CSS.escape(id)}"] > .row input`);
+const allInputs = () => [...outlineList.querySelectorAll('input')];
+
+function setOutline(on) {
+  outlineOn = on;
+  document.body.classList.toggle('outline-mode', on);
+  $('#outline-view').hidden = !on;
+  $('#outline-btn').classList.toggle('active', on);
+  closeNodePops();
+  selectedLink = null;
+  render();
+  if (on) focusRow(selected ?? map.root.id);
+  else fitView();
+}
+
+function focusRow(id, pos) {
+  const i = rowInput(id);
+  if (!i) return;
+  i.focus();
+  const p = pos ?? i.value.length;
+  i.setSelectionRange(p, p);
+  selected = id;
+}
+
+// remonta a lista a partir do mapa, devolvendo o foco/cursor à linha em edição
+function renderOutline() {
+  const act = document.activeElement;
+  const keep = act?.closest?.('#outline-view') ? { id: act.dataset.id, pos: act.selectionStart } : null;
+  const build = (n) => {
+    const li = document.createElement('li');
+    li.dataset.id = n.id;
+    const row = document.createElement('div');
+    row.className = 'row';
+    const bullet = document.createElement('button');
+    bullet.className = 'bullet';
+    bullet.dataset.toggle = n.id;
+    bullet.style.color = branchColor(map.root, n.id);
+    bullet.textContent = n.children.length ? (n.collapsed ? '▸' : '▾') : '•';
+    bullet.title = n.children.length ? 'Recolher / expandir' : '';
+    const input = document.createElement('input');
+    input.value = n.text;
+    input.dataset.id = n.id;
+    row.append(bullet, input);
+    li.append(row);
+    if (n.children.length && !n.collapsed) {
+      const ul = document.createElement('ul');
+      ul.append(...n.children.map(build));
+      li.append(ul);
+    }
+    return li;
+  };
+  outlineList.replaceChildren(build(map.root));
+  if (keep) focusRow(keep.id, keep.pos);
+}
+
+// grava o texto da linha; vazio volta ao texto anterior
+function commitRow(input) {
+  const n = findNode(map.root, input.dataset.id)?.node, text = input.value.trim();
+  if (!n) return;
+  if (!text) { input.value = n.text; return; }
+  if (text !== n.text) mutate(() => { n.text = text; });
+}
+
+// muda o mapa só se fn() devolver true (não deixa passo vazio no desfazer)
+function tryMutate(fn) {
+  history.push(snapshot());
+  if (fn()) { render(); scheduleSave(); return true; }
+  history.past.pop();
+  return false;
+}
+
+outlineList.addEventListener('keydown', (e) => {
+  const input = e.target.closest('input');
+  if (!input) return;
+  e.stopPropagation();
+  const id = input.dataset.id, inputs = allInputs(), idx = inputs.indexOf(input);
+  if (e.key === 'Escape') { e.preventDefault(); commitRow(input); setOutline(false); return; }
+  if (e.altKey && e.shiftKey && e.code === 'KeyO') { e.preventDefault(); commitRow(input); setOutline(false); return; }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    commitRow(input);
+    let created;
+    // nó novo começa vazio no outline (o mapa mostra vazio até ser digitado)
+    tryMutate(() => (created = id === map.root.id ? addChild(map, id) : addSibling(map, id)));
+    focusRow(created.id);
+  } else if (e.key === 'Tab') {
+    e.preventDefault();
+    commitRow(input);
+    tryMutate(() => (e.shiftKey ? outdentNode : indentNode)(map, id));
+    focusRow(id);
+  } else if (e.key === 'Backspace' && input.value === '' && id !== map.root.id) {
+    e.preventDefault();
+    const prev = inputs[idx - 1]?.dataset.id;
+    tryMutate(() => removeNode(map, id) !== null);
+    if (prev) focusRow(prev);
+  } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    const next = inputs[idx + (e.key === 'ArrowUp' ? -1 : 1)];
+    commitRow(input);
+    if (next) focusRow(next.dataset.id);
+  }
+});
+outlineList.addEventListener('focusout', (e) => {
+  const input = e.target.closest('input');
+  if (input?.isConnected && document.activeElement !== input) commitRow(input);
+});
+outlineList.addEventListener('click', (e) => {
+  const id = e.target.closest('[data-toggle]')?.dataset.toggle;
+  const n = id && findNode(map.root, id)?.node;
+  if (n?.children.length) mutate(() => { n.collapsed = !n.collapsed; });
+});
+$('#outline-btn').onclick = () => setOutline(!outlineOn);

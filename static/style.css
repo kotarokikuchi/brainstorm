@@ -185,3 +185,16 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 #focus-bar { top: 14px; left: 50%; transform: translateX(-50%); gap: 12px; padding: 6px 6px 6px 14px; font-size: 14px; }
 #focus-bar strong { max-width: 280px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 #focus-exit { border: none; background: #f0f0f6; border-radius: 8px; }
+
+/* Modo outline */
+body.outline-mode #canvas { display: none; }
+#outline-view { position: absolute; inset: 0; overflow: auto; padding: 32px 16px 96px; }
+#outline-view[hidden] { display: none; }
+.outline, .outline ul { list-style: none; margin: 0; padding: 0; }
+.outline { max-width: 760px; margin: 0 auto; }
+.outline ul { padding-left: 26px; border-left: 1px solid var(--line); margin-left: 9px; }
+.outline .row { display: flex; align-items: center; gap: 6px; }
+.outline .bullet { width: 20px; height: 26px; padding: 0; border: none; background: none; font-size: 14px; line-height: 1; }
+.outline input { flex: 1; border: none; background: none; font: inherit; font-size: 15px; padding: 4px 6px; border-radius: 6px; outline: none; color: var(--ink); }
+.outline input:focus { background: #fff; box-shadow: 0 0 0 1.5px var(--accent); }
+.outline > li > .row input { font-size: 20px; font-weight: 700; }

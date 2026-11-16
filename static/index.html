@@ -22,6 +22,7 @@
     <symbol id="i-photo" viewBox="0 0 24 24"><path d="M15 8h.01" /> <path d="M3 6a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v12a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-12z" /> <path d="M3 16l5 -5c.928 -.893 2.072 -.893 3 0l5 5" /> <path d="M14 14l1 -1c.928 -.893 2.072 -.893 3 0l3 3" /></symbol>
     <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3l6.5 -6.5a3 3 0 0 0 -6 -6l-6.5 6.5a4.5 4.5 0 0 0 9 9l6.5 -6.5" /></symbol>
     <symbol id="i-link" viewBox="0 0 24 24"><path d="M9 15l6 -6" /> <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" /> <path d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" /></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6l11 0" /> <path d="M9 12l11 0" /> <path d="M9 18l11 0" /> <path d="M5 6l0 .01" /> <path d="M5 12l0 .01" /> <path d="M5 18l0 .01" /></symbol>
     <symbol id="i-message" viewBox="0 0 24 24"><path d="M8 9h8" /> <path d="M8 13h6" /> <path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z" /></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M10 14l11 -11" /> <path d="M21 3l-6.5 18a.55 .55 0 0 1 -1 0l-3.5 -7l-7 -3.5a.55 .55 0 0 1 0 -1l18 -6.5" /></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5l0 14" /> <path d="M5 12l14 0" /></symbol>
@@ -198,11 +199,13 @@
     <button class="link-anchor" data-side="left" hidden title="Sair pela esquerda">+</button>
     <div id="hints"><span><kbd>Tab</kbd> filho</span><span><kbd>Enter</kbd> irmão</span></div>
 
+    <div id="outline-view" hidden><ul class="outline"></ul></div>
     <div id="focus-bar" class="card" hidden>
       <span>Foco: <strong id="focus-title"></strong></span>
       <button id="focus-exit">Sair do foco <kbd>Esc</kbd></button>
     </div>
     <div id="dock" class="card">
+      <button id="outline-btn" class="icon" title="Outline (Alt+Shift+O)"><svg viewBox="0 0 24 24"><use href="#i-list"/></svg></button>
       <select id="layout-select" title="Layout">
         <option value="map">Mapa</option>
         <option value="org">Organograma</option>

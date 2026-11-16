@@ -29,7 +29,7 @@ ws.onmessage = (m) => { const d = JSON.parse(m.data);
   if (d.method === 'Runtime.consoleAPICalled' && d.params.type === 'error') logs.push(JSON.stringify(d.params.args)); };
 const cmd = (method, params = {}) => new Promise(r => { const id = ++seq; waiting.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
 const ev = async (expr) => (await cmd('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result.result.value;
-const KEYS = { Tab: 9, Enter: 13, Escape: 27, Delete: 46, ' ': 32, ArrowRight: 39, ArrowLeft: 37, ArrowDown: 40, z: 90, c: 67, v: 86, b: 66, i: 73, '.': 190, F2: 113 };
+const KEYS = { Tab: 9, Enter: 13, Escape: 27, Delete: 46, ' ': 32, ArrowRight: 39, ArrowLeft: 37, ArrowDown: 40, z: 90, c: 67, v: 86, b: 66, i: 73, '.': 190, Backspace: 8, ArrowUp: 38, F2: 113 };
 async function key(k, mods = 0) { 
   const base = { key: k, code: k.length === 1 ? 'Key' + k.toUpperCase() : k, windowsVirtualKeyCode: KEYS[k], modifiers: mods };
   await cmd('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
@@ -624,6 +624,37 @@ assert.ok((await getMap()).root.children.find(c => c.text.startsWith('Cronograma
 await ev(`document.querySelector('#focus-exit').click()`);
 await sleep(300);
 assert.equal(await ev(`document.querySelector('#focus-bar').hidden`), true, 'botão sai do foco');
+
+// modo outline: lista editável; Enter cria item; Tab/Shift+Tab recua; Backspace no vazio apaga; Esc volta ao mapa
+const cronNode = async () => (await getMap()).root.children.find(c => c.text.startsWith('Cronograma'));
+await ev(`document.querySelector('#outline-btn').click()`);
+assert.equal(await ev(`!document.querySelector('#outline-view').hidden`), true, 'outline aparece');
+assert.equal(await ev(`getComputedStyle(document.querySelector('#canvas')).display`), 'none', 'mapa some');
+const countVisible = (n) => 1 + (n.collapsed ? 0 : n.children.reduce((a, c) => a + countVisible(c), 0));
+assert.equal(await ev(`document.querySelectorAll('#outline-view input').length`), countVisible((await getMap()).root), 'uma linha por nó visível');
+const q2 = (await cronNode()).children.find(c => c.text === 'Q2');
+await ev(`(() => { const i = document.querySelector('#outline-view [data-id="${q2.id}"] > .row input'); i.focus(); i.setSelectionRange(99, 99); })()`);
+await key('Enter');
+assert.equal(await ev(`document.activeElement.value`), '', 'Enter cria item vazio com foco');
+await typeText('Q3');
+await key('Enter');
+await key('Backspace');  // item vazio: apaga e volta para o anterior
+await sleep(900);
+assert.deepEqual((await cronNode()).children.map(c => c.text).filter(t => /^Q\d$/.test(t)), ['Q1', 'Q2', 'Q3'], 'Q3 criado, vazio apagado');
+assert.equal(await ev(`document.activeElement.value`), 'Q3', 'foco volta para o item anterior');
+await key('Tab');
+await sleep(900);
+assert.deepEqual((await cronNode()).children.find(c => c.text === 'Q2').children.map(c => c.text), ['Q3'], 'Tab recua para dentro de Q2');
+await key('Tab', 8);
+await sleep(900);
+assert.ok((await cronNode()).children.some(c => c.text === 'Q3'), 'Shift+Tab desrecua');
+await ev(`(() => { const i = document.activeElement; i.value = 'Q3 revisado'; })()`);
+await key('ArrowUp');  // sair da linha confirma o texto
+await sleep(900);
+assert.ok((await cronNode()).children.some(c => c.text === 'Q3 revisado'), 'edição de texto no outline');
+await key('Escape');
+assert.equal(await ev(`document.querySelector('#outline-view').hidden`), true, 'Esc volta ao mapa');
+assert.ok((await texts()).includes('Q3 revisado'), 'mapa mostra o item novo');
 
 // conflito: outra "aba" grava antes
 await sleep(900);
