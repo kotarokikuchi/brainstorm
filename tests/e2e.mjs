@@ -1099,6 +1099,28 @@ assert.equal(await ev(`document.querySelectorAll('#board-root path.laser').lengt
 assert.equal((await boardEls()).length, nBeforeLaser, 'laser não cria elementos');
 await key('v');
 
+// quadro: inserir imagem (seletor de arquivo e colar), desenhada, salva e embutida no SVG exportado
+const pngFile = `(async () => { const c = document.createElement('canvas'); c.width = 80; c.height = 40;
+  const x = c.getContext('2d'); x.fillStyle = '#e03131'; x.fillRect(0, 0, 80, 40);
+  return new File([await new Promise(r => c.toBlob(r, 'image/png'))], 'teste.png', { type: 'image/png' }); })()`;
+const nBeforeImg = (await boardEls()).length;
+await ev(`(async () => { const dt = new DataTransfer(); dt.items.add(await ${pngFile});
+  const i = document.querySelector('#board-image-input'); i.files = dt.files; i.dispatchEvent(new Event('change')); })()`);
+await sleep(1500);
+let imgEl = (await boardEls()).at(-1);
+assert.deepEqual([imgEl.type, imgEl.w, imgEl.h], ['image', 80, 40], 'imagem inserida com o tamanho natural');
+assert.equal((await fetch(BASE + `/api/maps/${boardId}/files/${imgEl.fileId}`)).headers.get('content-type'), 'image/png', 'arquivo salvo no servidor');
+assert.equal(await ev(`document.querySelectorAll('#board-root image').length`), 1, 'imagem desenhada');
+assert.equal(await selCount(), 1, 'imagem nova fica selecionada');
+await ev(`(async () => { const dt = new DataTransfer(); dt.items.add(await ${pngFile}); document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt })); })()`);
+await sleep(1500);
+assert.equal((await boardEls()).length, nBeforeImg + 2, 'Ctrl+V cola imagem');
+await ev(`document.querySelector('#export-btn').click()`);
+await ev(`document.querySelector('#export-menu [data-export="svg"]').click()`);
+await sleep(800);
+const imgSvg = await ev(`fetch(window.__downloads.at(-1)[1]).then(r => r.text())`);
+assert.ok(imgSvg.includes('href="data:image/png') && !imgSvg.includes('/api/maps/'), 'SVG exportado com a imagem embutida');
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);
