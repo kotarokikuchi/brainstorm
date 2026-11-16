@@ -103,6 +103,7 @@ async function openMap(id) {
   toolbarOn = false;
   focusId = null;
   outlineOn = false;
+  $('#history-panel').hidden = true;
   document.body.classList.remove('outline-mode');
   $('#outline-view').hidden = true;
   if (conflict) dirty = false;  // edições do mapa em conflito foram abandonadas ao sair dele
@@ -1010,7 +1011,7 @@ nodeMenu.onclick = (e) => {
 // clicar fora dos controles (cabeçalho, lista...) fecha qualquer menu aberto
 document.addEventListener('pointerdown', (e) => {
   if (!map || e.target.closest('.card, .adder, .link-anchor, .node, .link-hit, .resize-handle, #editor')) return;
-  const pops = [...nodePops, ...document.querySelectorAll('.link-pop'), $('#export-menu')];
+  const pops = [...nodePops, ...document.querySelectorAll('.link-pop'), $('#export-menu'), $('#history-panel')];
   if (pops.every(p => p.hidden)) return;
   for (const p of pops) p.hidden = true;
   render();
@@ -1655,4 +1656,49 @@ exportMenu.addEventListener('click', async (e) => {
   if (!kind) return;
   exportMenu.hidden = true;
   try { await EXPORTS[kind](); } catch (err) { alert(`Não foi possível exportar: ${err.message}`); }
+});
+
+// ---------- Histórico de versões ----------
+const historyPanel = $('#history-panel');
+
+async function loadHistory() {
+  const items = await (await api('GET', `/${map.id}/history`)).json();
+  const rows = items.map((v) => {
+    const li = document.createElement('li');
+    const info = document.createElement('div');
+    const when = document.createElement('strong');
+    when.textContent = new Date(v.saved).toLocaleString('pt-BR');
+    const what = document.createElement('small');
+    what.textContent = `${v.title} · ${v.nodes} tópico${v.nodes === 1 ? '' : 's'}`;
+    info.append(when, what);
+    const btn = document.createElement('button');
+    btn.dataset.restore = v.version;
+    btn.textContent = 'Restaurar';
+    li.append(info, btn);
+    return li;
+  });
+  if (!rows.length) {
+    const li = document.createElement('li');
+    li.textContent = 'Nenhuma versão anterior ainda.';
+    rows.push(li);
+  }
+  $('#history-list').replaceChildren(...rows);
+}
+
+$('#history-btn').onclick = async () => {
+  if (!historyPanel.hidden) { historyPanel.hidden = true; return; }
+  $('#export-menu').hidden = true;
+  await loadHistory();
+  historyPanel.hidden = false;
+};
+$('#history-close').onclick = () => { historyPanel.hidden = true; };
+$('#history-list').addEventListener('click', async (e) => {
+  const v = e.target.closest('[data-restore]')?.dataset.restore;
+  if (!v || !confirm('Restaurar esta versão? (Ctrl+Z desfaz)')) return;
+  const r = await api('GET', `/${map.id}/history/${v}`);
+  if (!r.ok) { alert('Não foi possível carregar esta versão.'); return; }
+  const old = await r.json();
+  historyPanel.hidden = true;
+  // restaurar é uma mudança como outra qualquer: entra no desfazer e é salva por cima da atual
+  mutate(() => { map.root = old.root; map.layout = old.layout ?? 'map'; map.links = old.links ?? []; });
 });
