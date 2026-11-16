@@ -392,15 +392,13 @@ async function insertImage(file, at = null) {
   }
 }
 
-// título do quadro: duplo clique no topo
-$('#title').addEventListener('dblclick', () => {
-  if (!board) return;
-  const t = prompt('Nome do quadro', board.title);
-  if (t === null || !t.trim() || t.trim() === board.title) return;
-  board.title = t.trim();
+// título do quadro (o app.js cuida da edição no topo)
+export function renameBoard(t) {
+  if (!board || !t || t === board.title) return;
+  board.title = t;
   render();
   deps.scheduleSave(board);
-});
+}
 
 // ---------- Seleção: clicar, Shift+clicar, área, mover, alças ----------
 const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
