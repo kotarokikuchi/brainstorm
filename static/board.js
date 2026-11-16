@@ -649,9 +649,9 @@ $('#board-opacity').addEventListener('change', (e) => { setProp('opacity', Numbe
 const textArea = $('#board-text');
 
 // largura/altura do texto (linhas × altura de linha), guardadas no elemento
-function measureText(e) {
+function measureText(e, text = e.text) {
   mctx.font = `${e.fontSize}px ${fontOf(e)}`;
-  const lines = e.text.split('\n');
+  const lines = text.split('\n');
   e.w = Math.max(4, ...lines.map(l => mctx.measureText(l).width));
   e.h = lines.length * lineH(e.fontSize);
 }
@@ -704,11 +704,14 @@ function commitText() {
   render();
 }
 
-textArea.addEventListener('input', () => {
+// a caixa, a nota e a moldura de seleção acompanham o texto (digitar e Enter, que insere a quebra por código)
+function textChanged() {
   const e = editingText?.el;
   if (e?.type === 'note') { fitNote(e, textArea.value); render(); }
+  if (e?.type === 'text') { measureText(e, textArea.value); render(); }
   placeTextArea();
-});
+}
+textArea.addEventListener('input', textChanged);
 // Enter quebra a linha (a caixa cresce antes, então nada rola para fora); Esc, Ctrl+Enter ou clicar fora confirmam
 textArea.addEventListener('keydown', (e) => {
   e.stopPropagation();
@@ -716,7 +719,7 @@ textArea.addEventListener('keydown', (e) => {
   else if (e.key === 'Enter') {
     e.preventDefault();
     textArea.setRangeText('\n', textArea.selectionStart, textArea.selectionEnd, 'end');
-    placeTextArea();
+    textChanged();
   }
 });
 textArea.addEventListener('blur', commitText);
