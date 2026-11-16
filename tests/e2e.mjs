@@ -141,7 +141,7 @@ assert.equal((await getMap()).version, vBefore, 'edição sem mudança não grav
 
 // revisão M5: texto em digitação protege o fechamento e a navegação encerra a edição
 const unloadBlocked = () => ev(`(() => { const e = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; })()`);
-await key('F2'); await typeText(' rascunho');
+await key('F2'); await ev(`document.querySelector('#editor').setSelectionRange(999, 999)`); await typeText(' rascunho');
 assert.equal(await unloadBlocked(), true, 'beforeunload avisa durante edição');
 await ev(`location.hash = '#/'`); await sleep(600);
 await ev(`location.hash = '#/map/demo'`); await sleep(1200);
@@ -151,6 +151,26 @@ await key('Tab');
 assert.equal(await ev(`!document.querySelector('#editor').hidden`), true, 'teclado funciona após voltar');
 await key('Escape');
 await sleep(900);
+
+// arrastar ramo: Q1 vira filho de Recursos (lado esquerdo → soltar à esquerda), placeholder aparece, Ctrl+Z desfaz
+const rect = (prefix) => ev(`(() => { const r = [...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('${prefix}')).getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
+const mouse = (type, x, y) => cmd('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 });
+
+const q1 = await rect('Q1'), recR = await rect('Recursos');
+await mouse('mousePressed', q1.x + q1.w / 2, q1.y + q1.h / 2);
+for (let i = 1; i <= 5; i++) {
+  await mouse('mouseMoved', q1.x + q1.w / 2 + (recR.x - 10 - q1.x - q1.w / 2) * i / 5, q1.y + q1.h / 2 + (recR.y + recR.h / 2 - q1.y - q1.h / 2) * i / 5);
+  await sleep(30);
+}
+assert.equal(await ev(`!!document.querySelector('#viewport .drop-placeholder')`), true, 'placeholder visível');
+await mouse('mouseReleased', recR.x - 10, recR.y + recR.h / 2);
+await sleep(900);
+const recursos = () => getMap().then(m => m.root.children.find(c => c.text.startsWith('Recursos')));
+assert.ok((await recursos()).children.some(c => c.text === 'Q1'), 'Q1 movido para Recursos');
+assert.equal(await ev(`!!document.querySelector('#viewport .drop-placeholder')`), false, 'placeholder some ao soltar');
+await key('z', 2);
+await sleep(900);
+assert.ok(!(await recursos()).children.some(c => c.text === 'Q1'), 'desfazer move de volta');
 
 // conflito: outra "aba" grava antes
 await sleep(900);

@@ -176,3 +176,67 @@ test('navigate picks nearest node in direction, else stays', () => {
   assert.equal(navigate(res.nodes, g1.id, 'left'), r1.id);
   assert.equal(navigate(res.nodes, l1.id, 'left'), l1.id);
 });
+
+// ---- Mover ramos ----
+import { moveNode, dropTarget } from '../static/model.js';
+
+test('moveNode reparents and reorders', () => {
+  const { m, r1, l1, r2, g1, g2 } = sample('map');
+  assert.equal(moveNode(m, g2.id, r1.id, 0), true);
+  assert.deepEqual(r1.children.map(n => n.id), [g2.id, g1.id]);
+  // mover para depois de si mesmo no mesmo pai ajusta o índice
+  assert.equal(moveNode(m, g2.id, r1.id, 2), true);
+  assert.deepEqual(r1.children.map(n => n.id), [g1.id, g2.id]);
+  // 1º nível → mais fundo: perde lado e cor própria (herda o novo ramo)
+  assert.equal(moveNode(m, r2.id, l1.id, 0), true);
+  assert.equal(r2.side, null);
+  assert.equal(r2.color, null);
+  assert.equal(findNode(m.root, r2.id).parent, l1);
+  // mais fundo → 1º nível: ganha lado e cor
+  assert.equal(moveNode(m, g1.id, m.root.id, 0, 'left'), true);
+  assert.equal(g1.side, 'left');
+  assert.ok(PALETTE.includes(g1.color));
+});
+
+test('moveNode refuses root, self and own descendants', () => {
+  const { m, r1, g1 } = sample('map');
+  assert.equal(moveNode(m, m.root.id, r1.id, 0), false);
+  assert.equal(moveNode(m, r1.id, r1.id, 0), false);
+  assert.equal(moveNode(m, r1.id, g1.id, 0), false);
+  assert.equal(findNode(m.root, r1.id).parent, m.root);
+});
+
+test('moveNode expands a collapsed target', () => {
+  const { m, r1, l1 } = sample('map');
+  l1.collapsed = true;
+  moveNode(m, r1.id, l1.id, 0);
+  assert.equal(l1.collapsed, false);
+});
+
+test('dropTarget: outer side of a node makes a child, inner part a sibling', () => {
+  const { m, r1, l1, g1, g2 } = sample('map');
+  const res = layout(m, measure);
+  const b = byId(res);
+  const center = (x) => [x.x + x.w / 2, x.y + x.h / 2];
+  // à direita de r1 (lado de fora) → filho de r1 no fim
+  const [, ry] = center(b[r1.id]);
+  assert.deepEqual(dropTarget(m, res.nodes, l1.id, b[r1.id].x + b[r1.id].w + 5, ry),
+    { parentId: r1.id, index: 2, side: null });
+  // metade de cima de g2, lado de dentro → irmão antes de g2
+  assert.deepEqual(dropTarget(m, res.nodes, l1.id, b[g2.id].x + 2, b[g2.id].y + 2),
+    { parentId: r1.id, index: 1, side: null });
+  // perto da raiz, à esquerda → filho da raiz no lado esquerdo
+  const root = b[m.root.id];
+  const t = dropTarget(m, res.nodes, g1.id, root.x - 5, root.y + root.h / 2);
+  assert.equal(t.parentId, m.root.id);
+  assert.equal(t.side, 'left');
+});
+
+test('dropTarget ignores the dragged branch itself', () => {
+  const { m, r1, g1 } = sample('map');
+  const res = layout(m, measure);
+  const g = byId(res)[g1.id];
+  const t = dropTarget(m, res.nodes, r1.id, g.x + g.w / 2, g.y + g.h / 2);
+  assert.notEqual(t?.parentId, g1.id);
+  assert.notEqual(t?.parentId, r1.id);
+});
