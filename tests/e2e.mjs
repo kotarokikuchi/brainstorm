@@ -1169,6 +1169,20 @@ await dbl(nb.x + nb.w / 2, nb.y + nb.h / 2);
 assert.equal(await ev(`document.querySelector('#board-text').value`), note.text, 'duplo clique reedita a nota');
 await key('Escape');
 
+// quadro: clicar fora conclui a nota/texto sem perder o que foi digitado (antes: criava outro e sumia)
+for (const [tool, x] of [['n', 300], ['t', 800]]) {
+  const before = (await boardEls()).length;
+  await key(tool);
+  await click(cv.x + x, cv.y + 150);
+  await typeText('123');
+  await sleep(500);
+  await click(cv.x + x + 250, cv.y + 450);  // fora
+  await sleep(900);
+  const els = await boardEls();
+  assert.deepEqual([els.length, els.at(-1).text], [before + 1, '123'], `clicar fora salva (${tool})`);
+  assert.equal(await ev(`document.querySelector('#board-text').hidden`), true);
+}
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);

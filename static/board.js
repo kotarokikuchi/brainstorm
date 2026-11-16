@@ -187,6 +187,9 @@ const toWorld = (e) => {
 
 svg.addEventListener('pointerdown', (e) => {
   if (!board) return;
+  // editando texto/nota: o clique só conclui a edição (com a ferramenta Texto ou Nota ainda ativa,
+  // ele criaria outro elemento e a edição atual se perderia sem salvar)
+  if (editingText) { e.preventDefault(); commitText(); return; }
   const badge = e.target.closest?.('.link-badge');
   if (badge && e.button === 0) {
     const url = safeUrl(board.elements.find(x => x.id === badge.dataset.id)?.link);
