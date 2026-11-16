@@ -1466,6 +1466,20 @@ await cmd('Page.reload'); await sleep(1500);
 assert.equal(await ev(`document.querySelector('#sort').value`), 'za', 'ordenação lembrada depois de recarregar');
 await ev(`(() => { const s = document.querySelector('#sort'); s.value = 'recent'; s.dispatchEvent(new Event('change')); })()`);
 
+// busca também na lixeira (pelo nome), mesmo dentro de uma pasta
+await fetch(BASE + '/api/maps/lixo-teste', { method: 'PUT', body: JSON.stringify({ version: 0, type: 'board', title: 'Lixo de teste', elements: [] }) });
+await fetch(BASE + '/api/maps/lixo-teste', { method: 'DELETE' });
+await ev(`location.hash = '#/folder/${dest.id}'`); await sleep(1000);
+await ev(`document.querySelector('#search').focus()`);
+await typeText('lixo de');
+await sleep(300);
+assert.equal(await shownSel('#trash'), true, 'lixeira aparece na busca');
+assert.equal(await ev(`document.querySelector('#trash').open`), true, 'aberta');
+assert.deepEqual(await ev(`[...document.querySelectorAll('#trash-list li span')].map(s => s.textContent)`), ['Lixo de teste'], 'só o que bate com a busca');
+assert.equal(await shownSel('#empty'), false, 'sem "nada encontrado" quando só a lixeira tem resultado');
+await key('Escape');
+assert.equal(await shownSel('#trash'), false, 'sem busca, dentro da pasta, lixeira some');
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);
