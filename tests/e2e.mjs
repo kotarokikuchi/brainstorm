@@ -343,6 +343,23 @@ assert.equal(newLink.from, cron.id);
 assert.deepEqual([newLink.fromSide, newLink.toSide], ['top', 'top'], 'lados gravados');
 assert.deepEqual(await anchorsShown(), [], '"+" somem ao terminar');
 
+// mover o destino da ligação: arrastar a ponta da seta selecionada para outro nó; Ctrl+Z desfaz
+await ev(`document.querySelector('#viewport .link-hit').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
+const endTo = await ev(`(() => { const r = document.querySelector('#viewport .link-end[data-which="to"]').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
+const [ex0, ey0] = center(endTo), [ox, oy] = center(await rect('Orçamento'));
+await mouse('mousePressed', ex0, ey0);
+for (let i = 1; i <= 5; i++) { await mouse('mouseMoved', ex0 + (ox - ex0) * i / 5, ey0 + (oy - ey0) * i / 5); await sleep(30); }
+assert.equal(await ev(`!!document.querySelector('#viewport .link-target')`), true, 'novo destino destacado');
+await mouse('mouseReleased', ox, oy);
+await sleep(900);
+const orc = (await recursos()).children.find(c => c.text === 'Orçamento');
+const first = (await getMap()).links[0];
+assert.equal(first.to, orc.id, 'destino movido');
+assert.ok(first.toSide, 'lado de chegada gravado');
+await key('z', 2);
+await sleep(900);
+assert.notEqual((await getMap()).links[0].to, orc.id, 'desfazer volta ao destino antigo');
+
 // conflito: outra "aba" grava antes
 await sleep(900);
 const cur = await getMap();
