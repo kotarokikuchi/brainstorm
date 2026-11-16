@@ -246,11 +246,14 @@ function renderList() {
     li.append(a, time, btn('Mover', 'moveDoc', it.id), btn('Duplicar', 'duplicate', it.id), btn('Apagar', 'delete', it.id));
     return li;
   }));
-  $('#empty').hidden = subfolders.length + docs.length > 0;
+  const trashShown = query ? searchItems(tree, trash, query).docs : trash;
+  $('#empty').hidden = subfolders.length + docs.length > 0 || (!!query && trashShown.length > 0);
   $('#empty').textContent = query ? `Nada encontrado para “${query}”.` : listFolder ? 'Pasta vazia.' : 'Nenhum mapa ainda. Crie o primeiro.';
-  $('#trash').hidden = !trash.length || !!listFolder || !!query;  // lixeira só no Início
-  $('#trash summary').textContent = `Lixeira (${trash.length})`;
-  $('#trash-list').replaceChildren(...trash.map(t => {
+  // lixeira só no Início; buscando, aparece (aberta) com o que bate com a busca, de qualquer pasta
+  $('#trash').hidden = !trashShown.length || (!!listFolder && !query);
+  if (query && trashShown.length) $('#trash').open = true;
+  $('#trash summary').textContent = `Lixeira (${trashShown.length})`;
+  $('#trash-list').replaceChildren(...trashShown.map(t => {
     const li = document.createElement('li');
     const name = document.createElement('span');
     name.textContent = t.title || '(sem título)';
