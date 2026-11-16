@@ -2,6 +2,7 @@ import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
   History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, toMarkdown, slides, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
 } from './model.js';
+import { folderOf, childFolders, folderPath, removeFolder, placeDoc } from './folders.js';
 import { initBoard, openBoard, closeBoard, currentBoard, newBoard, boardSvg, boardPlace } from './board.js';
 
 const $ = (s) => document.querySelector(s);
@@ -73,21 +74,63 @@ async function route() {
     retryTimer = null;
   }
   closeBoard();
-  if (m?.[1] === 'board') { map = null; openBoard(m[2]); } else if (m) openMap(m[2]); else showList();
+  if (m) { await loadTree(); $('.brand').href = folderHref(folderOf(tree, m[2])); }  // voltar cai na pasta do documento
+  if (m?.[1] === 'board') { map = null; openBoard(m[2]); } else if (m) openMap(m[2]);
+  else showList(location.hash.match(/^#\/folder\/([a-z0-9-]+)$/)?.[1] ?? null);
+}
+
+// ---------- Pastas ----------
+let tree = { version: 0, folders: [], place: {} }, listFolder = null;
+const folderHref = (id) => (id ? `#/folder/${id}` : '#/');
+async function loadTree() {
+  const r = await fetch('/api/folders');
+  if (r.ok) tree = await r.json();
+}
+// grava as pastas; se outra aba gravou antes (409), reaplica a mudança sobre a versão nova
+async function saveTree(change) {
+  for (let i = 0; i < 2; i++) {
+    const r = await fetch('/api/folders', { method: 'PUT', body: JSON.stringify(change(tree)) });
+    if (r.ok) { tree = await r.json(); return true; }
+    if (r.status !== 409) break;
+    tree = await r.json();
+  }
+  alert('Não foi possível salvar as pastas.');
+  return false;
 }
 
 // ---------- Lista de mapas ----------
-async function showList() {
+async function showList(folderId = null) {
   map = null;
   document.body.dataset.view = 'list';
-  const [items, trash] = await Promise.all([api('GET').then(r => r.json()), fetch('/api/trash').then(r => r.json())]);
+  $('.brand').href = '#/';
+  const [items, trash] = await Promise.all([api('GET').then(r => r.json()), fetch('/api/trash').then(r => r.json()), loadTree()]);
+  listFolder = tree.folders.some(f => f.id === folderId) ? folderId : null;
+  // trilha: Meus mapas › Trabalho › Clientes
+  const crumbs = [{ id: null, name: 'Meus mapas' }, ...folderPath(tree, listFolder)];
+  $('#list-title').replaceChildren(...crumbs.flatMap((c, i) => {
+    const a = document.createElement('a');
+    a.href = folderHref(c.id);
+    a.textContent = c.name;
+    return i ? [Object.assign(document.createElement('span'), { className: 'crumb-sep', textContent: '›' }), a] : [a];
+  }));
   const btn = (text, data, value) => {
     const b = document.createElement('button');
     b.textContent = text;
     b.dataset[data] = value;
     return b;
   };
-  $('#maps').replaceChildren(...items.map(it => {
+  const subfolders = childFolders(tree, listFolder).map(f => {
+    const li = document.createElement('li');
+    li.classList.add('folder');
+    const a = document.createElement('a');
+    a.href = folderHref(f.id);
+    a.innerHTML = '<svg viewBox="0 0 24 24"><use href="#i-folder"/></svg>';
+    a.append(f.name);
+    li.append(a, btn('Renomear', 'renameFolder', f.id), btn('Apagar', 'deleteFolder', f.id));
+    return li;
+  });
+  const docs = items.filter(it => folderOf(tree, it.id) === listFolder);
+  $('#maps').replaceChildren(...subfolders, ...docs.map(it => {
     const li = document.createElement('li');
     const a = document.createElement('a');
     const kind = it.type === 'board' ? 'board' : 'map';
@@ -100,8 +143,9 @@ async function showList() {
     li.append(a, time, btn('Duplicar', 'duplicate', it.id), btn('Apagar', 'delete', it.id));
     return li;
   }));
-  $('#empty').hidden = items.length > 0;
-  $('#trash').hidden = !trash.length;
+  $('#empty').hidden = subfolders.length + docs.length > 0;
+  $('#empty').textContent = listFolder ? 'Pasta vazia.' : 'Nenhum mapa ainda. Crie o primeiro.';
+  $('#trash').hidden = !trash.length || !!listFolder;  // lixeira só no Início
   $('#trash summary').textContent = `Lixeira (${trash.length})`;
   $('#trash-list').replaceChildren(...trash.map(t => {
     const li = document.createElement('li');
@@ -117,11 +161,28 @@ async function showList() {
 // lista: duplicar / mover para a lixeira (dá para restaurar, então não pergunta)
 $('#maps').addEventListener('click', async (e) => {
   const d = e.target.closest('button')?.dataset;
-  if (d?.duplicate) await fetch(`/api/maps/${d.duplicate}/duplicate`, { method: 'POST' });
-  else if (d?.delete) await api('DELETE', `/${d.delete}`);
-  else return;
-  showList();
+  if (d?.duplicate) {
+    const r = await fetch(`/api/maps/${d.duplicate}/duplicate`, { method: 'POST' });
+    if (r.ok && listFolder) { const { id } = await r.json(); await saveTree(t => placeDoc(t, id, listFolder)); }  // cópia na mesma pasta
+  } else if (d?.delete) await api('DELETE', `/${d.delete}`);
+  else if (d?.renameFolder) {
+    const f = tree.folders.find(x => x.id === d.renameFolder);
+    const name = prompt('Nome da pasta', f?.name)?.trim();
+    if (!f || !name || name === f.name) return;
+    await saveTree(t => ({ ...t, folders: t.folders.map(x => (x.id === f.id ? { ...x, name } : x)) }));
+  } else if (d?.deleteFolder) {
+    const f = tree.folders.find(x => x.id === d.deleteFolder);
+    if (!f || !confirm(`Apagar a pasta "${f.name}"? O que está dentro dela vai para a pasta de cima.`)) return;
+    await saveTree(t => removeFolder(t, f.id));
+  } else return;
+  showList(listFolder);
 });
+$('#new-folder').onclick = async () => {
+  const name = prompt('Nome da nova pasta')?.trim();
+  if (!name) return;
+  const parent = listFolder;
+  if (await saveTree(t => ({ ...t, folders: [...t.folders, { id: uid(), name: name.slice(0, 200), parent }] }))) showList(parent);
+};
 $('#trash-list').addEventListener('click', async (e) => {
   const d = e.target.closest('button')?.dataset;
   if (d?.restore) {
@@ -131,12 +192,13 @@ $('#trash-list').addEventListener('click', async (e) => {
     if (!confirm('Apagar de vez? Isso não pode ser desfeito.')) return;
     await fetch(`/api/trash/${d.purge}`, { method: 'DELETE' });
   } else return;
-  showList();
+  showList(listFolder);
 });
 
 $('#new-board').onclick = async () => {
   const b = newBoard(uid());
   const r = await api('PUT', `/${b.id}`, b);
+  if (r.ok && listFolder) await saveTree(t => placeDoc(t, b.id, listFolder));  // nasce na pasta aberta
   if (r.ok) location.hash = `#/board/${b.id}`;
   else alert('Não foi possível criar o quadro.');
 };
@@ -144,6 +206,7 @@ $('#new-board').onclick = async () => {
 $('#new-map').onclick = async () => {
   const m = newMap(uid());
   const r = await api('PUT', `/${m.id}`, m);
+  if (r.ok && listFolder) await saveTree(t => placeDoc(t, m.id, listFolder));  // nasce na pasta aberta
   if (r.ok) location.hash = `#/map/${m.id}`;
   else alert('Não foi possível criar o mapa.');
 };
