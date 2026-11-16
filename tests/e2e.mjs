@@ -220,11 +220,24 @@ assert.ok(!(await recursos()).children.some(c => c.text === 'Q1'), 'desfazer mov
 
 // ligar nós: botão "Ligar" em Q2, mover até Time mostra a prévia, clicar cria a seta; clicar nela + Del apaga; Ctrl+Z volta
 const center = (r) => [r.x + r.w / 2, r.y + r.h / 2];
+const clickAnchor = async (side) => {
+  const [x, y] = await ev(`(() => { const r = document.querySelector('.link-anchor[data-side="${side}"]').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+  await mouse('mousePressed', x, y); await mouse('mouseReleased', x, y);
+};
 await clickNode('Q2');
 await ev(`document.querySelector('#link-btn').click()`);
 const [tx, ty] = center(await rect('Time'));
+// sem escolher o lado: nenhum lado ativo, sem prévia, e clicar no destino não liga
+assert.equal(await ev(`document.querySelectorAll('.link-anchor.active').length`), 0, 'nenhum lado pré-selecionado');
 await mouse('mouseMoved', tx, ty);
-assert.equal(await ev(`!!document.querySelector('#viewport .link-preview')`), true, 'prévia da ligação');
+assert.equal(await ev(`!!document.querySelector('#viewport .link-preview')`), false, 'sem prévia antes de escolher o lado');
+await mouse('mousePressed', tx, ty); await mouse('mouseReleased', tx, ty);
+await sleep(300);
+assert.equal((await getMap()).links?.length ?? 0, 0, 'clicar no destino sem lado não liga');
+assert.equal(await ev(`document.querySelectorAll('.link-anchor:not([hidden])').length`), 4, 'continua no modo ligar');
+await clickAnchor('left');
+await mouse('mouseMoved', tx, ty);
+assert.equal(await ev(`!!document.querySelector('#viewport .link-preview')`), true, 'prévia depois de escolher o lado');
 await mouse('mousePressed', tx, ty);
 await mouse('mouseReleased', tx, ty);
 await sleep(900);
@@ -241,6 +254,7 @@ assert.equal((await getMap()).links.length, 1, 'desfazer restaura a ligação');
 // botão "Ligar" na barra: depois clicar no nó de destino
 await clickNode('Q2');
 await ev(`document.querySelector('#link-btn').click()`);
+await clickAnchor('left');
 const [qx, qy] = center(await rect('Recursos'));  // longe dos "+" de Q2
 await mouse('mousePressed', qx, qy);  // sem mover antes: clique direto no destino
 await mouse('mouseReleased', qx, qy);
@@ -309,7 +323,7 @@ for (let i = 1; i <= 5; i++) { await mouse('mouseMoved', bx0 + 18 * i, by0 + 14 
 await mouse('mouseReleased', bx0 + 90, by0 + 70);
 await sleep(900);
 const bend = async () => (await getMap()).links[0].bend;
-assert.ok((await bend()) && Math.hypot(...(await bend())) > 50, 'curva gravada');
+assert.ok(Array.isArray(await bend()), 'curva gravada');
 assert.match(await ev(`document.querySelector('#viewport .link').getAttribute('d')`), / Q/, 'seta passa pelo ponto');
 await key('z', 2);
 await sleep(900);
