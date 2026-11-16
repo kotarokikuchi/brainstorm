@@ -28,7 +28,7 @@ ws.onmessage = (m) => { const d = JSON.parse(m.data);
   if (d.method === 'Runtime.consoleAPICalled' && d.params.type === 'error') logs.push(JSON.stringify(d.params.args)); };
 const cmd = (method, params = {}) => new Promise(r => { const id = ++seq; waiting.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
 const ev = async (expr) => (await cmd('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result.result.value;
-const KEYS = { Tab: 9, Enter: 13, Escape: 27, Delete: 46, ' ': 32, ArrowRight: 39, ArrowLeft: 37, ArrowDown: 40, z: 90, F2: 113 };
+const KEYS = { Tab: 9, Enter: 13, Escape: 27, Delete: 46, ' ': 32, ArrowRight: 39, ArrowLeft: 37, ArrowDown: 40, z: 90, c: 67, v: 86, F2: 113 };
 async function key(k, mods = 0) { 
   const base = { key: k, code: k.length === 1 ? 'Key' + k.toUpperCase() : k, windowsVirtualKeyCode: KEYS[k], modifiers: mods };
   await cmd('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
@@ -200,6 +200,58 @@ await mouse('mousePressed', qx, qy);  // sem mover antes: clique direto no desti
 await mouse('mouseReleased', qx, qy);
 await sleep(900);
 assert.equal((await getMap()).links.length, 2, 'botão Ligar cria ligação');
+
+// menu "⋯" do nó: itens, copiar/colar pelo menu e por Ctrl+C/Ctrl+V, novo filho, Esc fecha
+const menuOpen = () => ev(`!document.querySelector('#node-menu').hidden`);
+const menu = (action) => ev(`document.querySelector('#node-menu [data-action="${action}"]').click()`);
+await clickNode('Q2');
+await ev(`document.querySelector('#more-btn').click()`);
+assert.equal(await menuOpen(), true, 'menu abre');
+assert.deepEqual(await ev(`[...document.querySelectorAll('#node-menu [data-action]')].map(b => b.dataset.action)`),
+  ['child', 'sibling', 'collapse', 'link', 'copy', 'paste', 'delete']);
+await menu('copy');
+assert.equal(await menuOpen(), false, 'menu fecha após ação');
+await clickNode('Time');
+await ev(`document.querySelector('#more-btn').click()`);
+await menu('paste');
+await sleep(900);
+const timeKids = async () => (await recursos()).children.find(c => c.text === 'Time').children.map(c => c.text);
+assert.deepEqual(await timeKids(), ['Q2'], 'colar pelo menu');
+await clickNode('Q1');
+await key('c', 2);
+await clickNode('Time');
+await key('v', 2);
+await sleep(900);
+assert.deepEqual(await timeKids(), ['Q2', 'Q1'], 'Ctrl+C / Ctrl+V');
+await ev(`document.querySelector('#more-btn').click()`);
+await menu('child');
+assert.equal(await ev(`!document.querySelector('#editor').hidden`), true, 'novo filho pelo menu');
+await key('Escape');
+await ev(`document.querySelector('#more-btn').click()`);
+await key('Escape');
+assert.equal(await menuOpen(), false, 'Esc fecha o menu');
+await sleep(900);
+
+// clicar fora: fundo do mapa fecha menus e tira a seleção; cabeçalho só fecha menus; setas voltam a selecionar
+const emptyPoint = () => ev(`(() => { for (let y = 120; y < 700; y += 20) for (let x = 20; x < 1300; x += 20) if (document.elementFromPoint(x, y)?.id === 'canvas') return [x, y]; })()`);
+const visible = (sel) => ev(`!document.querySelector('${sel}').hidden`);
+await clickNode('Q2');
+await ev(`document.querySelector('#more-btn').click()`);
+assert.equal(await visible('#node-menu'), true);
+await mouse('mousePressed', 300, 25); await mouse('mouseReleased', 300, 25);  // cabeçalho
+assert.equal(await visible('#node-menu'), false, 'clicar no cabeçalho fecha o menu');
+assert.equal(await visible('#toolbar'), true, 'cabeçalho mantém a seleção');
+await ev(`document.querySelector('#style-btn').click()`);
+const [ex, ey] = await emptyPoint();
+await mouse('mousePressed', ex, ey); await mouse('mouseReleased', ex, ey);
+assert.equal(await visible('#style-pop'), false, 'fundo fecha o estilo');
+assert.equal(await visible('#toolbar'), false, 'fundo esconde a barra');
+assert.equal(await visible('#add-child'), false, 'fundo esconde o +');
+assert.equal(await ev(`!!document.querySelector('.selected-ring')`), false, 'nada selecionado');
+await key('Delete');  // sem seleção: não faz nada nem quebra
+await key('ArrowRight');
+assert.equal(await ev(`!!document.querySelector('.selected-ring')`), true, 'seta seleciona de novo');
+await sleep(900);
 
 // conflito: outra "aba" grava antes
 await sleep(900);

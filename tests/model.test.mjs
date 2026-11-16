@@ -282,3 +282,30 @@ test('linkPath draws a curve between the nearest sides', () => {
   const l1 = { x: -80, y: 0, w: 40, h: 20 }, l2 = { x: -80, y: 200, w: 40, h: 20 };
   assert.match(linkPath(l1, l2), /^M-80,10 C.* -80,210$/);
 });
+
+// ---- Copiar/colar ramo ----
+import { pasteBranch } from '../static/model.js';
+
+test('pasteBranch inserts a deep copy with fresh ids', () => {
+  const { m, r1, l1, g1 } = sample('map');
+  const copy = JSON.parse(JSON.stringify(r1));
+  const n = pasteBranch(m, l1.id, copy);
+  assert.equal(findNode(m.root, n.id).parent, l1);
+  assert.equal(n.text, r1.text);
+  assert.equal(n.children.length, 2);
+  assert.notEqual(n.id, r1.id);
+  assert.notEqual(n.children[0].id, g1.id);
+  // 1º nível colado mais fundo: sem lado, herda a cor do novo ramo
+  assert.equal(n.side, null);
+  assert.equal(n.color, null);
+  // colar de novo não compartilha objetos com a cópia anterior
+  const n2 = pasteBranch(m, l1.id, copy);
+  assert.notEqual(n2.children[0].id, n.children[0].id);
+});
+
+test('pasteBranch under root gets side and color', () => {
+  const { m, g1 } = sample('map');
+  const n = pasteBranch(m, m.root.id, JSON.parse(JSON.stringify(g1)));
+  assert.ok(n.side === 'left' || n.side === 'right');
+  assert.ok(PALETTE.includes(n.color));
+});
