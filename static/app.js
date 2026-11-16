@@ -1,6 +1,6 @@
 import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
-  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, sideToward, cloudPath, branchBounds, MARKERS, markerShape, safeColor,
+  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, sideToward, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
 } from './model.js';
 
 const $ = (s) => document.querySelector(s);
@@ -97,12 +97,19 @@ async function openMap(id) {
 const ctx = document.createElement('canvas').getContext('2d');
 const FONT = getComputedStyle(document.body).fontFamily;
 const fontFor = (depth) => depth === 0 ? `700 24px ${FONT}` : depth === 1 ? `600 15px ${FONT}` : `400 14px ${FONT}`;
-function measure(text, depth) {
+const PAD = [24, 36, 20], BASE_H = [44, 36, 28], LINE_H = [30, 20, 18];
+const lvl = (depth) => Math.min(depth, 2);
+
+// linhas do texto: uma só, ou quebradas para caber na largura fixa do nó (redimensionado)
+function linesFor(text, depth, width) {
   ctx.font = fontFor(depth);
-  const w = Math.max(ctx.measureText(text).width, 30);
-  if (depth === 0) return { w: w + 24, h: 44 };
-  if (depth === 1) return { w: w + 36, h: 36 };
-  return { w: w + 20, h: 28 };
+  return width ? wrapLines(text, width - PAD[lvl(depth)], (t) => ctx.measureText(t).width) : [text];
+}
+
+function measure(text, depth, width) {
+  const lines = linesFor(text, depth, width), d = lvl(depth);
+  const textW = Math.max(30, ...lines.map(l => ctx.measureText(l).width));
+  return { w: Math.max(width ?? 0, textW + PAD[d]), h: BASE_H[d] + (lines.length - 1) * LINE_H[d] };
 }
 
 const el = (tag, attrs = {}, parent) => {
@@ -187,7 +194,12 @@ function drawNode(b) {
     x: b.x + b.w / 2, y: b.y + b.h / 2, 'text-anchor': 'middle', 'dominant-baseline': 'central',
     fill: solid ? textOn(b.color) : '#1d1d2b', style: `font: ${fontFor(b.depth)}`,
   }, g);
-  t.textContent = editing?.id === b.id ? '' : n.text;
+  const lines = editing?.id === b.id ? [''] : linesFor(n.text, b.depth, n.width);
+  if (lines.length === 1) t.textContent = lines[0];
+  else {
+    const lh = LINE_H[lvl(b.depth)], y0 = b.y + b.h / 2 - (lines.length - 1) * lh / 2;
+    lines.forEach((line, i) => { el('tspan', { x: b.x + b.w / 2, y: y0 + i * lh }, t).textContent = line; });
+  }
   if (b.id === selected && !selectedLink) {
     el('rect', { class: 'selected-ring', x: b.x - 4, y: b.y - 4, width: b.w + 8, height: b.h + 8, rx: 8 }, g);
   }
@@ -749,12 +761,20 @@ function drawLinks() {
     return;
   }
   svg.classList.remove('linking');
-  // bolinha no canto do nó selecionado: arrastar dela até outro nó cria a ligação
-  if (from && !editing && !drag?.active && !selectedLink) {
-    const h = el('circle', { class: 'link-handle', cx: from.x + from.w + 4, cy: from.y + from.h + 4, r: 6 }, viewport);
+  // bolinha no canto de fora do nó selecionado: arrastar muda a largura; duplo clique volta ao automático
+  if (from && toolbarOn && !editing && !drag?.active && !selectedLink) {
+    const n = findNode(map.root, from.id).node;
+    const left = map.layout === 'map' && from.side === 'left';
+    const h = el('circle', { class: 'resize-handle', cx: left ? from.x - 4 : from.x + from.w + 4, cy: from.y + from.h + 4, r: 6 }, viewport);
     h.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
-      linking = { from: from.id, target: null };
+      // nó centralizado (raiz, organograma) cresce para os dois lados: dobra o deslocamento
+      const factor = from.depth === 0 || map.layout === 'org' ? 2 : 1;
+      resizing = { node: n, sx: toWorld(e)[0], w0: from.w, sign: left ? -1 : 1, factor, pushed: false };
+    });
+    h.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      if (n.width) mutate(() => { delete n.width; });
     });
   }
 }
@@ -868,7 +888,7 @@ nodeMenu.onclick = (e) => {
 
 // clicar fora dos controles (cabeçalho, lista...) fecha qualquer menu aberto
 document.addEventListener('pointerdown', (e) => {
-  if (!map || e.target.closest('.card, .adder, .link-anchor, .node, .link-hit, .link-handle, #editor')) return;
+  if (!map || e.target.closest('.card, .adder, .link-anchor, .node, .link-hit, .resize-handle, #editor')) return;
   const pops = [stylePop, nodeMenu, ...document.querySelectorAll('.link-pop')];
   if (pops.every(p => p.hidden)) return;
   for (const p of pops) p.hidden = true;
@@ -1067,3 +1087,21 @@ linkMenu.onclick = (e) => {
   if (a === 'label') editLinkLabel();
   if (a === 'delete') deleteSelected();
 };
+
+// ---------- Redimensionar nó ----------
+let resizing = null;  // {node, sx, w0, sign, factor, pushed} enquanto arrasta a bolinha
+
+window.addEventListener('pointermove', (e) => {
+  if (!resizing) return;
+  const r = resizing, dx = toWorld(e)[0] - r.sx;
+  if (!r.pushed) { history.push(snapshot()); r.pushed = true; }
+  r.node.width = Math.max(60, Math.round(r.w0 + dx * r.sign * r.factor));
+  render();
+});
+
+window.addEventListener('pointerup', () => {
+  if (!resizing) return;
+  if (resizing.pushed) scheduleSave();
+  resizing = null;
+  render();
+});

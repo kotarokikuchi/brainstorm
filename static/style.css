@@ -94,7 +94,7 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 /* Ligações */
 #canvas.linking, #canvas.linking .node { cursor: crosshair; }
 .link-hit { cursor: pointer; }
-.link-handle { cursor: crosshair; fill: #fff; stroke: #22a559; stroke-width: 2; }
+.resize-handle { cursor: ew-resize; fill: #fff; stroke: #22a559; stroke-width: 2; }
 .link-preview, .link-target { pointer-events: none; }
 
 /* Menu do nó */

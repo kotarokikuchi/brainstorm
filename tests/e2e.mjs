@@ -14,7 +14,7 @@ const chrome = spawn('google-chrome', ['--headless=new', '--disable-gpu', '--rem
   '--window-size=1400,800', '--user-data-dir=' + join(tmp, 'chrome'), 'about:blank'], { stdio: 'ignore' });
 process.on('exit', () => { chrome.kill(); server.kill(); rmSync(tmp, { recursive: true, force: true }); });
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(1));
-setTimeout(() => { console.error('E2E timeout'); process.exit(1); }, 45000).unref();
+setTimeout(() => { console.error('E2E timeout'); process.exit(1); }, 90000).unref();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 let targets;
 for (let i = 0; i < 50; i++) { try { targets = await (await fetch('http://127.0.0.1:9333/json')).json(); break; } catch { await sleep(200); } }
@@ -216,14 +216,14 @@ await key('z', 2);
 await sleep(900);
 assert.ok(!(await recursos()).children.some(c => c.text === 'Q1'), 'desfazer move de volta');
 
-// ligar nós: arrastar da bolinha de Q2 até Time cria a seta; clicar nela + Del apaga; Ctrl+Z volta
+// ligar nós: botão "Ligar" em Q2, mover até Time mostra a prévia, clicar cria a seta; clicar nela + Del apaga; Ctrl+Z volta
 const center = (r) => [r.x + r.w / 2, r.y + r.h / 2];
 await clickNode('Q2');
-const hd = await ev(`(() => { const r = document.querySelector('#viewport .link-handle').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
-const [hx, hy] = center(hd), [tx, ty] = center(await rect('Time'));
-await mouse('mousePressed', hx, hy);
-for (let i = 1; i <= 5; i++) { await mouse('mouseMoved', hx + (tx - hx) * i / 5, hy + (ty - hy) * i / 5); await sleep(30); }
+await ev(`document.querySelector('#link-btn').click()`);
+const [tx, ty] = center(await rect('Time'));
+await mouse('mouseMoved', tx, ty);
 assert.equal(await ev(`!!document.querySelector('#viewport .link-preview')`), true, 'prévia da ligação');
+await mouse('mousePressed', tx, ty);
 await mouse('mouseReleased', tx, ty);
 await sleep(900);
 assert.equal((await getMap()).links.length, 1, 'ligação gravada');
@@ -411,6 +411,31 @@ await pick('shape', 'color', '#2f5bea');
 assert.equal(await ev(`${timeG}.querySelector('rect[stroke]').getAttribute('fill')`), '#2f5bea', 'cor em nó comum preenche');
 await key('Escape');
 await sleep(900);
+
+// redimensionar: bolinha no canto do nó selecionado muda a largura; texto quebra; duplo clique volta ao automático
+const timeNode = async () => (await recursos()).children.find(c => c.text.startsWith('Equipe') || c.text === 'Time');
+await clickNode('Time');
+await key('F2'); await typeText('Equipe do projeto e responsabilidades'); await key('Enter');
+await sleep(300);
+await clickNode('Equipe');
+const rh = await ev(`(() => { const r = document.querySelector('#viewport .resize-handle').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
+const [rx0, ry0] = center(rh);
+const wBefore = (await rect('Equipe')).w;
+// Time fica no lado esquerdo: a bolinha está no canto de fora (esquerda) e arrastar para a direita estreita
+await mouse('mousePressed', rx0, ry0);
+for (let i = 1; i <= 5; i++) { await mouse('mouseMoved', rx0 + 20 * i, ry0); await sleep(30); }
+await mouse('mouseReleased', rx0 + 100, ry0);
+await sleep(900);
+const tn = await timeNode();
+assert.ok(tn.width && tn.width < wBefore, `largura gravada menor (${tn.width} < ${wBefore})`);
+assert.ok(await ev(`[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('Equipe')).querySelectorAll('tspan').length`) > 1, 'texto quebra em linhas');
+await ev(`document.querySelector('#viewport .resize-handle').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
+await sleep(900);
+assert.equal((await timeNode()).width, undefined, 'duplo clique volta ao automático');
+await key('z', 2);
+await sleep(900);
+assert.ok((await timeNode()).width, 'desfazer restaura a largura');
+assert.equal(await ev(`!!document.querySelector('#viewport .link-handle')`), false, 'bolinha não cria mais ligação');
 
 // conflito: outra "aba" grava antes
 await sleep(900);
