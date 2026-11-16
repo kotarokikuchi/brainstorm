@@ -996,6 +996,26 @@ assert.equal(await ev(`!document.querySelector('#board-help').hidden`), true, '?
 await key('Escape');
 assert.equal(await ev(`document.querySelector('#board-help').hidden`), true);
 
+// quadro: menus do topo fecham ao clicar fora e ao clicar de novo no próprio botão
+const shownSel = (sel) => ev(`!document.querySelector('${sel}').hidden`);
+await ev(`document.querySelector('#map-menu-btn').click()`);
+assert.equal(await shownSel('#map-menu'), true, 'menu do quadro abre');
+await click(cv.x + 1100, cv.y + 560);  // lousa vazia
+assert.equal(await shownSel('#map-menu'), false, 'clicar fora fecha o menu do quadro');
+const mb = await ev(`(() => { const r = document.querySelector('#map-menu-btn').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+await click(mb[0], mb[1]);
+assert.equal(await shownSel('#map-menu'), true);
+await click(mb[0], mb[1]);
+assert.equal(await shownSel('#map-menu'), false, 'clicar de novo no ⋯ fecha');
+await ev(`document.querySelector('#export-btn').click()`);
+await click(mb[0], mb[1]);
+assert.equal(await shownSel('#export-menu'), false, 'abrir um menu do topo fecha o outro');
+assert.equal(await shownSel('#map-menu'), true);
+await click(cv.x + 1100, cv.y + 560);
+await key('?');
+await click(cv.x + 1100, cv.y + 560);
+assert.equal(await shownSel('#board-help'), false, 'clicar fora fecha os atalhos');
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);
