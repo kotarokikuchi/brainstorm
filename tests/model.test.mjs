@@ -329,32 +329,6 @@ test('linkPath with bend passes through the handle and leaves by the nearest sid
   assert.match(d, /Q120,600 /);
 });
 
-// ---- Irmão antes / inserir pai ----
-import { insertParent } from '../static/model.js';
-
-test('addSibling with before=true inserts ahead of the node', () => {
-  const { m, r1, g1, g2 } = sample('map');
-  const s = addSibling(m, g2.id, true);
-  assert.deepEqual(r1.children.map(n => n.id), [g1.id, s.id, g2.id]);
-});
-
-test('insertParent puts a new node between the node and its parent', () => {
-  const { m, r1, g1, g2 } = sample('map');
-  const p = insertParent(m, g2.id);
-  assert.deepEqual(r1.children.map(n => n.id), [g1.id, p.id]);
-  assert.deepEqual(p.children.map(n => n.id), [g2.id]);
-  assert.equal(p.text, '');
-  // em 1º nível: o novo pai assume lado e cor; o antigo passa a herdar
-  const side = r1.side, color = r1.color;
-  const p2 = insertParent(m, r1.id);
-  assert.equal(findNode(m.root, p2.id).parent, m.root);
-  assert.equal(p2.side, side);
-  assert.equal(p2.color, color);
-  assert.equal(r1.side, null);
-  assert.equal(r1.color, null);
-  assert.equal(insertParent(m, m.root.id), null);
-});
-
 // ---- Estilo do nó: nuvem e contorno do ramo ----
 import { cloudPath, branchBounds } from '../static/model.js';
 
@@ -380,4 +354,26 @@ test('branchBounds covers the node and its visible descendants only', () => {
   const res2 = layout(m, measure);
   const small = branchBounds(m, res2.nodes, r1.id, 10);
   assert.equal(small.w, byId(res2)[r1.id].w + 20);
+});
+
+// ---- Lados escolhidos na ligação ----
+import { sideToward } from '../static/model.js';
+
+test('sideToward picks the box side nearest to a point', () => {
+  const b = { x: 0, y: 0, w: 100, h: 40 };
+  assert.equal(sideToward(b, [50, -30]), 'top');
+  assert.equal(sideToward(b, [160, 20]), 'right');
+  assert.equal(sideToward(b, [50, 90]), 'bottom');
+  assert.equal(sideToward(b, [-40, 25]), 'left');
+});
+
+test('linkPath and linkHandle honor chosen sides', () => {
+  const a = { x: 0, y: 0, w: 40, h: 20 }, b = { x: 200, y: 0, w: 40, h: 20 };
+  const d = linkPath(a, b, null, 'top', 'bottom');
+  assert.match(d, /^M20,0 C20,-\d+/);   // sai pelo topo de a, subindo
+  assert.match(d, /,\d+ 220,20$/);       // chega pela base de b
+  const [, hy] = linkHandle(a, b, null, 'top', 'top');
+  assert.ok(hy < 0, 'topo → topo: meio da curva fica acima dos nós');
+  // com curva manual, o lado escolhido continua valendo
+  assert.match(linkPath(a, b, [0, 300], 'top', 'top'), /^M20,0 Q.* 220,0$/);
 });

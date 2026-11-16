@@ -100,14 +100,12 @@
     <!-- botões "+" ao lado do nó selecionado -->
     <button id="add-child" class="adder" title="Novo filho (Tab)">+</button>
     <button id="add-sibling" class="adder" title="Novo irmão (Enter)">+</button>
-    <!-- 4 "+" verdes ao passar o mouse sobre um nó -->
-    <div id="hover-ring" hidden></div>
-    <button class="hover-add" data-dir="child" hidden title="Novo filho">+</button>
-    <button class="hover-add" data-dir="before" hidden title="Novo irmão antes">+</button>
-    <button class="hover-add" data-dir="after" hidden title="Novo irmão depois">+</button>
-    <button class="hover-add" data-dir="parent" hidden title="Novo pai">+</button>
-    <button class="hover-add" data-dir="child-left" hidden title="Novo filho à esquerda">+</button>
-    <button class="hover-add" data-dir="child-right" hidden title="Novo filho à direita">+</button>
+    <!-- modo "Ligar": contorno verde e um "+" em cada lado do nó de origem -->
+    <div id="link-ring" hidden></div>
+    <button class="link-anchor" data-side="top" hidden title="Sair por cima">+</button>
+    <button class="link-anchor" data-side="right" hidden title="Sair pela direita">+</button>
+    <button class="link-anchor" data-side="bottom" hidden title="Sair por baixo">+</button>
+    <button class="link-anchor" data-side="left" hidden title="Sair pela esquerda">+</button>
     <div id="hints"><span><kbd>Tab</kbd> filho</span><span><kbd>Enter</kbd> irmão</span></div>
 
     <div id="dock" class="card">

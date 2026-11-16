@@ -107,8 +107,10 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 .link-bend { cursor: move; }
 .link-end { pointer-events: none; }
 
-/* 4 "+" ao passar o mouse */
-.hover-add { position: absolute; width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%; background: #1fa24a; color: #fff; font-size: 18px; line-height: 26px; transform: translate(-50%, -50%); }
-.hover-add:hover { background: #15803a; }
-.hover-add[hidden], #hover-ring[hidden] { display: none; }
-#hover-ring { position: absolute; border: 2.5px solid #1fa24a; border-radius: 12px; pointer-events: none; }
+/* Pontos de conexão (modo "Ligar") */
+.link-anchor { position: absolute; width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%; background: #1fa24a; color: #fff; font-size: 18px; line-height: 26px; transform: translate(-50%, -50%); }
+.link-anchor:hover, .link-anchor.active { background: #15803a; }
+.link-anchor[hidden], #link-ring[hidden] { display: none; }
+#link-ring { position: absolute; border: 2.5px solid #1fa24a; border-radius: 12px; pointer-events: none; }
+.link-anchor.active { box-shadow: 0 0 0 3px #1fa24a55; }
+.anchor-dot { pointer-events: none; }

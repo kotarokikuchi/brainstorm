@@ -237,7 +237,7 @@ assert.equal((await getMap()).links.length, 1, 'desfazer restaura a ligação');
 // botão "Ligar" na barra: depois clicar no nó de destino
 await clickNode('Q2');
 await ev(`document.querySelector('#link-btn').click()`);
-const [qx, qy] = center(await rect('Q1'));
+const [qx, qy] = center(await rect('Recursos'));  // longe dos "+" de Q2
 await mouse('mousePressed', qx, qy);  // sem mover antes: clique direto no destino
 await mouse('mouseReleased', qx, qy);
 await sleep(900);
@@ -317,30 +317,31 @@ await ev(`document.querySelector('#viewport .link-bend').dispatchEvent(new Mouse
 await sleep(900);
 assert.equal(await bend(), undefined, 'duplo clique volta à curva automática');
 
-// 4 "+" ao passar o mouse: irmão antes, novo pai; raiz só tem os laterais
+// pontos de conexão: só no modo "Ligar" aparecem os 4 "+" no nó de origem; escolhe o lado e clica no destino
 const hoverOn = async (prefix) => { const [x, y] = center(await rect(prefix)); await mouse('mouseMoved', x, y); await sleep(50); };
-const shownAdders = () => ev(`[...document.querySelectorAll('.hover-add')].filter(b => !b.hidden).map(b => b.dataset.dir).sort()`);
-const rootKids = async () => (await getMap()).root.children.map(c => c.text);
+const anchorsShown = () => ev(`[...document.querySelectorAll('.link-anchor')].filter(b => !b.hidden).map(b => b.dataset.side).sort()`);
+await clickNode('Cronograma');
+assert.deepEqual(await anchorsShown(), [], 'sem "+" fora do modo ligar');
 await hoverOn('Cronograma');
-assert.deepEqual(await shownAdders(), ['after', 'before', 'child', 'parent'], '4 possibilidades no nó');
-await ev(`document.querySelector('.hover-add[data-dir="before"]').click()`);
-await typeText('Antes'); await key('Enter');
+assert.deepEqual(await anchorsShown(), [], 'hover não mostra "+"');
+await ev(`document.querySelector('#more-btn').click()`);
+await menu('link');
+assert.deepEqual(await anchorsShown(), ['bottom', 'left', 'right', 'top'], '4 possibilidades de conexão');
+const anchorTop = await ev(`(() => { const r = document.querySelector('.link-anchor[data-side="top"]').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
+const [ax, ay] = center(anchorTop);
+await mouse('mousePressed', ax, ay); await mouse('mouseReleased', ax, ay);  // escolhe o lado de cima
+assert.equal(await ev(`document.querySelector('.link-anchor[data-side="top"]').classList.contains('active')`), true);
+const recTop = await rect('Recursos');
+const [rx, ry] = [recTop.x + recTop.w / 2, recTop.y + 2];  // perto do topo de Recursos
+await mouse('mouseMoved', rx, ry);
+assert.equal(await ev(`document.querySelectorAll('#viewport .anchor-dot').length`), 4, 'destino mostra os 4 pontos');
+await mouse('mousePressed', rx, ry); await mouse('mouseReleased', rx, ry);
 await sleep(900);
-let kids = await rootKids();
-assert.equal(kids[kids.indexOf('Cronograma') - 1], 'Antes', 'irmão antes');
-await hoverOn('Cronograma');
-await ev(`document.querySelector('.hover-add[data-dir="parent"]').click()`);
-await typeText('Fase'); await key('Enter');
-await sleep(900);
-const fase = (await getMap()).root.children.find(c => c.text === 'Fase');
-assert.deepEqual(fase?.children.map(c => c.text), ['Cronograma'], 'novo pai entre o nó e a raiz');
-await hoverOn('Cronograma');
-await ev(`document.querySelector('.hover-add[data-dir="parent"]').click()`);
-await key('Escape');  // descartar o pai novo não pode levar o ramo junto
-await sleep(900);
-assert.deepEqual((await getMap()).root.children.find(c => c.text === 'Fase')?.children.map(c => c.text), ['Cronograma'], 'Esc no pai novo preserva o ramo');
-await hoverOn('Planejamento');
-assert.deepEqual(await shownAdders(), ['child-left', 'child-right'], 'raiz: filho à esquerda e à direita');
+const newLink = (await getMap()).links.at(-1);
+const cron = (await getMap()).root.children.find(c => c.text === 'Cronograma');
+assert.equal(newLink.from, cron.id);
+assert.deepEqual([newLink.fromSide, newLink.toSide], ['top', 'top'], 'lados gravados');
+assert.deepEqual(await anchorsShown(), [], '"+" somem ao terminar');
 
 // conflito: outra "aba" grava antes
 await sleep(900);
