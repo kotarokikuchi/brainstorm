@@ -1425,6 +1425,29 @@ for (const fam of ['hand', 'normal', 'code']) {
   await sleep(300);
 }
 
+// editando um texto existente, a moldura tracejada acompanha os caracteres incluídos/apagados
+await key('8');
+await click(cv.x + 700, cv.y + 420);
+await typeText('casas');
+await key('Escape');
+await sleep(300);
+const etId = await ev(`[...document.querySelectorAll('#board-root .el')].at(-1).dataset.id`);
+const selW = () => ev(`document.querySelector('#board-root .sel-item').getBoundingClientRect().width`);
+const ebx = await elBox(etId), w0 = await selW();
+await dbl(ebx.x + ebx.w / 2, ebx.y + ebx.h / 2);
+await ev(`document.querySelector('#board-text').setSelectionRange(99, 99)`);
+await typeText(' da mãe joana');
+const w1 = await selW();
+assert.ok(w1 > w0 + 50, `moldura cresce ao digitar: ${w0} → ${w1}`);
+for (let i = 0; i < 9; i++) await key('Backspace');
+assert.ok(await selW() < w1 - 30, 'moldura diminui ao apagar');
+const selH = () => ev(`document.querySelector('#board-root .sel-item').getBoundingClientRect().height`);
+const h0 = await selH();
+await key('Enter');
+assert.ok(await selH() > h0 + 15, 'moldura cresce com o Enter');
+await typeText('linha 2');
+await key('Escape');
+
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
 process.exit(0);
