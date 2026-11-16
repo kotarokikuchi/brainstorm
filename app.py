@@ -16,15 +16,23 @@ MAX_BODY = 5_000_000
 
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
-        if self._api("GET"):
+        if self._foreign_host() or self._api("GET"):
             return
         super().do_GET()
 
     def do_PUT(self):
-        self._api("PUT") or self._send(404, {"error": "not found"})
+        self._foreign_host() or self._api("PUT") or self._send(404, {"error": "not found"})
 
     def do_DELETE(self):
-        self._api("DELETE") or self._send(404, {"error": "not found"})
+        self._foreign_host() or self._api("DELETE") or self._send(404, {"error": "not found"})
+
+    def _foreign_host(self):
+        # bloqueia DNS rebinding: um site externo apontando para 127.0.0.1 chega com outro Host
+        port = self.server.server_address[1]
+        if self.headers.get("Host") in (f"127.0.0.1:{port}", f"localhost:{port}"):
+            return False
+        self._send(403, {"error": "forbidden host"})
+        return True
 
     def _api(self, method):
         path = urlsplit(self.path).path
