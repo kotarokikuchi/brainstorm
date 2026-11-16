@@ -43,33 +43,15 @@ export function addChild(map, parentId) {
   return n;
 }
 
-export function addSibling(map, nodeId, before = false) {
+export function addSibling(map, nodeId) {
   const hit = findNode(map.root, nodeId);
   if (!hit.parent) return addChild(map, nodeId);
   const n = node();
   n.side = hit.node.side;
   if (hit.parent === map.root) n.color = PALETTE[map.root.children.length % PALETTE.length];
   const kids = hit.parent.children;
-  kids.splice(kids.indexOf(hit.node) + (before ? 0 : 1), 0, n);
+  kids.splice(kids.indexOf(hit.node) + 1, 0, n);
   return n;
-}
-
-// novo nó vazio entre nodeId e o pai dele; recusa a raiz
-export function insertParent(map, nodeId) {
-  const hit = findNode(map.root, nodeId);
-  if (!hit || !hit.parent) return null;
-  const p = node();
-  const kids = hit.parent.children;
-  kids.splice(kids.indexOf(hit.node), 1, p);
-  if (hit.parent === map.root) {
-    // o novo pai vira o ramo de 1º nível: herda lado e cor
-    p.side = hit.node.side;
-    p.color = hit.node.color;
-    hit.node.side = null;
-    hit.node.color = null;
-  }
-  p.children.push(hit.node);
-  return p;
 }
 
 export function removeNode(map, nodeId) {
@@ -126,27 +108,45 @@ function autoCurve(a, b) {
   return [p1, c1, c2, p2];
 }
 
-// meio de um lado da caixa (direita, esquerda, topo, base) mais perto do ponto h
-function nearestSide(b, [hx, hy]) {
-  const sides = [[b.x + b.w, b.y + b.h / 2], [b.x, b.y + b.h / 2], [b.x + b.w / 2, b.y], [b.x + b.w / 2, b.y + b.h]];
-  return sides.reduce((best, p) => (Math.hypot(p[0] - hx, p[1] - hy) < Math.hypot(best[0] - hx, best[1] - hy) ? p : best));
+const NORMAL = { top: [0, -1], right: [1, 0], bottom: [0, 1], left: [-1, 0] };
+const center = (b) => [b.x + b.w / 2, b.y + b.h / 2];
+const sidePoint = (b, side) => ({
+  top: [b.x + b.w / 2, b.y], right: [b.x + b.w, b.y + b.h / 2],
+  bottom: [b.x + b.w / 2, b.y + b.h], left: [b.x, b.y + b.h / 2],
+}[side]);
+
+// lado da caixa cujo meio fica mais perto do ponto
+export function sideToward(b, [px, py]) {
+  return Object.keys(NORMAL).reduce((best, side) => {
+    const [x, y] = sidePoint(b, side), [bx, by] = sidePoint(b, best);
+    return Math.hypot(x - px, y - py) < Math.hypot(bx - px, by - py) ? side : best;
+  });
 }
 
+// curva saindo/chegando pelos lados escolhidos (lado ausente: o que aponta para o outro nó)
+function sidedCurve(a, b, fromSide, toSide) {
+  const s1 = fromSide || sideToward(a, center(b)), s2 = toSide || sideToward(b, center(a));
+  const p1 = sidePoint(a, s1), p2 = sidePoint(b, s2);
+  const d = Math.round(Math.max(40, Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / 3));
+  return [p1, [p1[0] + NORMAL[s1][0] * d, p1[1] + NORMAL[s1][1] * d], [p2[0] + NORMAL[s2][0] * d, p2[1] + NORMAL[s2][1] * d], p2];
+}
+const curveOf = (a, b, fromSide, toSide) => (fromSide || toSide ? sidedCurve(a, b, fromSide, toSide) : autoCurve(a, b));
+
 // ponto de controle arrastável: meio da curva automática, ou meio dos centros + bend [dx, dy]
-export function linkHandle(a, b, bend) {
+export function linkHandle(a, b, bend, fromSide, toSide) {
   if (bend) return [(a.x + a.w / 2 + b.x + b.w / 2) / 2 + bend[0], (a.y + a.h / 2 + b.y + b.h / 2) / 2 + bend[1]];
-  const [p1, c1, c2, p2] = autoCurve(a, b);
+  const [p1, c1, c2, p2] = curveOf(a, b, fromSide, toSide);
   return [0, 1].map(i => (p1[i] + 3 * c1[i] + 3 * c2[i] + p2[i]) / 8);
 }
 
 // atributo d da seta; com bend vira quadrática que passa pelo ponto de controle
-export function linkPath(a, b, bend) {
+export function linkPath(a, b, bend, fromSide, toSide) {
   if (!bend) {
-    const [p1, c1, c2, p2] = autoCurve(a, b);
+    const [p1, c1, c2, p2] = curveOf(a, b, fromSide, toSide);
     return `M${p1} C${c1} ${c2} ${p2}`;
   }
   const h = linkHandle(a, b, bend);
-  const p1 = nearestSide(a, h), p2 = nearestSide(b, h);
+  const p1 = sidePoint(a, fromSide || sideToward(a, h)), p2 = sidePoint(b, toSide || sideToward(b, h));
   const c = [0, 1].map(i => 2 * h[i] - (p1[i] + p2[i]) / 2);
   return `M${p1} Q${c} ${p2}`;
 }

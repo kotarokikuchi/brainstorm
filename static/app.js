@@ -1,6 +1,6 @@
 import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
-  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, insertParent, cloudPath, branchBounds,
+  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, sideToward, cloudPath, branchBounds,
 } from './model.js';
 
 const $ = (s) => document.querySelector(s);
@@ -146,7 +146,8 @@ function render() {
   drawLinks();
   if (drag?.active) drawDrop();
   if (editing) placeInput();
-  placeHover();
+  placeAnchors();
+  placeOverlays();
 }
 
 function drawNode(b) {
@@ -284,15 +285,7 @@ function finishEdit(commit) {
   const node = findNode(map.root, id)?.node;
   if (node) {
     const text = commit ? input.value : '';
-    if (isNew && !text.trim() && node.children.length) {
-      // pai inserido e descartado: desfaz a inserção (removeNode levaria o ramo junto)
-      const st = JSON.parse(history.undo(snapshot()));
-      history.future.pop();
-      map.root = st.root;
-      map.layout = st.layout;
-      map.links = st.links ?? [];
-      selected = prev;
-    } else if (isNew) {
+    if (isNew) {
       // nó novo já entrou no histórico ao ser criado
       selected = commitText(map, id, text, true);
       if (findNode(map.root, id)) scheduleSave();
@@ -547,8 +540,6 @@ function placeOverlays() {
   pos(addChildBtn, ...child);
   pos(addSiblingBtn, ...sibling);
   addSiblingBtn.hidden ||= b.depth === 0;
-  // em hover, os 4 "+" verdes substituem os azuis
-  if (hovered === b.id) addChildBtn.hidden = addSiblingBtn.hidden = true;
   // dicas só em nó sem filhos visíveis, como num mapa recém-criado
   hints.hidden ||= left || map.layout === 'org' || (n.children.length > 0 && !n.collapsed);
   pos(hints, child[0] + 22, child[1]);
@@ -722,7 +713,7 @@ function drawLinks() {
   for (const k of map.links ?? []) {
     const a = boxes.find(b => b.id === k.from), b = boxes.find(b => b.id === k.to);
     if (!a || !b) continue;  // ponta escondida num ramo recolhido
-    const d = linkPath(a, b, k.bend), sel = k.id === selectedLink;
+    const d = linkPath(a, b, k.bend, k.fromSide, k.toSide), sel = k.id === selectedLink;
     el('path', {
       d, class: 'link', fill: 'none', stroke: sel ? '#2f5bea' : '#22a559', 'stroke-width': sel ? 3 : 2,
       'stroke-dasharray': '5 5', 'marker-end': `url(#${sel ? 'arrow-sel' : 'arrow'})`,
@@ -735,10 +726,17 @@ function drawLinks() {
   if (linking) {
     svg.classList.add('linking');
     const t = boxes.find(b => b.id === linking.target);
-    if (t) el('rect', { class: 'link-target', x: t.x - 5, y: t.y - 5, width: t.w + 10, height: t.h + 10, rx: 10, fill: '#22a55914', stroke: '#22a559', 'stroke-width': 2 }, viewport);
+    if (t) {
+      el('rect', { class: 'link-target', x: t.x - 5, y: t.y - 5, width: t.w + 10, height: t.h + 10, rx: 10, fill: '#22a55914', stroke: '#22a559', 'stroke-width': 2 }, viewport);
+      // 4 pontos possíveis de chegada; o mais perto do ponteiro fica maior
+      const near = sideToward(t, [linking.x, linking.y]);
+      const pts = { top: [t.x + t.w / 2, t.y], right: [t.x + t.w, t.y + t.h / 2], bottom: [t.x + t.w / 2, t.y + t.h], left: [t.x, t.y + t.h / 2] };
+      for (const [side, [cx, cy]] of Object.entries(pts)) el('circle', { class: 'anchor-dot', cx, cy, r: side === near ? 6 : 3.5, fill: '#22a559' }, viewport);
+    }
     if (from && linking.x !== undefined) {
       const end = t ?? { x: linking.x, y: linking.y, w: 0, h: 0 };
-      el('path', { d: linkPath(from, end), class: 'link-preview', fill: 'none', stroke: '#22a559', 'stroke-width': 2, 'stroke-dasharray': '3 4', 'marker-end': 'url(#arrow)' }, viewport);
+      const toSide = t ? sideToward(t, [linking.x, linking.y]) : null;
+      el('path', { d: linkPath(from, end, null, linking.fromSide, toSide), class: 'link-preview', fill: 'none', stroke: '#22a559', 'stroke-width': 2, 'stroke-dasharray': '3 4', 'marker-end': 'url(#arrow)' }, viewport);
     }
     return;
   }
@@ -758,8 +756,11 @@ $('#link-btn').onclick = () => { linking = { from: selected, target: null, byCli
 // atualiza ponteiro e nó de destino (caixa sob o ponteiro, exceto a origem)
 function trackLink(e) {
   [linking.x, linking.y] = toWorld(e);
-  const hit = boxes.find(b => b.id !== linking.from && linking.x >= b.x && linking.x <= b.x + b.w && linking.y >= b.y && linking.y <= b.y + b.h);
-  linking.target = hit?.id ?? null;
+  // o elemento sob o ponteiro resolve formas que passam da caixa (nuvem); senão, caixa com folga
+  const g = e.target.closest?.('.node'), pad = 8;
+  const hit = g ? boxes.find(b => b.id === g.dataset.id)
+    : boxes.find(b => linking.x >= b.x - pad && linking.x <= b.x + b.w + pad && linking.y >= b.y - pad && linking.y <= b.y + b.h + pad);
+  linking.target = hit && hit.id !== linking.from ? hit.id : null;
 }
 
 window.addEventListener('pointermove', (e) => {
@@ -770,15 +771,51 @@ window.addEventListener('pointermove', (e) => {
 
 window.addEventListener('pointerup', (e) => {
   if (!linking) return;
+  if (e.target.closest?.('.link-anchor')) return;  // escolheu o lado de saída; espera o destino
   trackLink(e);
-  const { from, target } = linking;
+  const { from, target, fromSide } = linking;
   linking = null;
   if (target && !(map.links ?? []).some(k => k.from === from && k.to === target)) {
-    mutate(() => addLink(map, from, target));
+    const toSide = fromSide ? sideToward(boxes.find(b => b.id === target), toWorld(e)) : null;
+    mutate(() => {
+      const k = addLink(map, from, target);
+      if (fromSide) Object.assign(k, { fromSide, toSide });
+    });
   } else {
     render();
   }
 });
+
+// ---------- Pontos de conexão (modo "Ligar") ----------
+const anchorBtns = [...document.querySelectorAll('.link-anchor')], linkRing = $('#link-ring');
+
+// no modo ligar, o nó de origem mostra contorno verde e um "+" em cada lado
+function placeAnchors() {
+  for (const btn of anchorBtns) btn.hidden = true;
+  linkRing.hidden = true;
+  const b = linking && boxes.find(x => x.id === linking.from);
+  if (!b) return;
+  const sx = (x) => view.x + x * view.k, sy = (y) => view.y + y * view.k;
+  const L = sx(b.x), R = sx(b.x + b.w), T = sy(b.y), B = sy(b.y + b.h);
+  const pos = { top: [(L + R) / 2, T - 20], right: [R + 20, (T + B) / 2], bottom: [(L + R) / 2, B + 20], left: [L - 20, (T + B) / 2] };
+  for (const btn of anchorBtns) {
+    const [x, y] = pos[btn.dataset.side];
+    Object.assign(btn.style, { left: `${x}px`, top: `${y}px` });
+    btn.classList.toggle('active', btn.dataset.side === linking.fromSide);
+    btn.hidden = false;
+  }
+  Object.assign(linkRing.style, { left: `${L - 5}px`, top: `${T - 5}px`, width: `${R - L + 10}px`, height: `${B - T + 10}px` });
+  linkRing.hidden = false;
+}
+
+for (const btn of anchorBtns) {
+  btn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    linking.fromSide = btn.dataset.side;
+    [linking.x, linking.y] = toWorld(e);
+    render();
+  });
+}
 
 // ---------- Menu "⋯" do nó + copiar/colar ----------
 let clipboard = null;  // JSON do ramo copiado (vale entre mapas na mesma aba)
@@ -819,7 +856,7 @@ nodeMenu.onclick = (e) => {
 
 // clicar fora dos controles (cabeçalho, lista...) fecha qualquer menu aberto
 document.addEventListener('pointerdown', (e) => {
-  if (!map || e.target.closest('.card, .adder, .hover-add, .node, .link-hit, .link-handle, #editor')) return;
+  if (!map || e.target.closest('.card, .adder, .link-anchor, .node, .link-hit, .link-handle, #editor')) return;
   if (stylePop.hidden && nodeMenu.hidden) return;
   stylePop.hidden = nodeMenu.hidden = true;
   render();
@@ -832,7 +869,7 @@ let bending = null;  // {link, a, b, pushed} enquanto arrasta o ponto de control
 function drawBendHandle(k, a, b, d) {
   const [p1, p2] = [d.match(/^M([-\d.e]+),([-\d.e]+)/), d.match(/([-\d.e]+),([-\d.e]+)$/)];
   for (const m of [p1, p2]) el('circle', { class: 'link-end', cx: m[1], cy: m[2], r: 4, fill: '#fff', stroke: '#2f5bea', 'stroke-width': 2 }, viewport);
-  const [hx, hy] = linkHandle(a, b, k.bend);
+  const [hx, hy] = linkHandle(a, b, k.bend, k.fromSide, k.toSide);
   const h = el('circle', { class: 'link-bend', cx: hx, cy: hy, r: 6, fill: '#2f5bea', stroke: '#fff', 'stroke-width': 2 }, viewport);
   h.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
@@ -859,68 +896,3 @@ window.addEventListener('pointerup', () => {
   render();
 });
 
-// ---------- 4 "+" ao passar o mouse ----------
-let hovered = null;  // id do nó sob o ponteiro (com margem para alcançar os botões)
-const hoverBtns = [...document.querySelectorAll('.hover-add')], hoverRing = $('#hover-ring');
-
-$('#editor-view').addEventListener('pointermove', (e) => {
-  if (!map) return;
-  let id = null;
-  if (!editing && !drag?.active && !linking && !bending && !pan) {
-    const [wx, wy] = toWorld(e), margin = 48 / view.k;
-    const inside = (b, pad) => wx >= b.x - pad && wx <= b.x + b.w + pad && wy >= b.y - pad && wy <= b.y + b.h + pad;
-    id = (boxes.find(b => inside(b, 0)) ?? boxes.find(b => b.id === hovered && inside(b, margin)))?.id ?? null;
-  }
-  if (id !== hovered) { hovered = id; placeHover(); }
-});
-$('#editor-view').addEventListener('pointerleave', () => { hovered = null; placeHover(); });
-
-function placeHover() {
-  for (const btn of hoverBtns) btn.hidden = true;
-  hoverRing.hidden = true;
-  const b = !editing && boxes.find(x => x.id === hovered);
-  if (b) {
-    const sx = (x) => view.x + x * view.k, sy = (y) => view.y + y * view.k;
-    const L = sx(b.x), R = sx(b.x + b.w), T = sy(b.y), B = sy(b.y + b.h), CX = (L + R) / 2, CY = (T + B) / 2;
-    const isRoot = b.id === map.root.id;
-    // lado dos filhos já tem a bolinha de recolher: afasta o "+" dela
-    const far = !isRoot && findNode(map.root, b.id).node.children.length ? 44 : 22;
-    let dirs;
-    if (isRoot) dirs = map.layout === 'map' ? { 'child-left': 'left', 'child-right': 'right' } : { child: map.layout === 'org' ? 'bottom' : 'right' };
-    else if (map.layout === 'org') dirs = { child: 'bottom', parent: 'top', before: 'left', after: 'right' };
-    else {
-      const flip = map.layout === 'map' && b.side === 'left';
-      dirs = { child: flip ? 'left' : 'right', parent: flip ? 'right' : 'left', before: 'top', after: 'bottom' };
-    }
-    const childSide = dirs.child;
-    const spot = (side) => {
-      const g = side === childSide ? far : 22;
-      return { right: [R + g, CY], left: [L - g, CY], top: [CX, T - g], bottom: [CX, B + g] }[side];
-    };
-    for (const btn of hoverBtns) {
-      const side = dirs[btn.dataset.dir];
-      if (!side) continue;
-      const [x, y] = spot(side);
-      Object.assign(btn.style, { left: `${x}px`, top: `${y}px` });
-      btn.hidden = false;
-    }
-    Object.assign(hoverRing.style, { left: `${L - 5}px`, top: `${T - 5}px`, width: `${R - L + 10}px`, height: `${B - T + 10}px` });
-    hoverRing.hidden = false;
-  }
-  placeOverlays();
-}
-
-for (const btn of hoverBtns) {
-  btn.onclick = () => {
-    const id = hovered, dir = btn.dataset.dir;
-    if (!id) return;
-    hovered = null;
-    addAndEdit(() => {
-      if (dir === 'parent') return insertParent(map, id);
-      if (dir === 'before' || dir === 'after') return addSibling(map, id, dir === 'before');
-      const n = addChild(map, id);
-      if (dir === 'child-left' || dir === 'child-right') n.side = dir.slice(6);
-      return n;
-    });
-  };
-}
