@@ -15,10 +15,15 @@ let board = null;  // quadro aberto
 let tool = 'select', history = new History();
 let drawing = null, panning = null, spaceDown = false;
 let selection = [], gesture = null, clipboard = null;  // gesture: mover / redimensionar / seleção por área
-const TEXT_DEFAULTS = { textAlign: 'left' };  // textos antigos não têm esses campos
+const TEXT_DEFAULTS = { textAlign: 'left', fontFamily: 'hand' };  // textos antigos não têm esses campos
 const style = { ...DEFAULTS, fontSize: 20, ...TEXT_DEFAULTS };  // estilo para os próximos elementos (o painel muda)
 let editingText = null, erasing = null;
-const HAND_FONT = 'Kalam, "Segoe Print", "Comic Sans MS", cursive';  // Kalam vem junto (static/fonts)
+const FONTS = {
+  hand: 'Kalam, "Segoe Print", "Comic Sans MS", cursive',  // Kalam vem junto (static/fonts)
+  normal: 'system-ui, -apple-system, "Segoe UI", sans-serif',
+  code: 'ui-monospace, "Cascadia Code", Consolas, "DejaVu Sans Mono", monospace',
+};
+const fontOf = (e) => FONTS[e.fontFamily] ?? FONTS.hand;
 const lineH = (fs) => fs * 1.25;
 const mctx = document.createElement('canvas').getContext('2d');
 const view = { x: 0, y: 0, k: 1 };
@@ -82,7 +87,7 @@ function drawElement(e) {
   if (e.type === 'text') {
     if (editingText?.el === e) return g;
     const align = ALIGN[e.textAlign] ?? ALIGN.left, ax = e.x + e.w * align[1];
-    const t = el('text', { x: ax, y: e.y, fill: e.strokeColor, 'font-size': e.fontSize, 'font-family': HAND_FONT, 'dominant-baseline': 'text-before-edge', 'text-anchor': align[0] }, g);
+    const t = el('text', { x: ax, y: e.y, fill: e.strokeColor, 'font-size': e.fontSize, 'font-family': fontOf(e), 'dominant-baseline': 'text-before-edge', 'text-anchor': align[0] }, g);
     e.text.split('\n').forEach((line, i) => { el('tspan', { x: ax, y: e.y + i * lineH(e.fontSize) }, t).textContent = line; });
     return g;
   }
@@ -515,7 +520,7 @@ const textArea = $('#board-text');
 
 // largura/altura do texto (linhas × altura de linha), guardadas no elemento
 function measureText(e) {
-  mctx.font = `${e.fontSize}px ${HAND_FONT}`;
+  mctx.font = `${e.fontSize}px ${fontOf(e)}`;
   const lines = e.text.split('\n');
   e.w = Math.max(4, ...lines.map(l => mctx.measureText(l).width));
   e.h = lines.length * lineH(e.fontSize);
@@ -523,12 +528,12 @@ function measureText(e) {
 
 function placeTextArea() {
   const e = editingText.el, k = view.k;
-  mctx.font = `${e.fontSize}px ${HAND_FONT}`;
+  mctx.font = `${e.fontSize}px ${fontOf(e)}`;
   const lines = textArea.value.split('\n');
   Object.assign(textArea.style, {
     left: `${view.x + e.x * k}px`, top: `${view.y + e.y * k}px`, color: e.strokeColor, textAlign: e.textAlign ?? 'left',
     // propriedades separadas: o atalho "font" zeraria a altura de linha e cortaria as últimas linhas
-    fontFamily: HAND_FONT, fontSize: `${e.fontSize * k}px`, lineHeight: `${lineH(e.fontSize) * k}px`,
+    fontFamily: fontOf(e), fontSize: `${e.fontSize * k}px`, lineHeight: `${lineH(e.fontSize) * k}px`,
     width: `${(Math.max(20, ...lines.map(l => mctx.measureText(l).width)) + 20) * k}px`,
     height: `${lines.length * lineH(e.fontSize) * k + 4}px`,
   });
@@ -627,7 +632,7 @@ export async function boardSvg() {
   r.prepend(bg);
   // imagens embutidas: o arquivo exportado não enxerga o servidor
   await Promise.all([...r.querySelectorAll('image')].map(async (im) => im.setAttribute('href', await dataUrl(im.getAttribute('href')))));
-  if (board.elements.some(x => x.type === 'text')) {
+  if (board.elements.some(x => x.type === 'text' && fontOf(x) === FONTS.hand)) {
     const st = document.createElementNS(SVG, 'style');
     st.textContent = await fontCss();
     clone.prepend(st);

@@ -1033,6 +1033,14 @@ await ev(`document.querySelector('#board-props [data-prop="textAlign"] [data-val
 await sleep(900);
 assert.equal((await boardEls()).at(-1).textAlign, 'center', 'alinhamento salvo');
 assert.equal(await ev(`document.querySelector('#board-root .el[data-id="${lastTxt.id}"] text').getAttribute('text-anchor')`), 'middle', 'texto centralizado');
+const wHand = (await boardEls()).at(-1).w;
+await ev(`document.querySelector('#board-props [data-prop="fontFamily"] [data-value="code"]').click()`);
+await sleep(900);
+const codeTxt = (await boardEls()).at(-1);
+assert.equal(codeTxt.fontFamily, 'code', 'família da fonte salva');
+assert.notEqual(codeTxt.w, wHand, 'largura medida de novo com a nova fonte');
+assert.match(await ev(`document.querySelector('#board-root .el[data-id="${lastTxt.id}"] text').getAttribute('font-family')`), /monospace/, 'texto em fonte de código');
+await ev(`document.querySelector('#board-props [data-prop="fontFamily"] [data-value="hand"]').click()`);
 
 // quadro: cada ferramenta mostra a letra do atalho no canto do botão
 const hint = (t) => ev(`getComputedStyle(document.querySelector('#board-tools [data-tool="${t}"]'), '::after').content`);
