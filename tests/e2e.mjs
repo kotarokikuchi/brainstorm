@@ -466,6 +466,38 @@ await key('z', 2);
 await sleep(900);
 assert.ok((await orcNode()).image, 'desfazer volta a imagem');
 
+// anexos: botão 📎 abre a lista; adicionar vários; selo com contagem no nó; baixar; remover; desfazer
+await clickNode('Orçamento');
+await ev(`document.querySelector('#attach-btn').click()`);
+assert.equal(await ev(`!document.querySelector('#attach-pop').hidden`), true, 'painel de anexos abre');
+await ev(`(() => {
+  const dt = new DataTransfer();
+  dt.items.add(new File(['ata da reunião'], 'ata.txt', { type: 'text/plain' }));
+  dt.items.add(new File([new Uint8Array([37, 80, 68, 70])], 'plano.pdf', { type: 'application/pdf' }));
+  const input = document.querySelector('#attach-input'); input.files = dt.files; input.dispatchEvent(new Event('change'));
+})()`);
+await sleep(1500);
+let atts = (await orcNode()).attachments;
+assert.deepEqual(atts?.map(a => a.name), ['ata.txt', 'plano.pdf'], 'anexos gravados');
+const orcG = `[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('Orçamento'))`;
+assert.equal(await ev(`document.querySelector('#viewport .attach-badge[data-id="' + ${orcG}.dataset.id + '"]')?.textContent`), '2', 'selo com o número de anexos');
+const links = await ev(`[...document.querySelectorAll('#attach-list a[download]')].map(a => [a.getAttribute('download'), a.getAttribute('href')])`);
+assert.equal(links.length, 2, 'lista com links de download');
+assert.equal(links[0][0], 'ata.txt');
+assert.equal(await ev(`fetch('${links[0][1]}').then(r => r.headers.get('content-disposition'))`), 'attachment', 'anexo baixa como arquivo');
+await ev(`document.querySelector('#attach-list [data-remove]').click()`);
+await sleep(900);
+assert.deepEqual((await orcNode()).attachments.map(a => a.name), ['plano.pdf'], 'remover anexo');
+await key('z', 2);
+await sleep(900);
+assert.equal((await orcNode()).attachments.length, 2, 'desfazer volta o anexo');
+await key('Escape');
+await clickNode('Q2');
+await ev(`document.querySelector('#viewport .attach-badge').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
+assert.equal(await ev(`!document.querySelector('#attach-pop').hidden`), true, 'clicar no selo abre os anexos');
+assert.equal(await ev(`document.querySelectorAll('#attach-list li').length`), 2);
+await key('Escape');
+
 // conflito: outra "aba" grava antes
 await sleep(900);
 const cur = await getMap();

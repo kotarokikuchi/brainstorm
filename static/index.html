@@ -59,6 +59,7 @@
     <div id="toolbar" class="card" hidden>
       <button id="style-btn" class="icon" title="Cor e forma"><svg viewBox="0 0 24 24"><use href="#i-bucket-droplet"/></svg></button>
       <button id="image-btn" class="icon" title="Imagem"><svg viewBox="0 0 24 24"><use href="#i-photo"/></svg></button>
+      <button id="attach-btn" class="icon" title="Anexos"><svg viewBox="0 0 24 24"><use href="#i-paperclip"/></svg></button>
       <button id="link-btn" class="icon" title="Ligar a outro nó"><svg viewBox="0 0 24 24"><use href="#i-line"/></svg></button>
       <button id="delete-btn" class="icon" title="Apagar (Del)"><svg viewBox="0 0 24 24"><use href="#i-trash"/></svg></button>
       <button id="more-btn" class="icon" title="Mais opções"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
@@ -71,6 +72,16 @@
         <input type="file" id="image-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
       </label>
       <button id="image-remove" class="danger-link" hidden>Remover imagem</button>
+    </div>
+    <div id="attach-pop" class="card" hidden>
+      <p class="pop-title">Anexos</p>
+      <ul id="attach-list"></ul>
+      <label id="attach-drop" class="drop">
+        <svg viewBox="0 0 24 24"><use href="#i-paperclip"/></svg>
+        <strong>Adicionar arquivos</strong>
+        <small>Solte aqui ou clique · até 20 MB cada</small>
+        <input type="file" id="attach-input" multiple hidden>
+      </label>
     </div>
     <div id="node-menu" class="card menu" hidden>
       <button data-action="child">Novo filho <kbd>Tab</kbd></button>
