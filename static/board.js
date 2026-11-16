@@ -15,7 +15,8 @@ let board = null;  // quadro aberto
 let tool = 'select', history = new History();
 let drawing = null, panning = null, spaceDown = false;
 let selection = [], gesture = null, clipboard = null;  // gesture: mover / redimensionar / seleção por área
-const style = { ...DEFAULTS, fontSize: 20 };  // estilo para os próximos elementos (o painel muda)
+const TEXT_DEFAULTS = { textAlign: 'left' };  // textos antigos não têm esses campos
+const style = { ...DEFAULTS, fontSize: 20, ...TEXT_DEFAULTS };  // estilo para os próximos elementos (o painel muda)
 let editingText = null, erasing = null;
 const HAND_FONT = 'Kalam, "Segoe Print", "Comic Sans MS", cursive';  // Kalam vem junto (static/fonts)
 const lineH = (fs) => fs * 1.25;
@@ -58,6 +59,7 @@ const el = (tag, attrs, parent) => {
   parent?.append(e);
   return e;
 };
+const ALIGN = { left: ['start', 0], center: ['middle', 0.5], right: ['end', 1] };  // âncora e ponto na caixa
 const DASH = { solid: null, dashed: '8 8', dotted: '1.5 6' };
 const HEX = /^#[0-9a-fA-F]{3,8}$/;
 const FILE_ID = /^[a-f0-9]{32}(\.[a-z0-9]{1,10})?$/;  // mesmo formato que o servidor gera
@@ -79,8 +81,9 @@ function drawElement(e) {
   if (erasing?.ids.has(e.id)) g.classList.add('erasing');
   if (e.type === 'text') {
     if (editingText?.el === e) return g;
-    const t = el('text', { x: e.x, y: e.y, fill: e.strokeColor, 'font-size': e.fontSize, 'font-family': HAND_FONT, 'dominant-baseline': 'text-before-edge' }, g);
-    e.text.split('\n').forEach((line, i) => { el('tspan', { x: e.x, y: e.y + i * lineH(e.fontSize) }, t).textContent = line; });
+    const align = ALIGN[e.textAlign] ?? ALIGN.left, ax = e.x + e.w * align[1];
+    const t = el('text', { x: ax, y: e.y, fill: e.strokeColor, 'font-size': e.fontSize, 'font-family': HAND_FONT, 'dominant-baseline': 'text-before-edge', 'text-anchor': align[0] }, g);
+    e.text.split('\n').forEach((line, i) => { el('tspan', { x: ax, y: e.y + i * lineH(e.fontSize) }, t).textContent = line; });
     return g;
   }
   if (e.type === 'image') {
@@ -481,7 +484,8 @@ function renderProps() {
   if (props.hidden) return;
   const cur = sel[0] ?? style;
   for (const group of props.querySelectorAll('[data-prop]')) {
-    for (const b of group.querySelectorAll('[data-value]')) b.classList.toggle('active', String(cur[group.dataset.prop]) === b.dataset.value);
+    const p = group.dataset.prop;
+    for (const b of group.querySelectorAll('[data-value]')) b.classList.toggle('active', String(cur[p] ?? TEXT_DEFAULTS[p]) === b.dataset.value);
   }
   $('#board-opacity').value = cur.opacity ?? 100;
 }
@@ -522,7 +526,7 @@ function placeTextArea() {
   mctx.font = `${e.fontSize}px ${HAND_FONT}`;
   const lines = textArea.value.split('\n');
   Object.assign(textArea.style, {
-    left: `${view.x + e.x * k}px`, top: `${view.y + e.y * k}px`, color: e.strokeColor,
+    left: `${view.x + e.x * k}px`, top: `${view.y + e.y * k}px`, color: e.strokeColor, textAlign: e.textAlign ?? 'left',
     // propriedades separadas: o atalho "font" zeraria a altura de linha e cortaria as últimas linhas
     fontFamily: HAND_FONT, fontSize: `${e.fontSize * k}px`, lineHeight: `${lineH(e.fontSize) * k}px`,
     width: `${(Math.max(20, ...lines.map(l => mctx.measureText(l).width)) + 20) * k}px`,
