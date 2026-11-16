@@ -26,6 +26,7 @@
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5l0 14" /> <path d="M5 12l14 0" /></symbol>
     <symbol id="i-square-rounded" viewBox="0 0 24 24"><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></symbol>
     <symbol id="i-square" viewBox="0 0 24 24"><path d="M3 3m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" /></symbol>
+    <symbol id="i-text-color" viewBox="0 0 24 24"><path d="M9 15v-7a3 3 0 0 1 6 0v7" /> <path d="M9 11h6" /> <path d="M5 19h14" /></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7l16 0" /> <path d="M10 11l0 6" /> <path d="M14 11l0 6" /> <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /> <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></symbol>
   </svg>
   <header class="topbar">
@@ -60,6 +61,7 @@
     <!-- barra flutuante sobre o nó selecionado -->
     <div id="toolbar" class="card" hidden>
       <button id="style-btn" class="icon" title="Cor e forma"><svg viewBox="0 0 24 24"><use href="#i-bucket-droplet"/></svg></button>
+      <button id="text-btn" class="icon" title="Estilo do texto"><svg viewBox="0 0 24 24"><use href="#i-text-color"/></svg></button>
       <button id="image-btn" class="icon" title="Imagem"><svg viewBox="0 0 24 24"><use href="#i-photo"/></svg></button>
       <button id="attach-btn" class="icon" title="Anexos"><svg viewBox="0 0 24 24"><use href="#i-paperclip"/></svg></button>
       <button id="comment-btn" class="icon" title="Comentários (Alt+Shift+C)"><svg viewBox="0 0 24 24"><use href="#i-message"/></svg></button>
@@ -92,6 +94,16 @@
         <input id="comment-input" placeholder="Adicionar comentário" autocomplete="off">
         <button type="submit" class="icon" title="Enviar (Enter)"><svg viewBox="0 0 24 24"><use href="#i-send"/></svg></button>
       </form>
+    </div>
+    <div id="text-pop" class="card" hidden>
+      <div class="seg text-toggles">
+        <button data-toggle="textBold" class="icon" title="Negrito (Ctrl+B)"><b>B</b></button>
+        <button data-toggle="textItalic" class="icon" title="Itálico (Ctrl+I)"><i>I</i></button>
+      </div>
+      <p>Tamanho</p>
+      <div class="seg" data-prop="textSize"><button data-value="small">Pequeno</button><button data-value="">Médio</button><button data-value="large">Grande</button></div>
+      <p>Cor do texto</p>
+      <div class="swatches" data-prop="textColor" data-extra="auto"></div>
     </div>
     <div id="node-menu" class="card menu" hidden>
       <button data-action="child">Novo filho <kbd>Tab</kbd></button>
