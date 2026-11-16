@@ -97,11 +97,11 @@ function arrowHead(pts, r, roughness) {
   }).join(' ');
 }
 
-// atributos "d" do traço; duas passadas quando há desleixo (efeito de esboço)
+// atributos "d" do traço: um traço levemente torto; duas passadas só no "Cartunista" (desleixo 2)
 export function elementPaths(el) {
   if (el.type === 'text') return [];  // texto é desenhado como <text>
   if (el.type === 'freedraw') return [freedrawPath(el)];
-  const passes = el.roughness ? 2 : 1, out = [];
+  const passes = el.roughness >= 2 ? 2 : 1, out = [];
   const abs = el.points?.map(([x, y]) => [el.x + x, el.y + y]);
   for (let pass = 0; pass < passes; pass++) {
     const r = rng(el.seed + pass), rough = el.roughness;
