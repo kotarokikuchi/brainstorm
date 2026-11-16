@@ -122,3 +122,89 @@ export function fillPath(el) {
   if (el.type === 'ellipse') return ellipsePath({ ...el, roughness: 0 }, null, 0);
   return null;
 }
+
+// ---- Seleção e edição ----
+
+function distToSeg([px, py], [ax, ay], [bx, by]) {
+  const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+  const t = len2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+const polyDist = (pts, p) => Math.min(...pts.slice(1).map((q, i) => distToSeg(p, pts[i], q)));
+
+// o ponto acerta o elemento? forma vazia só pela borda; preenchida também pelo miolo
+export function hitTest(el, p, tol = 6) {
+  const [px, py] = p, t = tol + (el.strokeWidth ?? 2) / 2;
+  const filled = el.backgroundColor && el.backgroundColor !== 'transparent';
+  const { x, y, w, h } = el, cx = x + w / 2, cy = y + h / 2;
+  if (el.type === 'rectangle') {
+    if (filled && px >= x && px <= x + w && py >= y && py <= y + h) return true;
+    return polyDist([[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]], p) <= t;
+  }
+  if (el.type === 'diamond') {
+    if (filled && Math.abs(px - cx) / (w / 2 || 1) + Math.abs(py - cy) / (h / 2 || 1) <= 1) return true;
+    return polyDist([[cx, y], [x + w, cy], [cx, y + h], [x, cy], [cx, y]], p) <= t;
+  }
+  if (el.type === 'ellipse') {
+    const a = w / 2 || 1, b = h / 2 || 1, r = Math.hypot((px - cx) / a, (py - cy) / b);
+    return (filled && r <= 1) || Math.abs(r - 1) * Math.min(a, b) <= t;
+  }
+  if (el.points) return polyDist(el.points.map(([qx, qy]) => [el.x + qx, el.y + qy]), p) <= t;
+  return px >= x && px <= x + w && py >= y && py <= y + h;  // texto: a caixa toda
+}
+
+// elemento mais em cima (último desenhado) sob o ponto
+export function elementAt(elements, p, tol = 6) {
+  for (let i = elements.length - 1; i >= 0; i--) if (hitTest(elements[i], p, tol)) return elements[i].id;
+  return null;
+}
+
+// seleção por área: só o que fica inteiro dentro da caixa
+export function elementsInBox(elements, box) {
+  return elements.filter((el) => {
+    const b = elementBounds(el);
+    return b.x >= box.x && b.y >= box.y && b.x + b.w <= box.x + box.w && b.y + b.h <= box.y + box.h;
+  }).map(el => el.id);
+}
+
+export function moveElements(elements, ids, dx, dy) {
+  const sel = new Set(ids);
+  for (const el of elements) if (sel.has(el.id)) { el.x += dx; el.y += dy; }
+}
+
+export function selectionBounds(elements, ids) {
+  const bs = elements.filter(el => ids.includes(el.id)).map(elementBounds);
+  if (!bs.length) return null;
+  const x = Math.min(...bs.map(b => b.x)), y = Math.min(...bs.map(b => b.y));
+  return { x, y, w: Math.max(...bs.map(b => b.x + b.w)) - x, h: Math.max(...bs.map(b => b.y + b.h)) - y };
+}
+
+// arrasta a alça (n, ne, e, se, s, sw, w, nw) até [px, py], partindo do elemento como estava (start)
+export function resizeElement(el, handle, [px, py], start) {
+  const sb = elementBounds(start);
+  let x1 = sb.x, y1 = sb.y, x2 = sb.x + sb.w, y2 = sb.y + sb.h;
+  if (handle.includes('w')) x1 = px;
+  if (handle.includes('e')) x2 = px;
+  if (handle.includes('n')) y1 = py;
+  if (handle.includes('s')) y2 = py;
+  if (!start.points) {
+    Object.assign(el, { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) });
+    return el;
+  }
+  // linhas e traços: escala (com sinal, para espelhar ao passar do lado oposto) os pontos
+  const sx = sb.w ? (x2 - x1) / sb.w : 1, sy = sb.h ? (y2 - y1) / sb.h : 1;
+  const abs = start.points.map(([qx, qy]) => [x1 + (start.x + qx - sb.x) * sx, y1 + (start.y + qy - sb.y) * sy]);
+  el.x = abs[0][0];
+  el.y = abs[0][1];
+  el.points = abs.map(([ax, ay]) => [f(ax - el.x), f(ay - el.y)]);
+  return el;
+}
+
+export const bringToFront = (elements, ids) =>
+  [...elements.filter(el => !ids.includes(el.id)), ...elements.filter(el => ids.includes(el.id))];
+export const sendToBack = (elements, ids) =>
+  [...elements.filter(el => ids.includes(el.id)), ...elements.filter(el => !ids.includes(el.id))];
+
+// cópias deslocadas, com ids novos (mesma semente: a cópia tem o mesmo traço)
+export const duplicateElements = (elements, ids, offset = 10) =>
+  elements.filter(el => ids.includes(el.id)).map(el => ({ ...structuredClone(el), id: uid(), x: el.x + offset, y: el.y + offset }));

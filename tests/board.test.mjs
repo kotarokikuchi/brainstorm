@@ -56,3 +56,62 @@ test('elementPaths draw each shape (two passes when rough) and arrowheads', () =
   for (const p of [[5, 5], [10, 3], [20, 8]]) resizeTo(fd, p);
   assert.match(elementPaths(fd)[0], /^M0,0 /);
 });
+
+// ---- Entrega 3: seleção e edição ----
+import { hitTest, elementAt, elementsInBox, moveElements, resizeElement, selectionBounds, bringToFront, sendToBack, duplicateElements } from '../static/board-model.js';
+
+const shape = (type, x, y, w, h, extra = {}) => ({ ...createElement(type, [x, y], { seed: 1 }), w, h, ...extra });
+
+test('hitTest: outline of empty shapes, inside of filled shapes, near lines', () => {
+  const r = shape('rectangle', 0, 0, 100, 50);
+  assert.equal(hitTest(r, [1, 25], 6), true, 'na borda');
+  assert.equal(hitTest(r, [50, 25], 6), false, 'miolo vazio não pega');
+  assert.equal(hitTest({ ...r, backgroundColor: '#a5d8ff' }, [50, 25], 6), true, 'preenchido pega no miolo');
+  const e = shape('ellipse', 0, 0, 100, 50);
+  assert.equal(hitTest(e, [100, 25], 6), true);
+  assert.equal(hitTest(e, [50, 25], 6), false);
+  const d = shape('diamond', 0, 0, 100, 100);
+  assert.equal(hitTest(d, [25, 25], 6), true, 'aresta do losango');
+  assert.equal(hitTest(d, [2, 2], 6), false, 'canto vazio do losango');
+  const ln = createElement('line', [0, 0]); resizeTo(ln, [100, 100]);
+  assert.equal(hitTest(ln, [50, 52], 6), true);
+  assert.equal(hitTest(ln, [50, 80], 6), false);
+});
+
+test('elementAt picks the topmost hit; elementsInBox needs full containment', () => {
+  const a = shape('rectangle', 0, 0, 100, 100, { backgroundColor: '#fff' });
+  const b = shape('rectangle', 50, 50, 100, 100, { backgroundColor: '#fff' });
+  assert.equal(elementAt([a, b], [75, 75], 6), b.id);
+  assert.equal(elementAt([a, b], [500, 500], 6), null);
+  assert.deepEqual(elementsInBox([a, b], { x: -5, y: -5, w: 110, h: 110 }), [a.id]);
+});
+
+test('moveElements and selectionBounds', () => {
+  const a = shape('rectangle', 0, 0, 10, 10), ln = createElement('arrow', [20, 20]);
+  resizeTo(ln, [40, 30]);
+  moveElements([a, ln], [a.id, ln.id], 5, -5);
+  assert.deepEqual([a.x, a.y, ln.x, ln.y], [5, -5, 25, 15]);
+  assert.deepEqual(selectionBounds([a, ln], [a.id, ln.id]), { x: 5, y: -5, w: 40, h: 30 });
+});
+
+test('resizeElement by handle: shapes keep positive size, lines scale their points', () => {
+  const r = shape('rectangle', 0, 0, 100, 50);
+  const start = structuredClone(r);
+  resizeElement(r, 'se', [150, 80], start);
+  assert.deepEqual([r.x, r.y, r.w, r.h], [0, 0, 150, 80]);
+  resizeElement(r, 'nw', [120, 70], start);  // passou do canto oposto: inverte sem tamanho negativo
+  assert.deepEqual([r.x, r.y, r.w, r.h], [100, 50, 20, 20]);
+  const ln = createElement('line', [0, 0]); resizeTo(ln, [100, 50]);
+  resizeElement(ln, 'e', [200, 0], structuredClone(ln));
+  assert.deepEqual(ln.points, [[0, 0], [200, 50]]);
+});
+
+test('layer order and duplicate', () => {
+  const [a, b, c] = ['rectangle', 'ellipse', 'diamond'].map((t, i) => shape(t, i * 10, 0, 5, 5));
+  assert.deepEqual(bringToFront([a, b, c], [a.id]).map(e => e.id), [b.id, c.id, a.id]);
+  assert.deepEqual(sendToBack([a, b, c], [c.id]).map(e => e.id), [c.id, a.id, b.id]);
+  const copies = duplicateElements([a, b, c], [b.id], 10);
+  assert.equal(copies.length, 1);
+  assert.notEqual(copies[0].id, b.id);
+  assert.deepEqual([copies[0].x, copies[0].y, copies[0].type], [b.x + 10, b.y + 10, 'ellipse']);
+});
