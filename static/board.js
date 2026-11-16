@@ -5,7 +5,7 @@ import {
   createElement, resizeTo, elementPaths, fillPath, elementBounds, DEFAULTS, elementAt, elementsInBox,
   moveElements, resizeElement, bringToFront, sendToBack, duplicateElements, elementsHitBy, paint, elementsInPolygon, forwardOne, backwardOne,
 } from './board-model.js';
-import { History } from './model.js';
+import { History, safeUrl } from './model.js';
 
 const $ = (s) => document.querySelector(s);
 const SVG = 'http://www.w3.org/2000/svg';
@@ -106,11 +106,21 @@ function drawElement(e) {
   return g;
 }
 
+// ícone de link no canto do elemento (tamanho fixo na tela); clicar abre o endereço
+function drawLinkBadge(e) {
+  const b = elementBounds(e), k = view.k;
+  const g = el('g', { class: 'link-badge', 'data-id': e.id, transform: `translate(${b.x + b.w + 4 / k} ${b.y - 26 / k}) scale(${1 / k})` }, root);
+  el('title', {}, g).textContent = safeUrl(e.link);
+  el('rect', { width: 22, height: 22, rx: 6 }, g);
+  el('use', { href: '#i-link', x: 3, y: 3, width: 16, height: 16 }, g);
+}
+
 function render() {
   if (!board) return;
   $('#title').textContent = board.title;
   root.setAttribute('transform', `translate(${view.x} ${view.y}) scale(${view.k})`);
   root.replaceChildren(...board.elements.map(drawElement));
+  for (const e of board.elements) if (safeUrl(e.link)) drawLinkBadge(e);
   drawSelection();
   $('#board-zoom').textContent = `${Math.round(view.k * 100)}%`;
   renderProps();
@@ -160,6 +170,12 @@ const toWorld = (e) => {
 
 svg.addEventListener('pointerdown', (e) => {
   if (!board) return;
+  const badge = e.target.closest?.('.link-badge');
+  if (badge && e.button === 0) {
+    const url = safeUrl(board.elements.find(x => x.id === badge.dataset.id)?.link);
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+    return;
+  }
   if (isDoubleClick(e) && tool === 'select' && e.button === 0 && onDoubleClick(e)) {
     e.preventDefault();  // sem os eventos de mouse depois, o foco fica no campo de texto
     gesture = null;
@@ -281,6 +297,7 @@ document.addEventListener('keydown', (e) => {
   else if (ctrl && k === '-') { e.preventDefault(); zoomCenter(1 / 1.1); }
   else if (ctrl && k === 'a') { e.preventDefault(); setTool('select'); selection = board.elements.map(x => x.id); render(); }
   else if (ctrl && k === 'd') { e.preventDefault(); act('duplicate'); }
+  else if (ctrl && k === 'k') { e.preventDefault(); act('link'); }
   else if (ctrl && k === 'c') { if (selection.length) clipboard = JSON.stringify(board.elements.filter(x => selection.includes(x.id))); }
   // Ctrl+V: sem preventDefault, para o evento "paste" (que traz imagens) acontecer antes; se não houver imagem, cola os elementos
   else if (ctrl && k === 'v') { pendingPaste = setTimeout(paste, 0); }
@@ -442,6 +459,15 @@ function selectUp() {
 function act(name) {
   if (!selection.length) return;
   const before = snapshot();
+  if (name === 'link') {
+    const sel = board.elements.filter(x => selection.includes(x.id));
+    const input = prompt('Endereço do link (vazio remove)', sel[0].link ?? '');
+    if (input === null) return;
+    const url = safeUrl(input);
+    if (input.trim() && !url) { alert('Use um endereço http ou https.'); return; }
+    for (const x of sel) { if (url) x.link = url; else delete x.link; }
+    return changed(before);
+  }
   if (name === 'delete') {
     board.elements = board.elements.filter(x => !selection.includes(x.id));
     selection = [];
@@ -625,7 +651,7 @@ export async function boardSvg() {
   clone.removeAttribute('class');
   const r = clone.querySelector('#board-root');
   r.removeAttribute('transform');
-  for (const x of r.querySelectorAll('.sel-item, .handle, .marquee, .laser')) x.remove();
+  for (const x of r.querySelectorAll('.sel-item, .handle, .marquee, .laser, .link-badge')) x.remove();
   const w = Math.max(1, bb.width) + 2 * pad, h = Math.max(1, bb.height) + 2 * pad;
   const bg = document.createElementNS(SVG, 'rect');
   Object.entries({ x: bb.x - pad, y: bb.y - pad, width: w, height: h, fill: '#ffffff' }).forEach(([k, v]) => bg.setAttribute(k, v));

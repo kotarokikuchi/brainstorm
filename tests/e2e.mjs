@@ -1041,6 +1041,17 @@ assert.equal(codeTxt.fontFamily, 'code', 'família da fonte salva');
 assert.notEqual(codeTxt.w, wHand, 'largura medida de novo com a nova fonte');
 assert.match(await ev(`document.querySelector('#board-root .el[data-id="${lastTxt.id}"] text').getAttribute('font-family')`), /monospace/, 'texto em fonte de código');
 await ev(`document.querySelector('#board-props [data-prop="fontFamily"] [data-value="hand"]').click()`);
+await ev(`(() => { window.prompt = () => 'example.com/doc'; window.__opened = []; window.open = (u) => { window.__opened.push(u); }; })()`);
+await ev(`document.querySelector('#board-props [data-act="link"]').click()`);
+await sleep(900);
+assert.equal((await boardEls()).at(-1).link, 'https://example.com/doc', 'link salvo (com https)');
+const lbx = await ev(`(() => { const r = document.querySelector('#board-root .link-badge').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+await click(lbx[0], lbx[1]);
+assert.deepEqual(await ev(`window.__opened`), ['https://example.com/doc'], 'clicar no ícone abre o link');
+await ev(`window.prompt = () => 'javascript:alert(1)'; window.alert = () => {}`);
+await key('k', 2);
+await sleep(900);
+assert.equal((await boardEls()).at(-1).link, 'https://example.com/doc', 'endereço inválido não entra');
 
 // quadro: cada ferramenta mostra a letra do atalho no canto do botão
 const hint = (t) => ev(`getComputedStyle(document.querySelector('#board-tools [data-tool="${t}"]'), '::after').content`);
