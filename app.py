@@ -54,6 +54,12 @@ def read_map(file):
 
 
 class Handler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        # arquivos do app: o navegador sempre confere se mudaram (304 barato) em vez de usar JS antigo do cache
+        if not urlsplit(self.path).path.startswith("/api/"):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     def do_GET(self):
         if self._foreign_host() or self._api("GET"):
             return

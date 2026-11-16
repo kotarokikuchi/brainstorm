@@ -268,6 +268,13 @@ class ApiTest(unittest.TestCase):
         self.req("DELETE", "/api/maps/qd")
         self.assertEqual(self.req("GET", "/api/trash")[1][0]["title"], "Quadro 2")
 
+    def test_static_files_are_revalidated(self):
+        # sem isso o navegador reaproveita JS antigo (cache heurístico) depois de uma atualização
+        status, headers, _ = self.raw_get("/app.js")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("Cache-Control"), "no-cache")
+        self.assertIn("Last-Modified", headers)
+
     def test_deleting_map_removes_its_files(self):
         self.req("PUT", "/api/maps/abc", {"version": 0, "root": {"text": "a", "children": []}})
         _, info = self.upload("abc", "foto.png", b"x")
