@@ -377,3 +377,39 @@ test('linkPath and linkHandle honor chosen sides', () => {
   // com curva manual, o lado escolhido continua valendo
   assert.match(linkPath(a, b, [0, 300], 'top', 'top'), /^M20,0 Q.* 220,0$/);
 });
+
+// ---- Forma efetiva: estilo em qualquer nó vira caixa ----
+import { effectiveShape } from '../static/model.js';
+
+test('effectiveShape: defaults per depth, box when styled, explicit shape wins', () => {
+  const n = (extra = {}) => ({ shape: null, color: null, ...extra });
+  assert.equal(effectiveShape(n(), 0), 'none');
+  assert.equal(effectiveShape(n(), 1), 'pill');
+  assert.equal(effectiveShape(n(), 2), 'underline');
+  assert.equal(effectiveShape(n({ borderColor: '#e5383b' }), 2), 'rounded');
+  assert.equal(effectiveShape(n({ color: '#2f5bea' }), 3), 'rounded');
+  assert.equal(effectiveShape(n({ fillNone: true }), 2), 'rounded');
+  assert.equal(effectiveShape(n({ borderWidth: 'thick' }), 0), 'rounded');
+  assert.equal(effectiveShape(n({ shape: 'underline', color: '#2f5bea' }), 2), 'underline');
+  assert.equal(effectiveShape(n({ shape: 'cloud' }), 2), 'cloud');
+});
+
+test('layout boxes carry the effective shape', () => {
+  const { m, g1 } = sample('map');
+  g1.borderColor = '#e5383b';
+  const b = byId(layout(m, measure));
+  assert.equal(b[g1.id].shape, 'rounded');
+  assert.equal(b[m.root.id].shape, 'none');
+});
+
+// ---- Segurança: marcadores só com tipo conhecido e cor hexadecimal ----
+import { markerShape } from '../static/model.js';
+
+test('markerShape rejects unknown types and sanitizes colors', () => {
+  assert.match(markerShape('arrow', '#e5383b'), /fill="#e5383b"/);
+  assert.equal(markerShape('evil', '#e5383b'), null);
+  assert.equal(markerShape('none', '#e5383b'), null);
+  const bad = markerShape('dot', 'x"/><circle id="pwn"/><path d="');
+  assert.ok(!bad.includes('pwn'), 'cor maliciosa não entra na marcação');
+  assert.match(bad, /fill="#22a559"/);
+});
