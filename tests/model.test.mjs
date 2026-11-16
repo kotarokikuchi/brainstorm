@@ -484,3 +484,24 @@ test('layout with a focus id draws only that branch, centered, keeping its color
     assert.equal(b[l1.id], undefined);
   }
 });
+
+// ---- Outline: recuar / desrecuar ----
+import { indentNode, outdentNode } from '../static/model.js';
+
+test('indentNode moves a node under its previous sibling', () => {
+  const { m, r1, g1, g2 } = sample('map');
+  assert.equal(indentNode(m, g1.id), false, 'primeiro filho não recua');
+  assert.equal(indentNode(m, g2.id), true);
+  assert.deepEqual(r1.children.map(n => n.id), [g1.id]);
+  assert.deepEqual(g1.children.map(n => n.id), [g2.id]);
+});
+
+test('outdentNode moves a node after its parent, one level up', () => {
+  const { m, r1, l1, g1, g2 } = sample('map');
+  assert.equal(outdentNode(m, r1.id), false, '1º nível não desrecua');
+  assert.equal(outdentNode(m, g1.id), true);
+  const kids = m.root.children.map(n => n.id);
+  assert.equal(kids[kids.indexOf(r1.id) + 1], g1.id, 'logo depois do antigo pai');
+  assert.ok(g1.side && PALETTE.includes(g1.color), 'virou 1º nível: lado e cor');
+  assert.deepEqual(r1.children.map(n => n.id), [g2.id]);
+});
