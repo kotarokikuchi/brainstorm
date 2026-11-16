@@ -29,6 +29,7 @@ window.addEventListener('hashchange', route);
 route();
 
 async function route() {
+  finishEdit(true);  // navegar no meio da digitação confirma o texto
   await flushSave();
   const m = location.hash.match(/^#\/map\/([a-z0-9-]+)$/);
   if (m) openMap(m[1]); else showList();
@@ -74,6 +75,7 @@ async function openMap(id) {
   map = await r.json();
   history = new History();
   selected = map.root.id;
+  if (conflict) dirty = false;  // edições do mapa em conflito foram abandonadas ao sair dele
   conflict = false;
   document.body.dataset.view = 'editor';
   setStatus('Salvo');
@@ -106,6 +108,8 @@ function render() {
   $('#title').textContent = map.root.text;
   const res = layout(map, measure);
   boxes = res.nodes;
+  // seleção nunca fica num nó invisível (recolhido/apagado): sobe ao ancestral visível
+  while (!boxes.some(b => b.id === selected)) selected = findNode(map.root, selected)?.parent?.id ?? map.root.id;
   viewport.setAttribute('transform', `translate(${view.x} ${view.y}) scale(${view.k})`);
   viewport.replaceChildren();
   // na lista, arestas longas primeiro: o tronco fica segmentado com a cor de cada ramo
@@ -234,13 +238,14 @@ function finishEdit(commit) {
     if (isNew) {
       // nó novo já entrou no histórico ao ser criado
       selected = commitText(map, id, text, true);
-      // nó novo descartado: volta para onde o usuário estava
-      if (!findNode(map.root, id) && findNode(map.root, prev)) selected = prev;
+      if (findNode(map.root, id)) scheduleSave();
+      // nó novo descartado: volta para onde o usuário estava (nada mudou, nada a salvar)
+      else if (findNode(map.root, prev)) selected = prev;
     } else if (commit && text.trim() && text.trim() !== node.text) {
       history.push(snapshot());
       selected = commitText(map, id, text, false);
+      scheduleSave();
     }
-    scheduleSave();
   }
   render();
 }
@@ -311,7 +316,8 @@ function setStatus(text, error = false) {
 }
 
 function scheduleSave() {
-  if (conflict) return;
+  // após um 409 não grava mais, mas marca pendência para o aviso ao fechar a aba
+  if (conflict) { dirty = true; return; }
   dirty = true;
   pending = map;
   setStatus('Salvando…');
@@ -357,7 +363,7 @@ async function flushSave() {
 }
 
 window.addEventListener('beforeunload', (ev) => {
-  if (dirty || saving) ev.preventDefault();
+  if (dirty || saving || editing) ev.preventDefault();
 });
 window.addEventListener('resize', render);
 

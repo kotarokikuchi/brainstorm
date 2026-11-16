@@ -125,6 +125,33 @@ await ev(`document.querySelector('#undo').click()`);
 assert.equal(await ev(`document.querySelector('#layout-select').value`), 'map', 'desfazer pelo botão');
 await sleep(900);
 
+// revisão I2: recolher o avô leva a seleção para o nó recolhido
+await clickNode('Time');
+const recBox = `[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('Recursos'))`;
+await ev(`${recBox}.querySelector('.toggle').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
+assert.match(await ev(`document.querySelector('.selected-ring').parentNode.textContent`), /^Recursos/, 'seleção sobe ao recolher');
+await ev(`${recBox}.querySelector('.toggle').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
+await sleep(900);
+
+// revisão M1: entrar e sair da edição sem mudar nada não grava
+const vBefore = (await getMap()).version;
+await key('F2'); await key('Enter');
+await sleep(900);
+assert.equal((await getMap()).version, vBefore, 'edição sem mudança não grava');
+
+// revisão M5: texto em digitação protege o fechamento e a navegação encerra a edição
+const unloadBlocked = () => ev(`(() => { const e = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; })()`);
+await key('F2'); await typeText(' rascunho');
+assert.equal(await unloadBlocked(), true, 'beforeunload avisa durante edição');
+await ev(`location.hash = '#/'`); await sleep(600);
+await ev(`location.hash = '#/map/demo'`); await sleep(1200);
+assert.equal(await ev(`document.querySelector('#editor').hidden`), true, 'edição encerrada ao navegar');
+assert.ok((await texts()).some(t => t.endsWith('rascunho')), 'texto digitado foi confirmado');
+await key('Tab');
+assert.equal(await ev(`!document.querySelector('#editor').hidden`), true, 'teclado funciona após voltar');
+await key('Escape');
+await sleep(900);
+
 // conflito: outra "aba" grava antes
 await sleep(900);
 const cur = await getMap();
@@ -132,6 +159,10 @@ await fetch(BASE + '/api/maps/demo', { method: 'PUT', body: JSON.stringify(cur) 
 await key('F2'); await typeText('Cronograma 2026'); await key('Enter');
 await sleep(900);
 assert.match(await status(), /outra aba/, 'conflito detectado');
+
+// revisão I1: editar após o conflito mantém o aviso ao fechar
+await key('F2'); await typeText(' depois'); await key('Enter');
+assert.equal(await unloadBlocked(), true, 'beforeunload avisa após conflito');
 
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
