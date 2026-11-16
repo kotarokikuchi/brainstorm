@@ -11,6 +11,10 @@
     <a href="#/" class="brand"><span class="logo"></span>Galho</a>
     <span id="title"></span>
     <span id="status"></span>
+    <span class="history-btns">
+      <button id="undo" class="icon" title="Desfazer (Ctrl+Z)"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button>
+      <button id="redo" class="icon" title="Refazer (Ctrl+Shift+Z)"><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5M20 9H9a5 5 0 0 0 0 10h3"/></svg></button>
+    </span>
   </header>
 
   <main id="list-view">
@@ -25,7 +29,40 @@
   <section id="editor-view">
     <svg id="canvas"><g id="viewport"></g></svg>
     <input id="editor" hidden autocomplete="off" spellcheck="false">
-    <footer id="help">Tab filho · Enter irmão · Del apagar · F2 editar · Setas navegar · Espaço recolher · Ctrl+Z desfazer</footer>
+
+    <!-- barra flutuante sobre o nó selecionado -->
+    <div id="toolbar" class="card" hidden>
+      <button id="style-btn" class="icon" title="Cor e forma"><svg viewBox="0 0 24 24"><path d="M12 3s-6 7-6 11a6 6 0 0 0 12 0c0-4-6-11-6-11z"/></svg></button>
+      <button id="delete-btn" class="icon" title="Apagar (Del)"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg></button>
+    </div>
+    <div id="style-pop" class="card" hidden>
+      <p>Cor</p>
+      <div id="swatches"></div>
+      <p>Forma</p>
+      <div id="shapes">
+        <button data-shape="none" class="icon" title="Sem forma"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+        <button data-shape="rect" class="icon" title="Retângulo"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12"/></svg></button>
+        <button data-shape="rounded" class="icon" title="Arredondado"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="4"/></svg></button>
+        <button data-shape="pill" class="icon" title="Pílula"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="5"/></svg></button>
+      </div>
+    </div>
+
+    <!-- botões "+" ao lado do nó selecionado -->
+    <button id="add-child" class="adder" title="Novo filho (Tab)">+</button>
+    <button id="add-sibling" class="adder" title="Novo irmão (Enter)">+</button>
+    <div id="hints"><span><kbd>Tab</kbd> filho</span><span><kbd>Enter</kbd> irmão</span></div>
+
+    <div id="dock" class="card">
+      <select id="layout-select" title="Layout">
+        <option value="map">Mapa</option>
+        <option value="org">Organograma</option>
+        <option value="list">Lista</option>
+      </select>
+      <button id="zoom-out" class="icon" title="Diminuir zoom">−</button>
+      <button id="zoom-reset" title="Zoom 100%">100%</button>
+      <button id="zoom-in" class="icon" title="Aumentar zoom">+</button>
+      <button id="zoom-fit" class="icon" title="Ajustar à tela"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    </div>
   </section>
 
   <script type="module" src="app.js"></script>
