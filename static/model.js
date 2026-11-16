@@ -43,15 +43,33 @@ export function addChild(map, parentId) {
   return n;
 }
 
-export function addSibling(map, nodeId) {
+export function addSibling(map, nodeId, before = false) {
   const hit = findNode(map.root, nodeId);
   if (!hit.parent) return addChild(map, nodeId);
   const n = node();
   n.side = hit.node.side;
   if (hit.parent === map.root) n.color = PALETTE[map.root.children.length % PALETTE.length];
   const kids = hit.parent.children;
-  kids.splice(kids.indexOf(hit.node) + 1, 0, n);
+  kids.splice(kids.indexOf(hit.node) + (before ? 0 : 1), 0, n);
   return n;
+}
+
+// novo nó vazio entre nodeId e o pai dele; recusa a raiz
+export function insertParent(map, nodeId) {
+  const hit = findNode(map.root, nodeId);
+  if (!hit || !hit.parent) return null;
+  const p = node();
+  const kids = hit.parent.children;
+  kids.splice(kids.indexOf(hit.node), 1, p);
+  if (hit.parent === map.root) {
+    // o novo pai vira o ramo de 1º nível: herda lado e cor
+    p.side = hit.node.side;
+    p.color = hit.node.color;
+    hit.node.side = null;
+    hit.node.color = null;
+  }
+  p.children.push(hit.node);
+  return p;
 }
 
 export function removeNode(map, nodeId) {

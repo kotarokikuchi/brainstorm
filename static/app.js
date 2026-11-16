@@ -1,6 +1,6 @@
 import {
   PALETTE, uid, newMap, findNode, addChild, addSibling, removeNode, commitText,
-  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch,
+  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, insertParent,
 } from './model.js';
 
 const $ = (s) => document.querySelector(s);
@@ -126,7 +126,7 @@ function render() {
   drawLinks();
   if (drag?.active) drawDrop();
   if (editing) placeInput();
-  placeOverlays();
+  placeHover();
 }
 
 function drawNode(b) {
@@ -250,7 +250,15 @@ function finishEdit(commit) {
   const node = findNode(map.root, id)?.node;
   if (node) {
     const text = commit ? input.value : '';
-    if (isNew) {
+    if (isNew && !text.trim() && node.children.length) {
+      // pai inserido e descartado: desfaz a inserção (removeNode levaria o ramo junto)
+      const st = JSON.parse(history.undo(snapshot()));
+      history.future.pop();
+      map.root = st.root;
+      map.layout = st.layout;
+      map.links = st.links ?? [];
+      selected = prev;
+    } else if (isNew) {
       // nó novo já entrou no histórico ao ser criado
       selected = commitText(map, id, text, true);
       if (findNode(map.root, id)) scheduleSave();
@@ -463,6 +471,8 @@ function placeOverlays() {
   pos(addChildBtn, ...child);
   pos(addSiblingBtn, ...sibling);
   addSiblingBtn.hidden ||= b.depth === 0;
+  // em hover, os 4 "+" verdes substituem os azuis
+  if (hovered === b.id) addChildBtn.hidden = addSiblingBtn.hidden = true;
   // dicas só em nó sem filhos visíveis, como num mapa recém-criado
   hints.hidden ||= left || map.layout === 'org' || (n.children.length > 0 && !n.collapsed);
   pos(hints, child[0] + 22, child[1]);
@@ -733,7 +743,7 @@ nodeMenu.onclick = (e) => {
 
 // clicar fora dos controles (cabeçalho, lista...) fecha qualquer menu aberto
 document.addEventListener('pointerdown', (e) => {
-  if (!map || e.target.closest('.card, .adder, .node, .link-hit, .link-handle, #editor')) return;
+  if (!map || e.target.closest('.card, .adder, .hover-add, .node, .link-hit, .link-handle, #editor')) return;
   if (stylePop.hidden && nodeMenu.hidden) return;
   stylePop.hidden = nodeMenu.hidden = true;
   render();
@@ -772,3 +782,69 @@ window.addEventListener('pointerup', () => {
   bending = null;
   render();
 });
+
+// ---------- 4 "+" ao passar o mouse ----------
+let hovered = null;  // id do nó sob o ponteiro (com margem para alcançar os botões)
+const hoverBtns = [...document.querySelectorAll('.hover-add')], hoverRing = $('#hover-ring');
+
+$('#editor-view').addEventListener('pointermove', (e) => {
+  if (!map) return;
+  let id = null;
+  if (!editing && !drag?.active && !linking && !bending && !pan) {
+    const [wx, wy] = toWorld(e), margin = 48 / view.k;
+    const inside = (b, pad) => wx >= b.x - pad && wx <= b.x + b.w + pad && wy >= b.y - pad && wy <= b.y + b.h + pad;
+    id = (boxes.find(b => inside(b, 0)) ?? boxes.find(b => b.id === hovered && inside(b, margin)))?.id ?? null;
+  }
+  if (id !== hovered) { hovered = id; placeHover(); }
+});
+$('#editor-view').addEventListener('pointerleave', () => { hovered = null; placeHover(); });
+
+function placeHover() {
+  for (const btn of hoverBtns) btn.hidden = true;
+  hoverRing.hidden = true;
+  const b = !editing && boxes.find(x => x.id === hovered);
+  if (b) {
+    const sx = (x) => view.x + x * view.k, sy = (y) => view.y + y * view.k;
+    const L = sx(b.x), R = sx(b.x + b.w), T = sy(b.y), B = sy(b.y + b.h), CX = (L + R) / 2, CY = (T + B) / 2;
+    const isRoot = b.id === map.root.id;
+    // lado dos filhos já tem a bolinha de recolher: afasta o "+" dela
+    const far = !isRoot && findNode(map.root, b.id).node.children.length ? 44 : 22;
+    let dirs;
+    if (isRoot) dirs = map.layout === 'map' ? { 'child-left': 'left', 'child-right': 'right' } : { child: map.layout === 'org' ? 'bottom' : 'right' };
+    else if (map.layout === 'org') dirs = { child: 'bottom', parent: 'top', before: 'left', after: 'right' };
+    else {
+      const flip = map.layout === 'map' && b.side === 'left';
+      dirs = { child: flip ? 'left' : 'right', parent: flip ? 'right' : 'left', before: 'top', after: 'bottom' };
+    }
+    const childSide = dirs.child;
+    const spot = (side) => {
+      const g = side === childSide ? far : 22;
+      return { right: [R + g, CY], left: [L - g, CY], top: [CX, T - g], bottom: [CX, B + g] }[side];
+    };
+    for (const btn of hoverBtns) {
+      const side = dirs[btn.dataset.dir];
+      if (!side) continue;
+      const [x, y] = spot(side);
+      Object.assign(btn.style, { left: `${x}px`, top: `${y}px` });
+      btn.hidden = false;
+    }
+    Object.assign(hoverRing.style, { left: `${L - 5}px`, top: `${T - 5}px`, width: `${R - L + 10}px`, height: `${B - T + 10}px` });
+    hoverRing.hidden = false;
+  }
+  placeOverlays();
+}
+
+for (const btn of hoverBtns) {
+  btn.onclick = () => {
+    const id = hovered, dir = btn.dataset.dir;
+    if (!id) return;
+    hovered = null;
+    addAndEdit(() => {
+      if (dir === 'parent') return insertParent(map, id);
+      if (dir === 'before' || dir === 'after') return addSibling(map, id, dir === 'before');
+      const n = addChild(map, id);
+      if (dir === 'child-left' || dir === 'child-right') n.side = dir.slice(6);
+      return n;
+    });
+  };
+}

@@ -328,3 +328,29 @@ test('linkPath with bend passes through the handle and leaves by the nearest sid
   // quadrática passa pelo handle em t=0.5: controle = 2H - (p1+p2)/2
   assert.match(d, /Q120,600 /);
 });
+
+// ---- Irmão antes / inserir pai ----
+import { insertParent } from '../static/model.js';
+
+test('addSibling with before=true inserts ahead of the node', () => {
+  const { m, r1, g1, g2 } = sample('map');
+  const s = addSibling(m, g2.id, true);
+  assert.deepEqual(r1.children.map(n => n.id), [g1.id, s.id, g2.id]);
+});
+
+test('insertParent puts a new node between the node and its parent', () => {
+  const { m, r1, g1, g2 } = sample('map');
+  const p = insertParent(m, g2.id);
+  assert.deepEqual(r1.children.map(n => n.id), [g1.id, p.id]);
+  assert.deepEqual(p.children.map(n => n.id), [g2.id]);
+  assert.equal(p.text, '');
+  // em 1º nível: o novo pai assume lado e cor; o antigo passa a herdar
+  const side = r1.side, color = r1.color;
+  const p2 = insertParent(m, r1.id);
+  assert.equal(findNode(m.root, p2.id).parent, m.root);
+  assert.equal(p2.side, side);
+  assert.equal(p2.color, color);
+  assert.equal(r1.side, null);
+  assert.equal(r1.color, null);
+  assert.equal(insertParent(m, m.root.id), null);
+});
