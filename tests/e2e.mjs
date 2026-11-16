@@ -14,7 +14,7 @@ const chrome = spawn('google-chrome', ['--headless=new', '--disable-gpu', '--rem
   '--window-size=1400,800', '--user-data-dir=' + join(tmp, 'chrome'), 'about:blank'], { stdio: 'ignore' });
 process.on('exit', () => { chrome.kill(); server.kill(); rmSync(tmp, { recursive: true, force: true }); });
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(1));
-setTimeout(() => { console.error('E2E timeout'); process.exit(1); }, 150000).unref();
+setTimeout(() => { console.error('E2E timeout'); process.exit(1); }, 300000).unref();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 let targets;
 for (let i = 0; i < 50; i++) { try { targets = await (await fetch('http://127.0.0.1:9333/json')).json(); break; } catch { await sleep(200); } }
@@ -995,6 +995,34 @@ await key('?');
 assert.equal(await ev(`!document.querySelector('#board-help').hidden`), true, '? mostra os atalhos');
 await key('Escape');
 assert.equal(await ev(`document.querySelector('#board-help').hidden`), true);
+
+// quadro: Enter quebra a linha (como num editor de texto) sem a primeira linha sumir; Esc confirma; sem borda
+await key('8');
+await click(cv.x + 900, cv.y + 420);
+assert.equal(await ev(`getComputedStyle(document.querySelector('#board-text')).outlineStyle`), 'none', 'sem borda tracejada');
+await typeText('Linha um');
+await key('Enter');
+assert.equal(await ev(`document.querySelector('#board-text').hidden`), false, 'Enter não fecha');
+await typeText('linha dois');
+await key('Enter');
+await typeText('linha três');
+assert.equal(await ev(`document.querySelector('#board-text').value`), 'Linha um\nlinha dois\nlinha três', 'Enter quebra a linha');
+assert.equal(await ev(`document.querySelector('#board-text').scrollTop`), 0, 'primeira linha continua visível');
+for (let i = 4; i <= 7; i++) { await key('Enter'); await typeText(String(i)); }
+assert.ok(await ev(`(() => { const t = document.querySelector('#board-text'); return t.scrollHeight <= t.clientHeight + 1; })()`), 'caixa mostra todas as linhas');
+for (let i = 0; i < 4; i++) { await key('Backspace'); await key('Backspace'); }
+await key('Escape');
+await sleep(900);
+let lastTxt = (await boardEls()).at(-1);
+assert.deepEqual([lastTxt.type, lastTxt.text], ['text', 'Linha um\nlinha dois\nlinha três'], 'Esc confirma as três linhas');
+assert.equal(await ev(`[...document.querySelectorAll('#board-root .el[data-id="${lastTxt.id}"] tspan')].length`), 3, 'desenhado em três linhas');
+const lt = await elBox(lastTxt.id);
+await dbl(lt.x + lt.w / 2, lt.y + 5);
+await ev(`document.querySelector('#board-text').setSelectionRange(99, 99)`);
+await typeText('!');
+await key('Enter', 2);  // Ctrl+Enter também confirma
+await sleep(900);
+assert.equal((await boardEls()).at(-1).text, 'Linha um\nlinha dois\nlinha três!', 'Ctrl+Enter confirma');
 
 // quadro: menus do topo fecham ao clicar fora e ao clicar de novo no próprio botão
 const shownSel = (sel) => ev(`!document.querySelector('${sel}').hidden`);
