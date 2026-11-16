@@ -117,9 +117,11 @@ function imageSize(image, width) {
   return { w: Math.round(image.w * s), h: Math.round(image.h * s) };
 }
 
-const ICON_W = 26;  // ícone de comentário dentro do nó
+const ICON_W = 26;  // ícones dentro do nó (comentário, link)
+const inlineIcons = (n) => (n.comments?.length ? 1 : 0);
 
-function measure(text, depth, width, image, icons = 0) {
+function measure(n, depth) {
+  const { text, width, image } = n, icons = inlineIcons(n);
   const lines = linesFor(text, depth, width && width - icons * ICON_W), d = lvl(depth), img = imageSize(image, width);
   const textW = Math.max(30, ...lines.map(l => ctx.measureText(l).width));
   return {

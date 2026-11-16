@@ -95,7 +95,7 @@ test('History undo/redo and limit', () => {
 // ---- Task 3: layouts ----
 import { layout, edgePath, navigate } from '../static/model.js';
 
-const measure = (text) => ({ w: text.length * 8 + 16, h: 20 });
+const measure = (n) => ({ w: n.text.length * 8 + 16, h: 20 });
 const byId = (res) => Object.fromEntries(res.nodes.map(b => [b.id, b]));
 
 function sample(layoutName) {
@@ -430,7 +430,7 @@ test('layout passes the node width to measure', () => {
   const { m, g1 } = sample('map');
   g1.width = 150;
   const seen = [];
-  const res = layout(m, (text, depth, width) => { seen.push(width); return { w: width ?? text.length * 8 + 16, h: width ? 44 : 20 }; });
+  const res = layout(m, (n) => { seen.push(n.width); return { w: n.width ?? n.text.length * 8 + 16, h: n.width ? 44 : 20 }; });
   const b = byId(res)[g1.id];
   assert.deepEqual([b.w, b.h], [150, 44]);
   assert.ok(seen.includes(150));
@@ -440,7 +440,7 @@ test('layout passes the node width to measure', () => {
 test('layout passes the node image to measure', () => {
   const { m, g1 } = sample('map');
   g1.image = { id: 'a'.repeat(32) + '.png', w: 400, h: 200 };
-  const res = layout(m, (text, depth, width, image) => ({ w: image ? 216 : 50, h: image ? 136 : 20 }));
+  const res = layout(m, (n) => ({ w: n.image ? 216 : 50, h: n.image ? 136 : 20 }));
   const b = byId(res)[g1.id];
   assert.deepEqual([b.w, b.h], [216, 136]);
 });
@@ -449,7 +449,7 @@ test('layout passes the node image to measure', () => {
 test('layout tells measure how many inline icons the node shows', () => {
   const { m, g1, g2 } = sample('map');
   g1.comments = [{ id: 'c1', text: 'oi', at: '2026-11-16T00:00:00Z' }];
-  const res = layout(m, (text, depth, width, image, icons) => ({ w: 50 + 26 * (icons ?? 0), h: 20 }));
+  const res = layout(m, (n) => ({ w: 50 + 26 * (n.comments?.length ? 1 : 0), h: 20 }));
   const b = byId(res);
   assert.equal(b[g1.id].w, 76);
   assert.equal(b[g2.id].w, 50);
