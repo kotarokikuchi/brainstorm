@@ -96,13 +96,21 @@ async function openMap(id) {
 // medida de texto via canvas (mesma fonte do SVG)
 const ctx = document.createElement('canvas').getContext('2d');
 const FONT = getComputedStyle(document.body).fontFamily;
-const fontFor = (depth) => depth === 0 ? `700 24px ${FONT}` : depth === 1 ? `600 15px ${FONT}` : `400 14px ${FONT}`;
+const BASE_SIZE = [24, 15, 14], SIZE_SCALE = { small: 0.85, large: 1.3 };
+const isBold = (n, depth) => n.textBold ?? depth <= 1;  // raiz e 1º nível são negrito por padrão
+// fonte do nó: padrão do nível + negrito/itálico/tamanho escolhidos
+function fontFor(depth, n = {}) {
+  const d = Math.min(depth, 2), weight = isBold(n, depth) ? (depth === 1 ? 600 : 700) : 400;
+  const size = Math.round(BASE_SIZE[d] * (SIZE_SCALE[n.textSize] ?? 1));
+  return `${n.textItalic ? 'italic ' : ''}${weight} ${size}px ${FONT}`;
+}
 const PAD = [24, 36, 20], BASE_H = [44, 36, 28], LINE_H = [30, 20, 18];
 const lvl = (depth) => Math.min(depth, 2);
 
 // linhas do texto: uma só, ou quebradas para caber na largura fixa do nó (redimensionado)
-function linesFor(text, depth, width) {
-  ctx.font = fontFor(depth);
+function linesFor(n, depth, width) {
+  const text = n.text;
+  ctx.font = fontFor(depth, n);
   return width ? wrapLines(text, width - PAD[lvl(depth)], (t) => ctx.measureText(t).width) : [text];
 }
 
@@ -117,14 +125,16 @@ function imageSize(image, width) {
   return { w: Math.round(image.w * s), h: Math.round(image.h * s) };
 }
 
-const ICON_W = 26;  // ícone de comentário dentro do nó
+const ICON_W = 26;  // ícones dentro do nó (comentário, link)
+const inlineIcons = (n) => (n.comments?.length ? 1 : 0);
 
-function measure(text, depth, width, image, icons = 0) {
-  const lines = linesFor(text, depth, width && width - icons * ICON_W), d = lvl(depth), img = imageSize(image, width);
+function measure(n, depth) {
+  const { width, image } = n, icons = inlineIcons(n), scale = SIZE_SCALE[n.textSize] ?? 1;
+  const lines = linesFor(n, depth, width && width - icons * ICON_W), d = lvl(depth), img = imageSize(image, width);
   const textW = Math.max(30, ...lines.map(l => ctx.measureText(l).width));
   return {
     w: Math.max(width ?? 0, textW + PAD[d] + icons * ICON_W, img ? img.w + 16 : 0),
-    h: BASE_H[d] + (lines.length - 1) * LINE_H[d] + (img ? img.h + 8 : 0),
+    h: Math.round(BASE_H[d] * scale) + (lines.length - 1) * Math.round(LINE_H[d] * scale) + (img ? img.h + 8 : 0),
   };
 }
 
@@ -213,12 +223,12 @@ function drawNode(b) {
   if (icon) drawCommentIcon(b, cy, g);
   const t = el('text', {
     x: tx, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central',
-    fill: solid ? textOn(b.color) : '#1d1d2b', style: `font: ${fontFor(b.depth)}`,
+    fill: n.textColor || (solid ? textOn(b.color) : '#1d1d2b'), style: `font: ${fontFor(b.depth, n)}`,
   }, g);
-  const lines = editing?.id === b.id ? [''] : linesFor(n.text, b.depth, n.width && n.width - (n.comments?.length ? ICON_W : 0));
+  const lines = editing?.id === b.id ? [''] : linesFor(n, b.depth, n.width && n.width - inlineIcons(n) * ICON_W);
   if (lines.length === 1) t.textContent = lines[0];
   else {
-    const lh = LINE_H[lvl(b.depth)], y0 = cy - (lines.length - 1) * lh / 2;
+    const lh = Math.round(LINE_H[lvl(b.depth)] * (SIZE_SCALE[n.textSize] ?? 1)), y0 = cy - (lines.length - 1) * lh / 2;
     lines.forEach((line, i) => { el('tspan', { x: tx, y: y0 + i * lh }, t).textContent = line; });
   }
   if (b.id === selected && !selectedLink) {
@@ -314,7 +324,7 @@ function placeInput() {
   input.style.top = `${view.y + b.y * view.k}px`;
   input.style.width = `${w}px`;
   input.style.height = `${b.h * view.k}px`;
-  input.style.font = fontFor(b.depth).replace(/\d+px/, (px) => `${parseInt(px) * view.k}px`);
+  input.style.font = fontFor(b.depth, findNode(map.root, b.id).node).replace(/\d+px/, (px) => `${parseInt(px) * view.k}px`);
 }
 
 function finishEdit(commit) {
@@ -376,6 +386,9 @@ document.addEventListener('keydown', (ev) => {
     if (key.startsWith('Arrow') || key === 'Tab' || key === 'Enter') { ev.preventDefault(); select(map.root.id); }
   } else if (!selected) {
     return;
+  } else if (ctrl && (key.toLowerCase() === 'b' || key.toLowerCase() === 'i')) {
+    ev.preventDefault();
+    toggleText(key.toLowerCase() === 'b' ? 'textBold' : 'textItalic');
   } else if (ctrl && key.toLowerCase() === 'c') {
     actions.copy();
   } else if (ctrl && key.toLowerCase() === 'v') {
@@ -480,9 +493,9 @@ window.addEventListener('resize', render);
 
 // ---------- Controles flutuantes: barra, estilo, "+" ----------
 const toolbar = $('#toolbar'), stylePop = $('#style-pop'), nodeMenu = $('#node-menu'), imagePop = $('#image-pop'), attachPop = $('#attach-pop'), hints = $('#hints');
-const commentPop = $('#comment-pop');
+const commentPop = $('#comment-pop'), textPop = $('#text-pop');
 // painéis presos ao nó selecionado: só um aberto por vez
-const nodePops = [stylePop, nodeMenu, imagePop, attachPop, commentPop];
+const nodePops = [stylePop, nodeMenu, imagePop, attachPop, commentPop, textPop];
 function closeNodePops() { for (const p of nodePops) p.hidden = true; }
 function openNodePop(pop) {
   const show = pop.hidden;
@@ -505,7 +518,7 @@ const swatch = (c) => {
   b.title = c === '' ? 'Automática' : c === 'none' ? 'Sem preenchimento' : c;
   return b;
 };
-for (const row of stylePop.querySelectorAll('.swatches[data-extra]')) {
+for (const row of document.querySelectorAll('#style-pop .swatches[data-extra], #text-pop .swatches[data-extra]')) {
   const extra = row.dataset.extra.split(' ').map(v => (v === 'auto' ? '' : v));
   row.append(...[...extra, ...PALETTE, ...EXTRA_COLORS].map(swatch));
 }
@@ -579,6 +592,11 @@ function placeOverlays() {
   below(attachPop, sx(b.x + b.w / 2) - 150);
   if (!commentPop.hidden) fillCommentList(n);
   below(commentPop, sx(b.x + b.w / 2) - 160);
+  below(textPop, sx(b.x + b.w / 2) - 140);
+  $('#text-btn').classList.toggle('active', !textPop.hidden);
+  for (const t of textPop.querySelectorAll('[data-toggle]')) {
+    t.classList.toggle('active', t.dataset.toggle === 'textBold' ? isBold(n, b.depth) : !!n[t.dataset.toggle]);
+  }
   $('#comment-btn').classList.toggle('active', !commentPop.hidden);
   $('#attach-btn').classList.toggle('active', !attachPop.hidden);
   $('#image-btn').classList.toggle('active', !imagePop.hidden);
@@ -588,7 +606,7 @@ function placeOverlays() {
   for (const t of stylePop.querySelectorAll('[data-tab]')) t.classList.toggle('active', t.dataset.tab === styleTab);
   for (const pnl of stylePop.querySelectorAll('[data-panel]')) pnl.hidden = pnl.dataset.panel !== styleTab;
   fillCustomRows();
-  for (const group of stylePop.querySelectorAll('div[data-prop]')) {
+  for (const group of document.querySelectorAll('#style-pop div[data-prop], #text-pop div[data-prop]')) {
     const prop = group.dataset.prop;
     const cur = prop === 'color' && n.fillNone ? 'none' : (n[prop] ?? '');
     for (const btn of group.querySelectorAll('[data-value]')) btn.classList.toggle('active', btn.dataset.value === cur);
@@ -1338,4 +1356,22 @@ $('#comment-list').addEventListener('click', (e) => {
   if (i === undefined) return;
   const n = findNode(map.root, selected).node;
   mutate(() => { n.comments = n.comments.filter((_, k) => k !== +i); if (!n.comments.length) delete n.comments; });
+});
+
+// ---------- Estilo do texto ----------
+// alterna negrito/itálico; voltar ao padrão do nível grava null
+function toggleText(prop) {
+  const hit = findNode(map.root, selected);
+  const cur = prop === 'textBold' ? isBold(hit.node, hit.depth) : !!hit.node.textItalic;
+  const def = prop === 'textBold' ? hit.depth <= 1 : false;
+  setStyle({ [prop]: !cur === def ? null : !cur });
+}
+
+$('#text-btn').onclick = () => openNodePop(textPop);
+textPop.addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
+textPop.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-toggle]');
+  if (t) return toggleText(t.dataset.toggle);
+  const btn = e.target.closest('[data-value]'), group = btn?.parentElement.closest('[data-prop]');
+  if (btn && group) setStyle({ [group.dataset.prop]: btn.dataset.value || null });
 });

@@ -165,3 +165,9 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 #comment-form:focus-within { border-color: var(--accent); }
 #comment-input { flex: 1; border: none; outline: none; font: inherit; font-size: 14px; background: none; }
 .comment-icon { cursor: pointer; }
+
+/* Estilo do texto */
+#text-pop { flex-direction: column; align-items: stretch; width: 280px; padding: 12px; gap: 2px; }
+#text-pop p { margin: 10px 0 6px; font-size: 12px; color: var(--muted); }
+.text-toggles button { font-size: 18px; font-family: Georgia, serif; }
+.text-toggles button.active { background: #e8eefe; color: var(--accent); }

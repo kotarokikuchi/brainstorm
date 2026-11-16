@@ -311,15 +311,15 @@ export class History {
 
 // ---- Layouts ----
 // Cada layout devolve caixas (canto superior esquerdo + tamanho) e arestas pai→filho.
-// measure(text, depth, width) -> {w, h} é injetado: no navegador mede via canvas, nos testes é fixo.
-// width = largura fixa do nó (redimensionado); o texto quebra em linhas para caber.
+// measure(node, depth) -> {w, h} é injetado: no navegador mede via canvas (texto, fonte, largura fixa,
+// imagem e ícones do nó); nos testes é fixo.
 
 const visible = (n) => (n.collapsed ? [] : n.children);
 
 export function layout(map, measure) {
   const nodes = [], edges = [];
   const box = (n, depth, color, side) => {
-    const { w, h } = measure(n.text, depth, n.width, n.image, n.comments?.length ? 1 : 0);
+    const { w, h } = measure(n, depth);
     const b = { id: n.id, x: 0, y: 0, w, h, depth, color, shape: effectiveShape(n, depth), side };
     nodes.push(b);
     return b;
@@ -335,7 +335,7 @@ function layoutMap(root, measure, box, colorOf, edges) {
   const heights = new Map();
   const subH = (n, depth) => {
     const kids = visible(n);
-    const own = measure(n.text, depth, n.width, n.image, n.comments?.length ? 1 : 0).h;
+    const own = measure(n, depth).h;
     const sum = kids.reduce((s, c) => s + subH(c, depth + 1), 0) + GAP_Y * Math.max(0, kids.length - 1);
     const h = Math.max(own, sum);
     heights.set(n.id, h);
@@ -375,7 +375,7 @@ function layoutOrg(root, measure, box, colorOf, edges) {
   const subW = (n, depth) => {
     const kids = visible(n);
     const sum = kids.reduce((s, c) => s + subW(c, depth + 1), 0) + GAP_X * Math.max(0, kids.length - 1);
-    const w = Math.max(measure(n.text, depth, n.width, n.image, n.comments?.length ? 1 : 0).w, sum);
+    const w = Math.max(measure(n, depth).w, sum);
     widths.set(n.id, w);
     return w;
   };
@@ -395,7 +395,7 @@ function layoutOrg(root, measure, box, colorOf, edges) {
     }
   };
   subW(root, 0);
-  place(null, root, 0, 0, -measure(root.text, 0, root.width, root.image, root.comments?.length ? 1 : 0).h / 2, '#222');
+  place(null, root, 0, 0, -measure(root, 0).h / 2, '#222');
 }
 
 function layoutList(root, measure, box, colorOf, edges) {

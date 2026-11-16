@@ -29,7 +29,7 @@ ws.onmessage = (m) => { const d = JSON.parse(m.data);
   if (d.method === 'Runtime.consoleAPICalled' && d.params.type === 'error') logs.push(JSON.stringify(d.params.args)); };
 const cmd = (method, params = {}) => new Promise(r => { const id = ++seq; waiting.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
 const ev = async (expr) => (await cmd('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result.result.value;
-const KEYS = { Tab: 9, Enter: 13, Escape: 27, Delete: 46, ' ': 32, ArrowRight: 39, ArrowLeft: 37, ArrowDown: 40, z: 90, c: 67, v: 86, F2: 113 };
+const KEYS = { Tab: 9, Enter: 13, Escape: 27, Delete: 46, ' ': 32, ArrowRight: 39, ArrowLeft: 37, ArrowDown: 40, z: 90, c: 67, v: 86, b: 66, i: 73, F2: 113 };
 async function key(k, mods = 0) { 
   const base = { key: k, code: k.length === 1 ? 'Key' + k.toUpperCase() : k, windowsVirtualKeyCode: KEYS[k], modifiers: mods };
   await cmd('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
@@ -548,6 +548,31 @@ await ev(`${orcG}.querySelector('.comment-icon').dispatchEvent(new MouseEvent('c
 assert.equal(await ev(`!document.querySelector('#comment-pop').hidden`), true, 'clicar no ícone abre os comentários');
 await ev(`document.activeElement.blur()`);
 await key('Escape');
+
+// estilo de texto: negrito, itálico, tamanho, cor; Ctrl+B alterna negrito
+const orcFont = () => ev(`${orcG}.querySelector('text').getAttribute('style')`);
+await clickNode('Orçamento');
+const wPlain = (await rect('Orçamento')).w;
+await ev(`document.querySelector('#text-btn').click()`);
+assert.equal(await ev(`!document.querySelector('#text-pop').hidden`), true, 'painel de texto abre');
+await ev(`document.querySelector('#text-pop [data-toggle="textBold"]').click()`);
+await ev(`document.querySelector('#text-pop [data-toggle="textItalic"]').click()`);
+await ev(`document.querySelector('#text-pop [data-prop="textSize"] [data-value="large"]').click()`);
+await ev(`document.querySelector('#text-pop [data-prop="textColor"] [data-value="#e5383b"]').click()`);
+await sleep(900);
+let on = await orcNode();
+assert.deepEqual([on.textBold, on.textItalic, on.textSize, on.textColor], [true, true, 'large', '#e5383b']);
+assert.match(await orcFont(), /italic 700 18px/, 'fonte aplicada');
+assert.equal(await ev(`${orcG}.querySelector('text').getAttribute('fill')`), '#e5383b', 'cor do texto');
+assert.ok((await rect('Orçamento')).w > wPlain, 'texto maior alarga o nó');
+await ev(`document.querySelector('#text-pop [data-prop="textSize"] [data-value=""]').click()`);
+await sleep(900);
+assert.equal((await orcNode()).textSize, null, 'Médio volta ao padrão');
+await key('Escape');
+await clickNode('Orçamento');
+await key('b', 2);
+await sleep(900);
+assert.equal((await orcNode()).textBold, null, 'Ctrl+B volta ao padrão (não negrito)');
 
 // conflito: outra "aba" grava antes
 await sleep(900);
