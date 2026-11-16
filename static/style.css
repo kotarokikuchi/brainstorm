@@ -289,7 +289,7 @@ body[data-view="board"] #title { cursor: text; }
 .handle[data-handle="e"], .handle[data-handle="w"] { cursor: ew-resize; }
 .marquee { fill: #6965db14; stroke: #6965db; pointer-events: none; }
 
-#board-text { position: absolute; margin: 0; padding: 0; border: none; outline: 1px dashed #6965db; background: transparent; resize: none; overflow: hidden; line-height: 1.25; white-space: pre; }
+#board-text { position: absolute; margin: 0; padding: 0; border: none; outline: none; caret-color: #6965db; user-select: text; -webkit-user-select: text; background: transparent; resize: none; overflow: hidden; line-height: 1.25; white-space: pre; }
 #board-text[hidden], #board-help[hidden], #board-font-row[hidden] { display: none; }
 #canvas.erasing, #board-canvas[data-tool="eraser"] { cursor: cell; }
 #board-canvas[data-tool="text"] { cursor: text; }

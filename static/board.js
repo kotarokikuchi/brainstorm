@@ -429,10 +429,12 @@ function placeTextArea() {
   const lines = textArea.value.split('\n');
   Object.assign(textArea.style, {
     left: `${view.x + e.x * k}px`, top: `${view.y + e.y * k}px`, color: e.strokeColor,
-    font: `${e.fontSize * k}px ${HAND_FONT}`,
+    // propriedades separadas: o atalho "font" zeraria a altura de linha e cortaria as últimas linhas
+    fontFamily: HAND_FONT, fontSize: `${e.fontSize * k}px`, lineHeight: `${lineH(e.fontSize) * k}px`,
     width: `${(Math.max(20, ...lines.map(l => mctx.measureText(l).width)) + 20) * k}px`,
     height: `${lines.length * lineH(e.fontSize) * k + 4}px`,
   });
+  textArea.scrollTop = 0;  // cresce antes de rolar: a primeira linha não some
 }
 
 function startText(e, isNew) {
@@ -466,9 +468,15 @@ function commitText() {
 }
 
 textArea.addEventListener('input', placeTextArea);
+// Enter quebra a linha (a caixa cresce antes, então nada rola para fora); Esc, Ctrl+Enter ou clicar fora confirmam
 textArea.addEventListener('keydown', (e) => {
   e.stopPropagation();
   if (e.key === 'Escape' || (e.key === 'Enter' && (e.ctrlKey || e.metaKey))) { e.preventDefault(); commitText(); }
+  else if (e.key === 'Enter') {
+    e.preventDefault();
+    textArea.setRangeText('\n', textArea.selectionStart, textArea.selectionEnd, 'end');
+    placeTextArea();
+  }
 });
 textArea.addEventListener('blur', commitText);
 
