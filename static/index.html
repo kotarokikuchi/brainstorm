@@ -46,6 +46,7 @@
     <symbol id="i-square-rounded" viewBox="0 0 24 24"><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></symbol>
     <symbol id="i-square" viewBox="0 0 24 24"><path d="M3 3m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" /></symbol>
     <symbol id="i-text-color" viewBox="0 0 24 24"><path d="M9 15v-7a3 3 0 0 1 6 0v7" /> <path d="M9 11h6" /> <path d="M5 19h14" /></symbol>
+    <symbol id="i-lasso" viewBox="0 0 24 24"><path d="M4.028 13.252c-.657 -.972 -1.028 -2.078 -1.028 -3.252c0 -3.866 4.03 -7 9 -7s9 3.134 9 7s-4.03 7 -9 7c-1.913 0 -3.686 -.464 -5.144 -1.255" /><path d="M5 15m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M5 17c0 1.42 .316 2.805 1 4" /></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7l16 0" /> <path d="M10 11l0 6" /> <path d="M14 11l0 6" /> <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /> <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></symbol>
   </svg>
   <header class="topbar">
@@ -291,6 +292,7 @@
       <button id="board-more-btn" class="icon" title="Mais ferramentas"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
       <div id="board-more" class="card menu" hidden>
         <button data-tool="bucket"><span><svg viewBox="0 0 24 24"><use href="#i-bucket-droplet"/></svg>Balde de tinta</span><kbd>B</kbd></button>
+        <button data-tool="lasso"><span><svg viewBox="0 0 24 24"><use href="#i-lasso"/></svg>Seleção de laço</span><kbd>Q</kbd></button>
       </div>
     </div>
     <div id="board-props" class="card" hidden>
@@ -324,7 +326,7 @@
         <dt>H / Espaço</dt><dd>Mover a tela</dd><dt>V ou 1</dt><dd>Selecionar</dd>
         <dt>R ou 2</dt><dd>Retângulo</dd><dt>D ou 3</dt><dd>Losango</dd><dt>O ou 4</dt><dd>Elipse</dd>
         <dt>A ou 5</dt><dd>Seta</dd><dt>L ou 6</dt><dd>Linha</dd><dt>P ou 7</dt><dd>Lápis</dd>
-        <dt>B</dt><dd>Balde de tinta: pinta o fundo da forma (ou a cor da linha/texto)</dd><dt>T ou 8</dt><dd>Texto (ou duplo clique); Enter quebra a linha, Esc ou clicar fora conclui</dd><dt>E ou 0</dt><dd>Borracha</dd>
+        <dt>Q</dt><dd>Seleção de laço: contorno livre (Shift soma à seleção)</dd><dt>B</dt><dd>Balde de tinta: pinta o fundo da forma (ou a cor da linha/texto)</dd><dt>T ou 8</dt><dd>Texto (ou duplo clique); Enter quebra a linha, Esc ou clicar fora conclui</dd><dt>E ou 0</dt><dd>Borracha</dd>
         <dt>Ctrl+Z / Ctrl+Shift+Z</dt><dd>Desfazer / refazer</dd><dt>Ctrl+D</dt><dd>Duplicar</dd>
         <dt>Ctrl+C / Ctrl+V</dt><dd>Copiar / colar</dd><dt>Ctrl+A</dt><dd>Selecionar tudo</dd>
         <dt>Delete</dt><dd>Apagar</dd><dt>Setas</dt><dd>Mover 1 px (Shift: 10)</dd>

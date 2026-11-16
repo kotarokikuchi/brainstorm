@@ -3,7 +3,7 @@
 
 import {
   createElement, resizeTo, elementPaths, fillPath, elementBounds, DEFAULTS, elementAt, elementsInBox,
-  moveElements, resizeElement, bringToFront, sendToBack, duplicateElements, elementsHitBy, paint,
+  moveElements, resizeElement, bringToFront, sendToBack, duplicateElements, elementsHitBy, paint, elementsInPolygon,
 } from './board-model.js';
 import { History } from './model.js';
 
@@ -158,6 +158,8 @@ svg.addEventListener('pointerdown', (e) => {
     board.elements.push(drawing.el);
   } else if (tool === 'select' && e.button === 0) {
     selectDown(e);
+  } else if (tool === 'lasso' && e.button === 0) {
+    gesture = { kind: 'lasso', pts: [toWorld(e)], keep: e.shiftKey ? [...selection] : [] };
   } else if (tool === 'text' && e.button === 0) {
     e.preventDefault();
     startText(createElement('text', toWorld(e), { ...style, text: '' }), true);
@@ -236,7 +238,7 @@ for (const b of document.querySelectorAll('#board-view button')) b.addEventListe
 const TOOL_KEYS = {
   h: 'hand', v: 'select', 1: 'select', r: 'rectangle', 2: 'rectangle', d: 'diamond', 3: 'diamond',
   o: 'ellipse', 4: 'ellipse', a: 'arrow', 5: 'arrow', l: 'line', 6: 'line', p: 'freedraw', 7: 'freedraw',
-  t: 'text', 8: 'text', e: 'eraser', 0: 'eraser', b: 'bucket',
+  t: 'text', 8: 'text', e: 'eraser', 0: 'eraser', b: 'bucket', q: 'lasso',
 };
 document.addEventListener('keydown', (e) => {
   if (!board || document.body.dataset.view !== 'board' || e.target.closest?.('input, textarea, select')) return;
@@ -295,6 +297,9 @@ function drawSelection() {
     const pos = { nw: [x1, y1], n: [(x1 + x2) / 2, y1], ne: [x2, y1], e: [x2, (y1 + y2) / 2], se: [x2, y2], s: [(x1 + x2) / 2, y2], sw: [x1, y2], w: [x1, (y1 + y2) / 2] };
     for (const h of HANDLES) el('rect', { class: 'handle', 'data-handle': h, x: pos[h][0] - s / 2, y: pos[h][1] - s / 2, width: s, height: s, rx: 2 / view.k, 'stroke-width': 1 / view.k }, root);
   }
+  if (gesture?.kind === 'lasso') {
+    el('path', { class: 'marquee', d: 'M' + gesture.pts.map(q => q.join(',')).join(' L') + ' Z', 'stroke-width': 1 / view.k }, root);
+  }
   if (gesture?.kind === 'marquee') {
     const m = marqueeBox(gesture);
     el('rect', { class: 'marquee', ...{ x: m.x, y: m.y, width: m.w, height: m.h }, 'stroke-width': 1 / view.k }, root);
@@ -338,7 +343,8 @@ function selectMove(e) {
   } else if (gesture.kind === 'resize') {
     resizeElement(gesture.item, gesture.handle, p, gesture.start);
     gesture.moved = true;
-  } else gesture.cur = p;
+  } else if (gesture.kind === 'lasso') gesture.pts.push(p);
+  else gesture.cur = p;
   render();
 }
 
@@ -346,6 +352,10 @@ function selectUp() {
   const g = gesture;
   gesture = null;
   if (g.kind === 'marquee') selection = [...new Set([...g.keep, ...elementsInBox(board.elements, marqueeBox(g))])];
+  if (g.kind === 'lasso') {
+    selection = [...new Set([...g.keep, ...elementsInPolygon(board.elements, g.pts)])];
+    if (selection.length) setTool('select');  // depois do laço, a seleção já pode ser arrastada
+  }
   if ((g.kind === 'move' || g.kind === 'resize') && g.moved) changed(g.before);
   render();
 }
