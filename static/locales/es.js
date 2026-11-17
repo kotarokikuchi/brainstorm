@@ -33,7 +33,8 @@ export default {
   // ---- Estado del guardado automático (texto en la parte superior) ----
   'status.saved': 'Guardado',
   'status.saving': 'Guardando…',
-  'status.conflict': 'Mapa modificado en otra pestaña — recarga',
+  'status.conflict': 'Documento modificado en otra pestaña — recarga',
+  'status.trashed': 'Documento movido a la papelera en otra pestaña',
   'status.saveError': 'Error al guardar — reintentando',
 
   // ---- Documentos (mapa mental o pizarra) ----

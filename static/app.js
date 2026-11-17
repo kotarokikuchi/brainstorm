@@ -917,9 +917,11 @@ async function save() {
   saving = (async () => {
     try {
       const r = await api('PUT', `/${m.id}`, m);
-      if (r.status === 409) {
+      if (r.status === 409 || r.status === 410) {
+        // alterado (409) ou movido para a lixeira (410) em outra aba: não tenta de novo, mas mantém a pendência
         conflict = true;
-        setStatus(t('status.conflict'), true);
+        dirty = true;
+        setStatus(r.status === 409 ? t('status.conflict') : t('status.trashed'), true);
       } else if (!r.ok) {
         throw new Error(`HTTP ${r.status}`);
       } else {

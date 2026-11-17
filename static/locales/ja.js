@@ -33,7 +33,8 @@ export default {
   // ---- Autosave status (text in the top bar) ----
   'status.saved': '保存済み',
   'status.saving': '保存中…',
-  'status.conflict': '別のタブでマップが変更されました — 再読み込みしてください',
+  'status.conflict': '別のタブで文書が変更されました — 再読み込みしてください',
+  'status.trashed': '別のタブで文書がゴミ箱に移動されました',
   'status.saveError': '保存エラー — 再試行しています',  // "save error, retrying"
 
   // ---- Documents (mind map or board) ----

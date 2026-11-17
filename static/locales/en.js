@@ -33,7 +33,8 @@ export default {
   // ---- Autosave status (text at the top) ----
   'status.saved': 'Saved',
   'status.saving': 'Saving…',
-  'status.conflict': 'Map changed in another tab — reload',
+  'status.conflict': 'Document changed in another tab — reload',
+  'status.trashed': 'Document moved to the trash in another tab',
   'status.saveError': 'Save failed — retrying',
 
   // ---- Documents (mind map or board) ----

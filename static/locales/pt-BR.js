@@ -33,7 +33,8 @@ export default {
   // ---- Estado do salvamento automático (texto no topo) ----
   'status.saved': 'Salvo',
   'status.saving': 'Salvando…',
-  'status.conflict': 'Mapa alterado em outra aba — recarregue',
+  'status.conflict': 'Documento alterado em outra aba — recarregue',
+  'status.trashed': 'Documento movido para a lixeira em outra aba',
   'status.saveError': 'Erro ao salvar — tentando de novo',
 
   // ---- Documentos (mapa mental ou quadro) ----
