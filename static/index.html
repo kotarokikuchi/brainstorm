@@ -54,10 +54,27 @@
     <symbol id="i-search" viewBox="0 0 24 24"><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></symbol>
     <symbol id="i-arrows-sort" viewBox="0 0 24 24"><path d="M3 9l4 -4l4 4m-4 -4v14" /><path d="M21 15l-4 4l-4 -4m4 4v-14" /></symbol>
     <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2" /><path d="M9 12h12l-3 -3" /><path d="M18 15l3 -3" /></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="M6 9l6 6l6 -6" /></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7l16 0" /> <path d="M10 11l0 6" /> <path d="M14 11l0 6" /> <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /> <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></symbol>
   </svg>
   <header class="topbar">
     <a href="#/" class="brand"><span class="logo"></span>Brainstorm</a>
+    <nav class="top-menus">
+      <span class="top-menu">
+        <button id="maps-menu-btn" class="topbar-toggle top-menu-btn"><svg viewBox="0 0 24 24"><use href="#i-sitemap"/></svg><span data-i18n="topbar.maps">Mapas</span><svg class="chev" viewBox="0 0 24 24"><use href="#i-chevron-down"/></svg></button>
+        <div id="maps-menu" class="card menu top-menu-pop" hidden>
+          <button id="list-maps" data-i18n="topbar.listMaps">Listar mapas</button>
+          <button id="new-map"><span data-i18n="list.newMap">Novo mapa</span></button>
+        </div>
+      </span>
+      <span class="top-menu">
+        <button id="boards-menu-btn" class="topbar-toggle top-menu-btn"><svg viewBox="0 0 24 24"><use href="#i-brush"/></svg><span data-i18n="topbar.boards">Quadros</span><svg class="chev" viewBox="0 0 24 24"><use href="#i-chevron-down"/></svg></button>
+        <div id="boards-menu" class="card menu top-menu-pop" hidden>
+          <button id="list-boards" data-i18n="topbar.listBoards">Listar quadros</button>
+          <button id="new-board"><span data-i18n="list.newBoard">Novo quadro</span></button>
+        </div>
+      </span>
+    </nav>
     <span id="title" tabindex="0" data-i18n-title="common.clickToRename" title="Clique para renomear"></span>
     <button id="map-menu-btn" class="icon topbar-toggle" data-i18n-title="topbar.docOptions" title="Opções do mapa"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
     <span id="status"></span>
@@ -70,8 +87,6 @@
     </span>
     <span class="new-buttons">
       <button id="new-folder"><svg viewBox="0 0 24 24"><use href="#i-folder-plus"/></svg><span data-i18n="list.newFolder">Nova pasta</span></button>
-      <button id="new-board"><svg viewBox="0 0 24 24"><use href="#i-brush"/></svg><span data-i18n="list.newBoard">Novo quadro</span></button>
-      <button id="new-map" class="primary"><svg viewBox="0 0 24 24"><use href="#i-sitemap"/></svg><span data-i18n="list.newMap">Novo mapa</span></button>
     </span>
     <select id="lang" data-i18n-title="lang.select" title="Idioma" data-i18n-aria-label="lang.select" aria-label="Idioma"></select>
     <button id="logout-btn" class="icon" data-i18n-title="topbar.logout" title="Sair" hidden><svg viewBox="0 0 24 24"><use href="#i-logout"/></svg></button>

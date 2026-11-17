@@ -25,6 +25,10 @@ export default {
   'topbar.docOptions': 'Opções do mapa',  // dica do botão "…" ao lado do título (vale também para quadros)
   'topbar.present': 'Apresentar',  // dica: modo apresentação
   'topbar.logout': 'Sair',  // dica: encerrar a sessão
+  'topbar.maps': 'Mapas',
+  'topbar.boards': 'Quadros',
+  'topbar.listMaps': 'Listar mapas',
+  'topbar.listBoards': 'Listar quadros',
 
   // ---- Estado do salvamento automático (texto no topo) ----
   'status.saved': 'Salvo',
@@ -55,6 +59,8 @@ export default {
   'list.sortAz': 'Nome (A–Z)',
   'list.sortZa': 'Nome (Z–A)',
   'list.empty': 'Nenhum mapa ainda. Crie o primeiro.',
+  'list.noMaps': 'Nenhum mapa ainda.',
+  'list.noBoards': 'Nenhum quadro ainda.',
   'list.emptyFolder': 'Pasta vazia.',
   'list.searchNoResults': 'Nada encontrado para “{query}”.',
   'list.createMapError': 'Não foi possível criar o mapa.',

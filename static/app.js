@@ -170,7 +170,10 @@ async function route() {
   if (m) { await loadTree(); $('.brand').href = folderHref(folderOf(tree, m[2])); }  // voltar cai na pasta do documento
   searchInput.value = '';  // navegar (abrir pasta, voltar) limpa a busca
   if (m?.[1] === 'board') { map = null; openBoard(m[2]); } else if (m) openMap(m[2]);
-  else showList(location.hash.match(/^#\/folder\/([a-z0-9-]+)$/)?.[1] ?? null);
+  else {
+    const kind = { '#/maps': 'map', '#/boards': 'board' }[location.hash] ?? null;  // "Listar mapas / quadros"
+    showList(location.hash.match(/^#\/folder\/([a-z0-9-]+)$/)?.[1] ?? null, kind);
+  }
 }
 
 // duplicar: o sufixo do título da cópia vai no idioma da interface
@@ -180,7 +183,7 @@ const confirmTrash = (type, title) =>
   confirm(type === 'board' ? t('doc.trashConfirmBoard', { title: title || t('doc.untitled') }) : t('doc.trashConfirmMap', { title: title || t('doc.untitled') }));
 
 // ---------- Pastas ----------
-let tree = { version: 0, folders: [], place: {} }, listFolder = null;
+let tree = { version: 0, folders: [], place: {} }, listFolder = null, listKind = null;  // listKind: 'map' | 'board' | null
 const folderHref = (id) => (id ? `#/folder/${id}` : '#/');
 async function loadTree() {
   const r = await fetch('/api/folders');
@@ -208,7 +211,8 @@ searchInput.addEventListener('input', () => renderList());
 searchInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') { searchInput.value = ''; renderList(); } });
 let listData = { items: [], trash: [] };
 
-async function showList(folderId = null) {
+async function showList(folderId = null, kind = null) {
+  listKind = kind;
   map = null;
   document.body.dataset.view = 'list';
   $('.brand').href = '#/';
@@ -222,8 +226,10 @@ function renderList() {
   const { items, trash } = listData, query = searchInput.value.trim();
   // trilha: Meus mapas › Trabalho › Clientes
   const crumbs = [{ id: null, name: t('list.root') }, ...folderPath(tree, listFolder)];
+  if (listKind) crumbs.push({ kind: true, name: listKind === 'board' ? t('topbar.boards') : t('topbar.maps') });
   $('#list-title').replaceChildren(...crumbs.flatMap((c, i) => {
     const sep = Object.assign(document.createElement('span'), { className: 'crumb-sep', textContent: '›' });
+    if (c.kind) return [sep, Object.assign(document.createElement('span'), { className: 'crumb-kind', textContent: c.name })];
     if (c.id && i === crumbs.length - 1) {  // pasta aberta: clicar no nome edita ali mesmo
       const cur = Object.assign(document.createElement('span'), { className: 'crumb-current', textContent: c.name, title: t('common.clickToRename'), tabIndex: 0 });
       const edit = () => inlineEdit(cur, c.name, async (name) => { await renameFolder(c, name); showList(listFolder); });
@@ -243,14 +249,19 @@ function renderList() {
     b.dataset[data] = value;
     return b;
   };
-  // buscando: resultados de todas as pastas, com o lugar de cada um; senão, o conteúdo da pasta aberta
-  const found = query ? searchItems(tree, items, query) : { folders: childFolders(tree, listFolder, lang), docs: items.filter(it => folderOf(tree, it.id) === listFolder) };
+  // buscando ou listando só mapas/quadros: itens de todas as pastas, com o lugar de cada um;
+  // senão, o conteúdo da pasta aberta
+  const ofKind = listKind ? items.filter(it => (it.type === 'board' ? 'board' : 'map') === listKind) : items;
+  const found = query ? searchItems(tree, ofKind, query)
+    : listKind ? { folders: [], docs: ofKind }
+    : { folders: childFolders(tree, listFolder, lang), docs: items.filter(it => folderOf(tree, it.id) === listFolder) };
+  if (listKind) found.folders = [];
   const sorted = sortItems(found, sortSelect.value, lang);
   const where = (folderId) => {
     const s = document.createElement('small');
     s.className = 'where';
     s.textContent = [t('list.root'), ...folderPath(tree, folderId).map(f => f.name)].join(' › ');
-    return query ? [s] : [];
+    return query || listKind ? [s] : [];
   };
   const subfolders = sorted.folders.map(f => {
     const li = document.createElement('li');
@@ -284,9 +295,11 @@ function renderList() {
   }));
   const trashShown = query ? searchItems(tree, trash, query).docs : trash;
   $('#empty').hidden = subfolders.length + docs.length > 0 || (!!query && trashShown.length > 0);
-  $('#empty').textContent = query ? t('list.searchNoResults', { query }) : listFolder ? t('list.emptyFolder') : t('list.empty');
+  $('#empty').textContent = query ? t('list.searchNoResults', { query })
+    : listKind === 'board' ? t('list.noBoards') : listKind === 'map' ? t('list.noMaps')
+    : listFolder ? t('list.emptyFolder') : t('list.empty');
   // lixeira só no Início; buscando, aparece (aberta) com o que bate com a busca, de qualquer pasta
-  $('#trash').hidden = !trashShown.length || (!!listFolder && !query);
+  $('#trash').hidden = !trashShown.length || ((!!listFolder || !!listKind) && !query);
   if (query && trashShown.length) $('#trash').open = true;
   $('#trash summary').textContent = t('trash.title', { n: trashShown.length });
   $('#trash-list').replaceChildren(...trashShown.map(it => {
@@ -1407,12 +1420,19 @@ document.addEventListener('pointerdown', (e) => {
 }, true);
 
 // menus do topo: um aberto por vez; clicar de novo no botão fecha
-const topPops = () => [$('#export-menu'), $('#history-panel'), $('#map-menu')];
+const topPops = () => [$('#export-menu'), $('#history-panel'), $('#map-menu'), $('#maps-menu'), $('#boards-menu')];
 function toggleTop(pop) {
   const show = pop.hidden;
   for (const p of topPops()) p.hidden = true;
   pop.hidden = !show;
 }
+
+// menus Mapas / Quadros: listar todos daquele tipo ou criar um novo (escolher um item fecha o menu)
+$('#maps-menu-btn').onclick = () => toggleTop($('#maps-menu'));
+$('#boards-menu-btn').onclick = () => toggleTop($('#boards-menu'));
+$('#list-maps').onclick = () => { location.hash = '#/maps'; };
+$('#list-boards').onclick = () => { location.hash = '#/boards'; };
+for (const m of [$('#maps-menu'), $('#boards-menu')]) m.addEventListener('click', (e) => { if (e.target.closest('button')) m.hidden = true; });
 
 // ---------- Curvar ligações ----------
 let bending = null;  // {link, a, b, pushed} enquanto arrasta o ponto de controle

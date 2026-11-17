@@ -1573,6 +1573,31 @@ for (const code of ['en', 'es', 'ja']) {
 }
 assert.deepEqual(await pickLang('pt-BR'), ['reloaded', 'pt-BR', 'pt-BR', 'pt-BR'], 'volta para o português');
 
+// menus Mapas / Quadros no topo: abrem e fecham, listam só aquele tipo (de todas as pastas) e criam um novo
+await ev(`location.hash = '#/'`); await sleep(800);
+await ev(`document.querySelector('#boards-menu-btn').click()`);
+assert.equal(await shownSel('#boards-menu'), true, 'menu Quadros abre');
+await ev(`document.querySelector('#maps-menu-btn').click()`);
+assert.deepEqual([await shownSel('#boards-menu'), await shownSel('#maps-menu')], [false, true], 'abrir um menu fecha o outro');
+await ev(`document.querySelector('#maps-menu-btn').click()`);
+assert.equal(await shownSel('#maps-menu'), false, 'clicar de novo fecha');
+const docsOf = async (board) => (await (await fetch(BASE + '/api/maps')).json()).filter(m => (m.type === 'board') === board).length;
+await ev(`document.querySelector('#boards-menu-btn').click(); document.querySelector('#list-boards').click()`); await sleep(1000);
+assert.equal(await ev(`location.hash`), '#/boards');
+assert.equal(await shownSel('#boards-menu'), false, 'escolher um item fecha o menu');
+const nBoards = await docsOf(true);
+assert.deepEqual(await ev(`[document.querySelectorAll('#maps li').length, document.querySelectorAll('#maps li.board').length, document.querySelectorAll('#maps li .where').length]`),
+  [nBoards, nBoards, nBoards], 'Listar quadros: só quadros, de todas as pastas, com o lugar de cada um');
+assert.equal(await ev(`document.querySelector('#list-title').textContent`), 'Meus mapas›Quadros', 'trilha mostra o tipo listado');
+await ev(`document.querySelector('#maps-menu-btn').click(); document.querySelector('#list-maps').click()`); await sleep(1000);
+const nMaps = await docsOf(false);
+assert.deepEqual(await ev(`[document.querySelectorAll('#maps li').length, document.querySelectorAll('#maps li.board').length]`), [nMaps, 0], 'Listar mapas: só mapas');
+await ev(`location.hash = '#/map/demo'`); await sleep(1000);
+assert.equal(await ev(`getComputedStyle(document.querySelector('#boards-menu-btn')).display !== 'none'`), true, 'menus também no editor');
+await ev(`document.querySelector('#maps-menu-btn').click(); document.querySelector('#new-map').click()`); await sleep(1500);
+assert.match(await ev(`location.hash`), /^#\/map\/[a-z0-9-]+$/, 'Novo mapa pelo menu abre o mapa novo');
+assert.equal(await docsOf(false), nMaps + 1, 'mapa criado');
+
 // Sair: encerra a sessão e volta para a página de login
 await ev(`location.hash = '#/'`); await sleep(800);
 assert.equal(await ev(`!document.querySelector('#logout-btn').hidden`), true, 'botão Sair aparece com login ativo');
