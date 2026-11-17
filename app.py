@@ -489,7 +489,8 @@ class Handler(SimpleHTTPRequestHandler):
         store = self.server.store
         if method == "GET" and not pid:
             providers = (store.setting("llm") or {}).get("providers", {})
-            self._send(200, [llm_view(p, providers.get(p, {})) for p in LLM_PROVIDERS])
+            default = (store.setting("llm") or {}).get("default")
+            self._send(200, [llm_view(p, providers.get(p, {}), default) for p in LLM_PROVIDERS])
             return
         if pid not in LLM_PROVIDERS or method not in ("PUT", "DELETE"):
             self._send(404, {"error": "not found"})
@@ -506,11 +507,18 @@ class Handler(SimpleHTTPRequestHandler):
             llm = store.setting("llm") or {"providers": {}}
             if body is None:
                 llm["providers"].pop(pid, None)
+                if llm.get("default") == pid:  # sem chave não fica como padrão
+                    llm.pop("default")
             else:
                 current = llm["providers"].setdefault(pid, {})
                 current.update({k: v.strip() for k, v in body.items() if k in ("key", "model", "baseUrl")})
+                if body.get("default"):
+                    if not current.get("key"):
+                        self._send(400, {"error": "provider has no key"})
+                        return
+                    llm["default"] = pid
             store.set_setting("llm", llm)
-        self._send(*((204, None) if body is None else (200, llm_view(pid, llm["providers"][pid]))))
+        self._send(*((204, None) if body is None else (200, llm_view(pid, llm["providers"][pid], llm.get("default")))))
 
     def _send(self, status, payload, headers=None):
         data = b"" if payload is None else json.dumps(payload, ensure_ascii=False).encode()
@@ -530,13 +538,14 @@ def valid_llm(body):
     return (isinstance(body, dict)
             and ("key" not in body or (text_ok(body["key"], 500) and body["key"].strip() != ""))
             and ("model" not in body or text_ok(body["model"], 200))
+            and ("default" not in body or body["default"] is True)  # o padrão só muda escolhendo outro
             and ("baseUrl" not in body or (text_ok(body["baseUrl"], 500)
                                            and (body["baseUrl"] == "" or re.match(r"https?://[^\s/]", body["baseUrl"])))))
 
 
-def llm_view(pid, p):
+def llm_view(pid, p, default=None):
     return {"id": pid, "configured": bool(p.get("key")), "keyHint": hint(p.get("key", "")),
-            "model": p.get("model", ""), "baseUrl": p.get("baseUrl", "")}
+            "model": p.get("model", ""), "baseUrl": p.get("baseUrl", ""), "default": pid == default}
 
 
 def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: Path | None = None,
