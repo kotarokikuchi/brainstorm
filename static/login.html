@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrar · Brainstorm</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="login-page">
+  <main class="login-card">
+    <div class="brand"><span class="logo"></span>Brainstorm</div>
+    <form id="login-form">
+      <label>Usuário<input id="login-user" name="user" autocomplete="username" required autofocus></label>
+      <label>Senha<input id="login-password" name="password" type="password" autocomplete="current-password" required></label>
+      <p id="login-error" role="alert" hidden></p>
+      <button class="primary" type="submit">Entrar</button>
+    </form>
+  </main>
+  <script>
+    const form = document.querySelector('#login-form'), error = document.querySelector('#login-error');
+    const MESSAGES = { 401: 'Usuário ou senha incorretos.', 429: 'Muitas tentativas erradas. Espere alguns minutos e tente de novo.' };
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const button = form.querySelector('button');
+      button.disabled = true;
+      error.hidden = true;
+      try {
+        const r = await fetch('/api/login', {
+          method: 'POST',
+          body: JSON.stringify({ user: form.user.value, password: form.password.value }),
+        });
+        if (r.ok) { location.href = '/'; return; }
+        error.textContent = MESSAGES[r.status] ?? `Não foi possível entrar (HTTP ${r.status}).`;
+      } catch {
+        error.textContent = 'Sem conexão com o servidor.';
+      }
+      error.hidden = false;
+      button.disabled = false;
+      form.password.select();
+    });
+  </script>
+</body>
+</html>
