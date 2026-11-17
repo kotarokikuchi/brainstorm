@@ -14,7 +14,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from backup import Backup, BackupError, Busy, NotConfigured, clean_config, hint, text_ok
+from backup import NAME_RE, Backup, BackupError, Busy, NotConfigured, clean_config, hint, text_ok
 from s3 import S3Error
 from store import ID_RE, Store, migrate_legacy, valid_doc, valid_folders
 
@@ -198,6 +198,10 @@ class Handler(SimpleHTTPRequestHandler):
         if path.startswith(("/api/settings/", "/api/backup/")):
             self._settings(method, path)
             return True
+        if self.server.backup.restoring and method in ("PUT", "POST", "DELETE") and path.startswith(("/api/maps", "/api/folders", "/api/trash")):
+            # restauração em andamento: o salvamento automático da página tenta de novo sozinho
+            self._send(503, {"error": "restore in progress"}, {"Retry-After": "5"})
+            return True
         if path == "/api/trash" or path.startswith("/api/trash/"):
             self._trash(method, path[len("/api/trash"):].strip("/"))
             return True
@@ -368,12 +372,12 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(data)
 
     def _static_stamp(self):
-        # carimbo = partida do servidor + arquivo mais recente de static/
+        # carimbo = partida do servidor + arquivo mais recente de static/ + restaurações feitas
         try:
             newest = max((p.stat().st_mtime for p in self.server.static_dir.rglob("*") if p.is_file()), default=0)
         except FileNotFoundError:
             return None  # editor trocando o arquivo neste instante: tenta no próximo ciclo
-        return f"{START}-{newest}"
+        return f"{START}-{newest}-{self.server.backup.restores}"  # restauração também recarrega as abas
 
     def _events(self):
         # Server-Sent Events: a página recarrega quando o carimbo muda (static/ editado ou servidor reiniciado)
@@ -428,8 +432,17 @@ class Handler(SimpleHTTPRequestHandler):
             self._llm(method, rest)
         elif kind == "backup" and not rest and method in ("GET", "PUT"):
             self._backup_config(method)
+        elif path == "/api/backup/restore" and method == "POST":
+            responded, body = self._json()
+            if responded:
+                return
+            name = body.get("name") if isinstance(body, dict) else None
+            if not (isinstance(name, str) and NAME_RE.fullmatch(name)):
+                self._send(400, {"error": "invalid backup name"})
+                return
+            self._backup_call(lambda: self.server.backup.restore(name), view=True)
         elif path in ("/api/backup/run", "/api/backup/list") and method == ("POST" if path.endswith("run") else "GET"):
-            self._backup_call(self.server.backup.run if path.endswith("run") else self.server.backup.list)
+            self._backup_call(self.server.backup.run if path.endswith("run") else self.server.backup.list, path.endswith("run"))
         else:
             self._send(404, {"error": "not found"})
 
@@ -447,7 +460,7 @@ class Handler(SimpleHTTPRequestHandler):
                 backup.save_config(cfg)
         self._send(200, backup.view())
 
-    def _backup_call(self, action):
+    def _backup_call(self, action, view=False):
         # backup agora / lista do bucket: síncronos; erro do storage = 502 com a mensagem curta
         try:
             result = action()
@@ -458,7 +471,7 @@ class Handler(SimpleHTTPRequestHandler):
         except (BackupError, S3Error) as e:
             self._send(502, {"error": str(e)})
         else:
-            self._send(200, self.server.backup.view() if isinstance(result, str) else result)
+            self._send(200, self.server.backup.view() if view else result)
 
     def _llm(self, method, pid):
         store = self.server.store

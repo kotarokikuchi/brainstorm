@@ -462,6 +462,13 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.req("GET", "/api/backup/list")[0], 400)
         self.assertEqual(self.req("GET", "/api/backup/run")[0], 404)
 
+    def test_restore_name_must_be_one_of_our_backups(self):
+        self.server.store.set_setting("backup", self.BACKUP)
+        for name in ("../brainstorm-2026-01-01-000000.tar.gz", "brainstorm-2026-01-01-000000.tar.gz/../x", "x/brainstorm-2026-01-01-000000.tar.gz",
+                     "brainstorm-2026-01-01-0000.tar.gz", "brainstorm-2026-01-01-000000.tar.gz\n", 5, None):
+            self.assertEqual(self.req("POST", "/api/backup/restore", {"name": name})[0], 400, name)
+        self.assertEqual(self.req("POST", "/api/backup/restore", raw=b"[]")[0], 400)
+
     def test_static_files_are_revalidated(self):
         # sem isso o navegador reaproveita JS antigo (cache heurístico) depois de uma atualização
         status, headers, _ = self.raw_get("/app.js")

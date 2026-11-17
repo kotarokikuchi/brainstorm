@@ -6,17 +6,19 @@ que começam com ponto: o servidor e o próprio backup ignoram (id de documento 
 """
 import hashlib
 import json
+import os
 import re
 import shutil
 import sqlite3
 import tarfile
 import threading
 import time
-from contextlib import closing
+from contextlib import closing, suppress
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from s3 import S3, S3Error
+from store import ID_RE, SCHEMA_VERSION, migrate
 
 NAME_RE = re.compile(r"brainstorm-\d{4}-\d{2}-\d{2}-\d{6}\.tar\.gz")
 INTERVALS = (6, 12, 24, 168)  # horas
@@ -98,6 +100,19 @@ def fingerprint(store):
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
 
+def check_members(tar):
+    # só o banco e attachments/<documento>/<arquivo> (arquivos comuns): nada de links, nada fora do lugar
+    for m in tar.getmembers():
+        parts = m.name.split("/")
+        ok = (m.name == "brainstorm.db" and m.isfile()) or (parts[0] == "attachments" and (
+            (len(parts) == 1 and m.isdir())
+            or (len(parts) == 2 and ID_RE.fullmatch(parts[1]) and m.isdir())
+            or (len(parts) == 3 and ID_RE.fullmatch(parts[1]) and parts[2] and not parts[2].startswith(".")
+                and "\\" not in parts[2] and parts[2].isprintable() and m.isfile())))
+        if not ok:
+            raise BackupError("invalid archive")
+
+
 def iso(t):
     return datetime.fromtimestamp(t, timezone.utc).isoformat() if t else None
 
@@ -151,6 +166,9 @@ class Backup:
     def _run(self, cfg, prune=True):
         client = self.client(cfg)
         now, status, fp = time.time(), self.status(), fingerprint(self.store)
+        if int(now) == int(status.get("lastAttempt") or 0):
+            time.sleep(1)  # o nome tem segundos: dois backups no mesmo segundo sobrescreveriam o anterior
+            now = time.time()
         name = f"brainstorm-{datetime.fromtimestamp(now, timezone.utc):%Y-%m-%d-%H%M%S}.tar.gz"
         tmp = self._tmp(".backup-tmp")
         try:
@@ -203,6 +221,97 @@ class Backup:
         cfg = self.config()
         items = self._backups(self.client(cfg), cfg)
         return [{"name": o["key"][len(cfg["prefix"]):], "size": o["size"], "modified": o["modified"]} for o in reversed(items)]
+
+    # ---- restauração ----
+    def restore(self, name):
+        """Troca tudo pelo backup `name` (só o nome do arquivo, dentro do prefixo). Tudo ou nada."""
+        if not NAME_RE.fullmatch(name):
+            raise ValueError("invalid backup name")
+        if not self.lock.acquire(blocking=False):
+            raise Busy()
+        self.restoring = True
+        try:
+            cfg = self.config()
+            client = self.client(cfg)
+            self._run(cfg, prune=False)  # 1. guarda o estado atual (se falhar, não restaura)
+            tmp = self._tmp(".restore-tmp")
+            try:
+                archive = tmp / "restore.tar.gz"
+                client.get_file(cfg["prefix"] + name, archive)
+                self._extract(archive, tmp / "data")
+                self._swap(tmp / "data")
+            except (S3Error, OSError, sqlite3.Error) as e:
+                raise BackupError(str(e) or type(e).__name__) from None
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+            self.restores += 1
+            self._prune(client, cfg)  # erro aqui não desfaz nada; o próximo backup tenta de novo
+        finally:
+            self.restoring = False
+            self.lock.release()
+
+    def _extract(self, archive, dest):
+        # ponytail: sem limite de tamanho descompactado; o arquivo vem do bucket do próprio usuário
+        try:
+            with tarfile.open(archive, "r:gz") as tar:
+                check_members(tar)
+                tar.extractall(dest, filter="data")
+        except (tarfile.TarError, EOFError, OSError):
+            raise BackupError("invalid archive") from None
+        db_file = dest / "brainstorm.db"
+        if not db_file.is_file():
+            raise BackupError("invalid archive")
+        try:
+            with closing(sqlite3.connect(db_file)) as db:
+                tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+                if not {"docs", "history", "meta"} <= tables:
+                    raise BackupError("invalid archive")
+                row = db.execute("SELECT value FROM meta WHERE key = 'schema'").fetchone()
+                if row and (not str(row[0]).isdigit() or int(row[0]) > SCHEMA_VERSION):
+                    raise BackupError("backup is from a newer version of the app")
+                with db:
+                    migrate(db)  # backup antigo: cria as colunas que faltam, como ao abrir o banco
+        except sqlite3.DatabaseError:
+            raise BackupError("invalid archive") from None
+
+    def _swap(self, src):
+        """Banco e anexos trocados juntos: o banco só é confirmado depois que os anexos estão no lugar."""
+        files_dir, new_files = self.store.files_dir, src / "attachments"
+        old = files_dir / ".restore-old"
+        with suppress(OSError):
+            old.rmdir()  # sobra vazia de antes
+        old.mkdir()  # se ainda existe com anexos (desfazer falhou antes), para aqui: nada é apagado
+        db = sqlite3.connect(self.store.db_path, timeout=10, isolation_level=None)
+        moved = []  # (de, para), para desfazer na ordem inversa
+        try:
+            db.execute("ATTACH DATABASE ? AS src", (str(src / "brainstorm.db"),))
+            db.execute("BEGIN IMMEDIATE")
+            for table in ("docs", "history"):
+                cols = ", ".join(c[1] for c in db.execute(f"PRAGMA main.table_info({table})"))
+                db.execute(f"DELETE FROM main.{table}")
+                db.execute(f"INSERT INTO main.{table} ({cols}) SELECT {cols} FROM src.{table}")
+            # sessions e settings ficam como estão: não desloga e não perde as chaves
+            db.execute("DELETE FROM main.meta WHERE key != 'auth_fingerprint'")
+            db.execute("INSERT INTO main.meta (key, value) SELECT key, value FROM src.meta WHERE key != 'auth_fingerprint'")
+            # anexos: pasta por pasta (a de anexos pode ser um ponto de montagem; tudo no mesmo disco = rename)
+            for d, _ in attachments(files_dir):
+                os.rename(d, old / d.name)
+                moved.append((d, old / d.name))
+            for d in sorted(new_files.iterdir()) if new_files.is_dir() else []:
+                os.rename(d, files_dir / d.name)
+                moved.append((d, files_dir / d.name))
+            db.execute("COMMIT")
+        except BaseException:
+            for a, b in reversed(moved):
+                os.rename(b, a)
+            if db.in_transaction:
+                db.execute("ROLLBACK")
+            with suppress(OSError):
+                old.rmdir()
+            raise
+        finally:
+            db.close()
+        shutil.rmtree(old, ignore_errors=True)
 
     # ---- agenda ----
     def tick(self, now=None):

@@ -262,11 +262,144 @@ class BackupTest(unittest.TestCase):
         self.assertNotIn(SECRET, json.dumps(view))
         with urllib.request.urlopen(base + "/api/backup/list") as r:
             self.assertEqual([b["name"] for b in json.loads(r.read())], [view["status"]["lastName"]])
+        body = json.dumps({"name": view["status"]["lastName"]}).encode()
+        with urllib.request.urlopen(urllib.request.Request(base + "/api/backup/restore", data=body, method="POST")) as r:
+            self.assertEqual(r.status, 200)
+        self.assertEqual(server.backup.restores, 1)
         self.fake.deny = True
         with self.assertRaises(urllib.error.HTTPError) as e:
             urllib.request.urlopen(base + "/api/backup/list")
         self.assertEqual((e.exception.code, json.loads(e.exception.read())), (502, {"error": "403 AccessDenied"}))
         e.exception.close()
+
+    # ---- restauração ----
+    def snapshot(self):
+        files = {str(f.relative_to(self.store.files_dir)): f.read_bytes() for f in self.store.files_dir.rglob("*") if f.is_file()}
+        return [(d["id"], d["title"]) for d in self.store.list_docs()], self.store.folders(), files
+
+    def change_everything(self):
+        self.store.put("m1", {**doc("mudado"), "version": 1}, 0)
+        self.store.put("m2", doc("novo"), 0)
+        self.store.files("m2").mkdir()
+        (self.store.files("m2") / "b.txt").write_bytes(b"novo anexo")
+        (self.store.files("m1") / "a.png").unlink()
+        self.store.put_folders({"version": 1, "folders": [], "place": {}})
+
+    def test_restore_brings_everything_back_and_keeps_login_and_keys(self):
+        before = self.snapshot()
+        name = self.backup.run()
+        self.change_everything()
+        changed = self.snapshot()
+        self.backup.restore(name)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.store.get("m1")["root"]["text"], "primeiro")
+        self.assertTrue(self.store.session_ok(self.token), "não desloga")
+        self.assertEqual(self.store.setting("llm")["providers"]["openai"]["key"], "sk-llm-segredo-1234", "não perde as chaves")
+        with self.store._db() as db:
+            self.assertIsNotNone(db.execute("SELECT 1 FROM meta WHERE key = 'auth_fingerprint'").fetchone())
+        self.assertEqual(self.backup.restores, 1)
+        self.assertEqual(sorted(p.name for p in self.store.files_dir.iterdir()), ["m1"], "sem temporários")
+        # o estado de antes do restore ficou guardado (desfazer um restore errado)
+        pre = sorted(self.fake.objects)[-1]
+        self.assertNotEqual(pre, "bs/" + name)
+        self.backup.restore(pre[len("bs/"):])
+        self.assertEqual(self.snapshot(), changed)
+
+    def put_tar(self, name, members):
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            for info, data in members:
+                info.size = len(data or b"")
+                tar.addfile(info, io.BytesIO(data) if data else None)
+        self.fake.objects["bs/" + name] = (buf.getvalue(), "2020-01-01T00:00:00.000Z")
+
+    def valid_db(self, schema="1"):
+        path = self.tmp / f"src-{schema}.db"
+        Store(path, self.tmp / "x")
+        with closing(sqlite3.connect(path)) as db, db:
+            db.execute("UPDATE meta SET value = ? WHERE key = 'schema'", (schema,))
+        return path.read_bytes()
+
+    def test_bad_archives_are_refused_and_nothing_changes(self):
+        self.change_everything()
+        before = self.snapshot()
+        db = self.valid_db()
+        link = tarfile.TarInfo("attachments/m1/l")
+        link.type, link.linkname = tarfile.SYMTYPE, "/etc/passwd"
+        cases = {
+            "../evil": [(tarfile.TarInfo("brainstorm.db"), db), (tarfile.TarInfo("../evil"), b"x")],
+            "dotdot": [(tarfile.TarInfo("brainstorm.db"), db), (tarfile.TarInfo("attachments/m1/../../evil"), b"x")],
+            "absolute": [(tarfile.TarInfo("brainstorm.db"), db), (tarfile.TarInfo("/tmp/evil"), b"x")],
+            "other file": [(tarfile.TarInfo("brainstorm.db"), db), (tarfile.TarInfo("notes.txt"), b"x")],
+            "symlink": [(tarfile.TarInfo("brainstorm.db"), db), (link, None)],
+            "no db": [(tarfile.TarInfo("attachments/m1/a.png"), b"x")],
+            "not a db": [(tarfile.TarInfo("brainstorm.db"), b"nada")],
+            "newer schema": [(tarfile.TarInfo("brainstorm.db"), self.valid_db("99"))],
+        }
+        for i, (label, members) in enumerate(cases.items()):
+            name = f"brainstorm-2020-01-01-00000{i}.tar.gz"
+            self.put_tar(name, members)
+            with self.assertRaises(BackupError, msg=label) as e:
+                self.backup.restore(name)
+            self.assertEqual(self.snapshot(), before, label)
+            if label == "newer schema":
+                self.assertIn("newer", str(e.exception))
+        self.assertFalse((self.tmp / "evil").exists() or Path("/tmp/evil").exists())
+        self.assertEqual(sorted(p.name for p in self.store.files_dir.iterdir()), ["m1", "m2"], "sem temporários")
+        self.assertEqual(self.backup.restores, 0)
+        self.assertFalse(self.backup.restoring)
+
+    def test_failure_in_the_middle_leaves_database_and_files_as_they_were(self):
+        name = self.backup.run()
+        self.change_everything()
+        before = self.snapshot()
+        real, calls = __import__("os").rename, []
+
+        def flaky(a, b):
+            calls.append(a)
+            if len(calls) == 3:  # já tirou m1 e m2 do lugar; falha ao pôr a pasta restaurada
+                raise OSError("disco cheio")
+            real(a, b)
+        with mock.patch("backup.os.rename", flaky), self.assertRaises(BackupError):
+            self.backup.restore(name)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(sorted(p.name for p in self.store.files_dir.iterdir()), ["m1", "m2"])
+        self.assertFalse(self.backup.restoring)
+
+    def test_restore_needs_a_backup_of_the_current_state_first(self):
+        name = self.backup.run()
+        self.change_everything()
+        before = self.snapshot()
+        with mock.patch.object(S3, "put_file", side_effect=S3Error("500 InternalError")), self.assertRaises(BackupError):
+            self.backup.restore(name)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_writes_wait_while_restoring(self):
+        server = app.make_server(self.tmp, 0)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+
+        def call(method, path, body=None):
+            req = urllib.request.Request(base + path, data=json.dumps(body).encode() if body is not None else None, method=method)
+            try:
+                with urllib.request.urlopen(req) as r:
+                    return r.status
+            except urllib.error.HTTPError as e:
+                e.close()
+                return e.code
+        stamp = app.Handler._static_stamp(mock.Mock(server=server))
+        server.backup.restoring = True
+        for method, path, body in (("PUT", "/api/maps/m1", {**doc("x"), "version": 1}), ("DELETE", "/api/maps/m1", None),
+                                   ("PUT", "/api/folders", {"version": 1, "folders": [], "place": {}}), ("POST", "/api/maps/m1/duplicate", {}),
+                                   ("DELETE", "/api/trash/m1", None), ("POST", "/api/maps/m1/history", {})):
+            self.assertEqual(call(method, path, body), 503, path)
+        self.assertEqual(call("GET", "/api/maps/m1"), 200, "leitura continua")
+        server.backup.restoring = False
+        self.assertEqual(call("PUT", "/api/maps/m1", {**doc("x"), "version": 1}), 200)
+        server.backup.restores += 1
+        self.assertNotEqual(app.Handler._static_stamp(mock.Mock(server=server)), stamp, "as abas recarregam depois de um restore")
 
     def test_config_validation(self):
         good = {"endpoint": "https://s3.eu-central-2.wasabisys.com/", "region": "eu-central-2", "bucket": "meu-bucket",
