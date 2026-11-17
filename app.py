@@ -127,10 +127,13 @@ class Handler(SimpleHTTPRequestHandler):
             self._send(404, {"error": "login disabled"})
             return
         ip, now = self.client_address[0], time.time()
+        # a tentativa é reservada (contada como erro) antes de conferir a senha, na mesma trava da
+        # checagem: tentativas simultâneas não passam do limite; acertar zera a contagem
         with self.server.login_lock:
             fails = [t for t in self.server.login_fails.get(ip, []) if now - t < LOGIN_WINDOW]
-            self.server.login_fails[ip] = fails
-        if len(fails) >= LOGIN_MAX_FAILS:
+            locked = len(fails) >= LOGIN_MAX_FAILS
+            self.server.login_fails[ip] = fails if locked else fails + [now]
+        if locked:
             self._send(429, {"error": "too many attempts"}, {"Retry-After": str(int(LOGIN_WINDOW - (now - fails[0])) + 1)})
             return
         length = int(self.headers.get("Content-Length") or 0)
@@ -145,9 +148,7 @@ class Handler(SimpleHTTPRequestHandler):
         ok = hmac.compare_digest((user if ok else "").encode(), want_user.encode()) & \
             hmac.compare_digest((password if ok else "").encode(), want_password.encode()) & ok
         if not ok:
-            time.sleep(self.server.login_delay)  # atrasa quem tenta adivinhar
-            with self.server.login_lock:
-                self.server.login_fails.setdefault(ip, []).append(time.time())
+            time.sleep(self.server.login_delay)  # atrasa quem tenta adivinhar (o erro já foi contado)
             self._send(401, {"error": "invalid credentials"})
             return
         with self.server.login_lock:
@@ -397,6 +398,8 @@ def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: P
     server = ThreadingHTTPServer((host, port), partial(Handler, directory=str(ROOT / "static")))
     server.store = store
     server.auth = auth  # (usuário, senha) ou None = sem login
+    if auth:
+        store.reset_sessions_if_auth_changed(*auth)  # trocou usuário/senha: todo mundo entra de novo
     server.login_delay, server.login_fails, server.login_lock = 1.0, {}, threading.Lock()
     server.data_dir = data_dir
     server.static_dir = ROOT / "static"
