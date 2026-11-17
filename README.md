@@ -61,10 +61,29 @@ python3 -c "import sqlite3, os; sqlite3.connect('data/brainstorm.db').backup(sql
 cp -r data/attachments ~/brainstorm-backup-attachments
 ```
 
-A cópia do banco também leva os hashes das sessões de login e uma impressão (scrypt com sal) do
-usuário e da senha: guarde-a em lugar seguro e use uma senha forte.
+A cópia do banco também leva os hashes das sessões de login, uma impressão (scrypt com sal) do
+usuário e da senha e, se configuradas, as chaves de API e do storage (em texto puro, tabela `settings`):
+guarde-a em lugar seguro e use uma senha forte. O backup automático abaixo já tira tudo isso.
 
 Ou pare o app (`docker compose down`) e copie a pasta `data/` inteira.
+
+### Backup automático no Wasabi (ou outro S3)
+
+Em **Configurações ▾ → Configurar backup**: escolha a região do Wasabi (preenche o endpoint
+`https://s3.<região>.wasabisys.com`), informe bucket, prefixo (padrão `brainstorm/`), access key e
+secret key, a frequência (6 h, 12 h, diária ou semanal) e quantos backups manter (padrão 14). Ligado, o
+app faz sozinho um `brainstorm-AAAA-MM-DD-HHMMSS.tar.gz` (UTC) só quando algo mudou, e apaga do prefixo
+os mais antigos além do limite; "Fazer backup agora" faz na hora. O endpoint precisa ser `https://`.
+
+O arquivo leva o banco e os anexos, mas **sem** as chaves de API, sem as credenciais do storage, sem as
+sessões de login e sem a impressão do usuário/senha. Para restaurar, escolha o backup na lista e
+confirme: antes, o app faz um backup do estado atual (dá para desfazer); a troca é tudo ou nada, não
+desloga ninguém e mantém as configurações; durante ela as gravações esperam (respondem 503) e as abas
+abertas recarregam no fim. Backup de uma versão mais nova do app é recusado.
+
+Em **Configurar LLM** ficam as chaves de API (Anthropic, OpenAI, Gemini, OpenRouter ou um servidor
+compatível com OpenAI) para funcionalidades futuras: guardadas só no servidor, a tela mostra apenas o
+final mascarado.
 
 Para deixar os anexos direto num disco externo, use `BRAINSTORM_FILES=/caminho/do/disco` (no Docker,
 veja o comentário no `docker-compose.yml`).
@@ -91,6 +110,7 @@ Variáveis opcionais: `BRAINSTORM_HOST` (padrão `127.0.0.1`), `BRAINSTORM_DATA`
 
 ```bash
 python -m unittest test_app        # servidor
+python -m unittest test_backup     # cliente S3 (SigV4), backup e restauração contra um S3 falso
 node --test tests/*.test.mjs       # lógica dos mapas, quadros, skills e pastas
 node tests/e2e.mjs                 # ponta a ponta no Chrome headless (~2 min)
 ```

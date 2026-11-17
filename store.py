@@ -42,9 +42,21 @@ CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,       -- sha256 do cookie (o cookie em si não fica guardado)
     expires    REAL NOT NULL
 );
+-- configurações com segredos (chaves de LLM, storage do backup): nunca vão para o backup
+CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
+SCHEMA_VERSION = 1  # meta.schema: sobe a cada mudança de tabela (o restore recusa backup de esquema mais novo)
 
 EMPTY_FOLDERS = {"version": 0, "folders": [], "place": {}}
+
+
+def migrate(db):
+    """Cria o que falta (tabelas, colunas) e sobe meta.schema; usado ao abrir o banco e no restore."""
+    db.executescript(SCHEMA)
+    if "label" not in [c[1] for c in db.execute("PRAGMA table_info(history)")]:
+        db.execute("ALTER TABLE history ADD COLUMN label TEXT")  # banco criado antes das versões com nome
+    db.execute("INSERT INTO meta VALUES ('schema', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value "
+               "WHERE CAST(meta.value AS INTEGER) < CAST(excluded.value AS INTEGER)", (str(SCHEMA_VERSION),))
 
 
 def iso(t):
@@ -122,9 +134,7 @@ class Store:
         self.files_dir.mkdir(parents=True, exist_ok=True)
         with self._db() as db:
             db.execute("PRAGMA journal_mode=WAL")  # leituras não esperam gravações
-            db.executescript(SCHEMA)
-            if "label" not in [c["name"] for c in db.execute("PRAGMA table_info(history)")]:
-                db.execute("ALTER TABLE history ADD COLUMN label TEXT")  # banco criado antes das versões com nome
+            migrate(db)
 
     @contextmanager
     def _db(self):
@@ -292,6 +302,19 @@ class Store:
     def end_session(self, token):
         with self._db() as db:
             db.execute("DELETE FROM sessions WHERE token_hash = ?", (self._hash(token),))
+
+    # ---- configurações: um JSON por chave ----
+    def setting(self, key):
+        with self._db() as db:
+            row = db.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return json.loads(row["value"]) if row else None
+
+    def set_setting(self, key, value):
+        with self._db() as db:
+            if value is None:
+                db.execute("DELETE FROM settings WHERE key = ?", (key,))
+            else:
+                db.execute("INSERT OR REPLACE INTO settings VALUES (?, ?)", (key, json.dumps(value, ensure_ascii=False)))
 
     # ---- pastas: a árvore inteira num JSON (validada pelo servidor) ----
     def folders(self):
