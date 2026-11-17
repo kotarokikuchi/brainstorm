@@ -5,6 +5,7 @@ import io
 import json
 import os
 import socket
+import sqlite3
 import tempfile
 import threading
 import time
@@ -324,6 +325,75 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.req("GET", f"/api/maps/{dup['id']}")[1]["title"], "Quadro 2 (cópia)")
         self.req("DELETE", "/api/maps/qd")
         self.assertEqual(self.req("GET", "/api/trash")[1][0]["title"], "Quadro 2")
+
+    def skill(self, version=0, **kw):
+        return {"version": version, "type": "skill", "title": "Revisão", "tags": ["code", "review"], "content": "# Oi", **kw}
+
+    def test_skill_roundtrip(self):
+        self.assertEqual(self.req("PUT", "/api/maps/sk", self.skill()), (200, {"version": 1}))
+        status, doc = self.req("GET", "/api/maps/sk")
+        self.assertEqual((status, doc["type"], doc["tags"], doc["content"]), (200, "skill", ["code", "review"], "# Oi"))
+        lst = {i["id"]: i for i in self.req("GET", "/api/maps")[1]}
+        self.assertEqual({k: lst["sk"][k] for k in ("type", "title", "tags")}, {"type": "skill", "title": "Revisão", "tags": ["code", "review"]})
+        self.make_map()
+        self.assertNotIn("tags", {i["id"]: i for i in self.req("GET", "/api/maps")[1]}["abc"])
+
+    def test_skill_invalid(self):
+        bad = [{"tags": "a"}, {"tags": [""]}, {"tags": ["x" * 41]}, {"tags": [" a"]}, {"tags": [str(i) for i in range(31)]},
+               {"tags": ["a", "a"]}, {"content": 5}, {"title": "t" * 201}]
+        for kw in bad:
+            self.assertEqual(self.req("PUT", "/api/maps/sk", self.skill(**kw))[0], 400, kw)
+
+    def test_duplicate_skill(self):
+        self.req("PUT", "/api/maps/sk", self.skill())
+        _, dup = self.req("POST", "/api/maps/sk/duplicate", raw=b"")
+        self.assertEqual(self.req("GET", f"/api/maps/{dup['id']}")[1]["title"], "Revisão (cópia)")
+
+    def test_named_version(self):
+        self.server.history_interval = 0
+        self.put_text(0, "a")
+        self.put_text(1, "b")
+        self.assertEqual(self.req("POST", "/api/maps/abc/history", {"label": "v1"}), (201, {"version": 2}))
+        self.assertEqual(self.req("GET", "/api/maps/abc/history")[1][0]["label"], "v1")
+        self.put_text(2, "c")
+        hist = self.req("GET", "/api/maps/abc/history")[1]
+        self.assertEqual([(h["version"], h["label"]) for h in hist], [(2, "v1"), (1, None)])
+        self.assertEqual(self.req("POST", "/api/maps/abc/history", raw=b"")[0], 201, "sem rótulo")
+
+    def test_named_version_survives_prune(self):
+        self.server.history_interval = 0
+        self.put_text(0, "a")
+        self.req("POST", "/api/maps/abc/history", {"label": "keep"})
+        with mock.patch("store.HISTORY_MAX", 3):
+            for v in range(1, 7):
+                self.put_text(v, f"v{v}")
+        hist = self.req("GET", "/api/maps/abc/history")[1]
+        self.assertEqual(len([h for h in hist if h["label"] is None]), 3)
+        self.assertEqual([h["version"] for h in hist if h["label"]], [1])
+
+    def test_label_validation(self):
+        self.make_map()
+        self.assertEqual(self.req("POST", "/api/maps/abc/history", {"label": "x" * 101})[0], 400)
+        self.assertEqual(self.req("POST", "/api/maps/abc/history", {"label": 5})[0], 400)
+        self.assertEqual(self.req("POST", "/api/maps/abc/history", {"label": "a\nb"})[0], 400)
+        self.assertEqual(self.req("POST", "/api/maps/nope/history", {"label": "x"})[0], 404)
+
+    def test_skill_history_counts_characters(self):
+        self.server.history_interval = 0
+        self.req("PUT", "/api/maps/sk", self.skill())
+        self.req("PUT", "/api/maps/sk", self.skill(1, content="abc"))
+        self.assertEqual(self.req("GET", "/api/maps/sk/history")[1][0]["nodes"], 4)
+
+    def test_label_column_migration(self):
+        db = self.data / "old.db"
+        with contextlib.closing(sqlite3.connect(db)) as c, c:
+            c.executescript("CREATE TABLE history (doc_id TEXT NOT NULL, version INTEGER NOT NULL, saved REAL NOT NULL, "
+                            "body TEXT NOT NULL, PRIMARY KEY (doc_id, version));")
+        store = Store(db, self.data / "f")
+        store.put("abc", {"version": 0, "root": {"text": "a", "children": []}}, 0)
+        self.assertEqual(store.label_version("abc", "x"), 1)
+        self.assertIsNone(store.label_version("nope", "x"))
+        self.assertEqual(store.history("abc")[0]["label"], "x")
 
     def test_static_files_are_revalidated(self):
         # sem isso o navegador reaproveita JS antigo (cache heurístico) depois de uma atualização

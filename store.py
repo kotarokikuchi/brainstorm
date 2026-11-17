@@ -22,7 +22,7 @@ MAX_FOLDERS = 2000
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS docs (
     id      TEXT PRIMARY KEY,
-    type    TEXT NOT NULL,             -- map | board
+    type    TEXT NOT NULL,             -- map | board | skill
     title   TEXT NOT NULL,
     version INTEGER NOT NULL,
     updated REAL NOT NULL,             -- epoch da última gravação
@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS history (
     version INTEGER NOT NULL,
     saved   REAL NOT NULL,             -- quando essa versão foi gravada
     body    TEXT NOT NULL,
+    label   TEXT,                      -- NULL = versão automática; preenchido = versão com nome (não é podada)
     PRIMARY KEY (doc_id, version)
 );
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -51,23 +52,34 @@ def iso(t):
 
 
 def doc_type(body):
-    return "board" if body.get("type") == "board" else "map"
+    return body["type"] if body.get("type") in ("board", "skill") else "map"
 
 
 def doc_title(body):
-    return body.get("title", "") if body.get("type") == "board" else body["root"].get("text", "")
+    return body.get("title", "") if body.get("type") in ("board", "skill") else body["root"].get("text", "")
 
 
 def doc_size(body):
     # tópicos do mapa ou elementos do quadro (mostrado no histórico)
+    if body.get("type") == "skill":
+        return len(body["content"])
     count = lambda n: 1 + sum(count(c) for c in n.get("children", []))
     return len(body["elements"]) if body.get("type") == "board" else count(body["root"])
 
 
-# documentos: mapa mental ({root}) ou quadro de desenho ({type: "board", title, elements})
+def valid_tags(tags):
+    return (isinstance(tags, list) and len(tags) <= 30 and len(set(map(str, tags))) == len(tags)
+            and all(isinstance(t, str) and 0 < len(t) <= 40 and t == t.strip() for t in tags))
+
+
+# documentos: mapa mental ({root}), quadro de desenho ({type: "board", title, elements})
+# ou skill ({type: "skill", title, tags, content})
 def valid_doc(body):
     if not (isinstance(body, dict) and isinstance(body.get("version"), int)):
         return False
+    if body.get("type") == "skill":
+        return (isinstance(body.get("title"), str) and len(body["title"]) <= 200
+                and valid_tags(body.get("tags")) and isinstance(body.get("content"), str))
     if body.get("type", "map") == "board":
         return isinstance(body.get("elements"), list) and isinstance(body.get("title", ""), str)
     return (body.get("type", "map") == "map" and isinstance(body.get("root"), dict)
@@ -111,6 +123,8 @@ class Store:
         with self._db() as db:
             db.execute("PRAGMA journal_mode=WAL")  # leituras não esperam gravações
             db.executescript(SCHEMA)
+            if "label" not in [c["name"] for c in db.execute("PRAGMA table_info(history)")]:
+                db.execute("ALTER TABLE history ADD COLUMN label TEXT")  # banco criado antes das versões com nome
 
     @contextmanager
     def _db(self):
@@ -157,24 +171,31 @@ class Store:
 
     def _snapshot(self, db, doc_id, row, interval):
         # guarda a versão que vai ser sobrescrita, no máximo uma a cada `interval` s
-        last = db.execute("SELECT MAX(saved) FROM history WHERE doc_id = ?", (doc_id,)).fetchone()[0]
+        last = db.execute("SELECT MAX(saved) FROM history WHERE doc_id = ? AND label IS NULL", (doc_id,)).fetchone()[0]
         if last is not None and time.time() - last < interval:
             return
-        db.execute("INSERT OR REPLACE INTO history VALUES (?, ?, ?, ?)", (doc_id, row["version"], row["updated"], row["body"]))
-        db.execute("DELETE FROM history WHERE doc_id = ? AND version NOT IN "
-                   "(SELECT version FROM history WHERE doc_id = ? ORDER BY version DESC LIMIT ?)", (doc_id, doc_id, HISTORY_MAX))
+        db.execute("INSERT INTO history (doc_id, version, saved, body) VALUES (?, ?, ?, ?) ON CONFLICT(doc_id, version) DO NOTHING",
+                   (doc_id, row["version"], row["updated"], row["body"]))  # não apaga o rótulo de uma versão com nome
+        db.execute("DELETE FROM history WHERE doc_id = ? AND label IS NULL AND version NOT IN "
+                   "(SELECT version FROM history WHERE doc_id = ? AND label IS NULL ORDER BY version DESC LIMIT ?)",
+                   (doc_id, doc_id, HISTORY_MAX))
 
     def list_docs(self):
         with self._db() as db:
-            rows = db.execute("SELECT id, title, type, updated FROM docs WHERE deleted IS NULL ORDER BY updated DESC").fetchall()
-        return [{"id": r["id"], "title": r["title"], "type": r["type"], "updated": iso(r["updated"])} for r in rows]
+            rows = db.execute("SELECT id, title, type, updated, CASE WHEN type = 'skill' THEN body END AS body "
+                              "FROM docs WHERE deleted IS NULL ORDER BY updated DESC").fetchall()
+        out = [{"id": r["id"], "title": r["title"], "type": r["type"], "updated": iso(r["updated"])} for r in rows]
+        for item, r in zip(out, rows):
+            if r["body"]:
+                item["tags"] = json.loads(r["body"]).get("tags", [])
+        return out
 
     def duplicate(self, doc_id, suffix=" (cópia)"):
         body = self.get(doc_id)
         if body is None:
             return None
         new_id = f"{doc_id[:48]}-copia-{uuid.uuid4().hex[:6]}"
-        if body.get("type") == "board":
+        if body.get("type") in ("board", "skill"):
             body["title"] = f"{body.get('title', '')}{suffix}"
         else:
             body["root"]["text"] = f"{body['root'].get('text', '')}{suffix}"
@@ -210,7 +231,7 @@ class Store:
     # ---- histórico ----
     def history(self, doc_id):
         with self._db() as db:
-            rows = db.execute("SELECT version, saved, body FROM history WHERE doc_id = ? ORDER BY version DESC", (doc_id,)).fetchall()
+            rows = db.execute("SELECT version, saved, body, label FROM history WHERE doc_id = ? ORDER BY version DESC", (doc_id,)).fetchall()
         out = []
         for r in rows:
             try:
@@ -218,8 +239,20 @@ class Store:
                 title, nodes = doc_title(body), doc_size(body)
             except (ValueError, KeyError, TypeError, AttributeError, RecursionError):
                 title, nodes = "", 0  # versão malformada não derruba a lista inteira
-            out.append({"version": r["version"], "saved": iso(r["saved"]), "title": title, "nodes": nodes})
+            out.append({"version": r["version"], "saved": iso(r["saved"]), "title": title, "nodes": nodes, "label": r["label"]})
         return out
+
+    def label_version(self, doc_id, label):
+        """Dá nome (ou tira, com None) à versão atual do documento. Devolve a versão ou None se não existe."""
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT version, updated, body FROM docs WHERE id = ? AND deleted IS NULL", (doc_id,)).fetchone()
+            if not row:
+                return None
+            db.execute("INSERT INTO history (doc_id, version, saved, body, label) VALUES (?, ?, ?, ?, ?) "
+                       "ON CONFLICT(doc_id, version) DO UPDATE SET label = excluded.label",
+                       (doc_id, row["version"], row["updated"], row["body"], label))
+        return row["version"]
 
     def history_version(self, doc_id, version):
         with self._db() as db:
@@ -324,7 +357,7 @@ def migrate_legacy(store: Store, data_dir: Path):
             for f in folder.glob("*.json") if _real_dir(folder) else []:
                 body = _read_json(f)
                 if body is not None and re.fullmatch(r"[0-9]{1,9}", f.stem):
-                    db.execute("INSERT OR IGNORE INTO history VALUES (?, ?, ?, ?)",
+                    db.execute("INSERT OR IGNORE INTO history (doc_id, version, saved, body) VALUES (?, ?, ?, ?)",
                                (doc_id, int(f.stem), f.stat().st_mtime, json.dumps(body, ensure_ascii=False)))
 
         for f in docs:
