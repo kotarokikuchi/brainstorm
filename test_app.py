@@ -766,34 +766,12 @@ class AuthTest(unittest.TestCase):
         # as outras 20 levam pelo menos 20 atrasos, por mais conexões que o atacante abra
         self.server.login_delay = 0.1
         started = time.monotonic()
-        with mock.patch("app.LOGIN_MAX_DELAY", 0.1), ThreadPoolExecutor(30) as pool:  # sem dobrar: 0,1 s cada
+        with ThreadPoolExecutor(30) as pool:
             codes = list(pool.map(lambda _: self.login(password="errada")[0], range(30)))
         self.assertGreaterEqual(time.monotonic() - started, 20 * 0.1)
         self.assertEqual(codes.count(401), 10, "só 10 tentativas conferidas em paralelo")
         self.assertEqual(codes.count(429), 20)
         self.assertEqual(self.login()[0], 200)
-
-    def test_locked_delay_doubles_and_caps(self):
-        # no bloqueio cada erro dobra a espera da próxima conferência (até 60 s): ~60 palpites/hora, como antes.
-        # A espera vem antes da comparação, para certo e errado: o tempo não denuncia a senha
-        self.server.login_delay = 1
-        waits = lambda: [c.args[0] for c in sleep.call_args_list]
-        with mock.patch("app.time.sleep") as sleep:
-            for _ in range(10):
-                self.assertEqual(self.login(password="errada")[0], 401)
-            for _ in range(8):
-                self.assertEqual(self.login(password="errada")[0], 429)
-            self.assertEqual(self.login()[0], 200)
-            self.assertEqual(waits(), [1] * 10 + [1, 2, 4, 8, 16, 32, 60, 60, 60])
-            sleep.reset_mock()
-            for _ in range(12):
-                self.login(password="errada")
-            self.assertEqual(waits()[-2:], [1, 2], "acertar zera a espera")
-            self.server.login_fails = [t - 600 for t in self.server.login_fails]  # a janela passou
-            sleep.reset_mock()
-            for _ in range(11):
-                self.login(password="errada")
-            self.assertEqual(waits()[-1], 1, "fim do bloqueio zera a espera")
 
     def test_lockout_answer_waits_for_the_body(self):
         # responder sem ler o corpo faz o fechamento virar RST: o navegador mostraria "sem conexão"
