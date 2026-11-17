@@ -79,6 +79,18 @@ def doc_size(body):
     return len(body["elements"]) if body.get("type") == "board" else count(body["root"])
 
 
+def load_json(raw):
+    """JSON vindo de fora (corpo de requisição, backup, formato antigo) ou None se não vale. Além do JSON
+    inválido, recusa NaN/Infinity (inclusive 1e400; o navegador não lê) e surrogate sozinho ("\\ud800":
+    não vira UTF-8, o banco e a resposta derrubariam a conexão)."""
+    try:
+        data = json.loads(raw)
+        json.dumps(data, ensure_ascii=False, allow_nan=False).encode()
+    except (ValueError, TypeError, RecursionError):  # UnicodeError também é ValueError
+        return None
+    return data
+
+
 def valid_tags(tags):
     return (isinstance(tags, list) and len(tags) <= 30 and len(set(map(str, tags))) == len(tags)
             and all(isinstance(t, str) and 0 < len(t) <= 40 and t == t.strip() for t in tags))
@@ -127,6 +139,14 @@ def valid_folders(body):
                for k, v in body["place"].items())
 
 
+def _with_id(row, doc_id):
+    # o id vem sempre da linha: um corpo restaurado com outro id faria a página gravar em outra rota
+    if not row:
+        return None
+    body = json.loads(row["body"])
+    return {**body, "id": doc_id} if isinstance(body, dict) else body
+
+
 class Store:
     def __init__(self, db_path: Path, files_dir: Path):
         self.db_path, self.files_dir = Path(db_path), Path(files_dir)
@@ -154,7 +174,7 @@ class Store:
     def get(self, doc_id):
         with self._db() as db:
             row = db.execute("SELECT body FROM docs WHERE id = ? AND deleted IS NULL", (doc_id,)).fetchone()
-        return json.loads(row["body"]) if row else None
+        return _with_id(row, doc_id)
 
     def exists(self, doc_id):
         return self.get(doc_id) is not None
@@ -267,7 +287,7 @@ class Store:
     def history_version(self, doc_id, version):
         with self._db() as db:
             row = db.execute("SELECT body FROM history WHERE doc_id = ? AND version = ?", (doc_id, version)).fetchone()
-        return json.loads(row["body"]) if row else None
+        return _with_id(row, doc_id)
 
     # ---- sessões de login (sobrevivem a reinícios do servidor) ----
     @staticmethod
@@ -340,8 +360,8 @@ def _read_json(file):
     if file.is_symlink():
         return None
     try:
-        data = json.loads(file.read_text("utf-8"))
-    except (OSError, ValueError, UnicodeDecodeError):
+        data = load_json(file.read_bytes())
+    except OSError:
         return None
     return data if isinstance(data, dict) else None
 

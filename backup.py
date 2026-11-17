@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from s3 import S3, S3Error
-from store import ID_RE, SCHEMA_VERSION, migrate
+from store import ID_RE, SCHEMA_VERSION, load_json, migrate, valid_doc
 
 NAME_RE = re.compile(r"brainstorm-\d{4}-\d{2}-\d{2}-\d{6}\.tar\.gz")
 INTERVALS = (6, 12, 24, 168)  # horas
@@ -124,6 +124,11 @@ def check_members(tar, free):
             or (len(parts) == 3 and ID_RE.fullmatch(parts[1]) and file_name_ok(parts[2]) and m.isfile())))
         if not ok:
             raise BackupError("invalid archive")
+
+
+def doc_ok(doc_id, body):
+    # mesma validação da API: o id vai nas rotas da página, o corpo é aberto pelo editor
+    return isinstance(doc_id, str) and bool(ID_RE.fullmatch(doc_id)) and valid_doc(load_json(body))
 
 
 def iso(t):
@@ -314,6 +319,8 @@ class Backup:
                     raise BackupError("backup is from a newer version of the app")
                 with db:
                     migrate(db)  # backup antigo: cria as colunas que faltam, como ao abrir o banco
+                if not all(doc_ok(*r) for r in db.execute("SELECT id, body FROM docs")):
+                    raise BackupError("invalid archive")
         except sqlite3.DatabaseError:
             raise BackupError("invalid archive") from None
 

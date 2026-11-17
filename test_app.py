@@ -15,6 +15,7 @@ import urllib.request
 from pathlib import Path
 from unittest import mock
 
+import app
 from app import Handler, load_env, make_server, watch
 from store import Store, migrate_legacy
 
@@ -589,6 +590,22 @@ class ApiTest(unittest.TestCase):
         for version in ("9" * 30, "%C2%B2", "1%0A"):  # estoura o inteiro do SQLite; "²".isdigit() é True
             self.assertEqual(self.req("GET", f"/api/maps/abc/history/{version}")[0], 400, version)
 
+    def test_nan_and_lone_surrogates_are_400(self):
+        # NaN/Infinity não são JSON (o navegador não abriria o documento); surrogate sozinho não vira UTF-8
+        lone = b'"\\ud800"'
+        for raw in (b'{"version": 0, "root": {"text": "a", "children": [], "x": NaN}}',
+                    b'{"version": 0, "root": {"text": "a", "children": [], "x": -Infinity}}',
+                    b'{"version": 0, "root": {"text": "a", "children": [], "x": 1e400}}',
+                    b'{"version": 0, "root": {"text": ' + lone + b', "children": []}}'):
+            self.assertEqual(self.req("PUT", "/api/maps/abc", raw=raw)[0], 400, raw)
+        folders = b'{"version": 0, "folders": [{"id": "f1", "name": ' + lone + b', "parent": null}], "place": {}}'
+        self.assertEqual(self.req("PUT", "/api/folders", raw=folders)[0], 400)
+        self.assertEqual(self.req("PUT", "/api/settings/llm/openai", raw=b'{"key": "abc", "model": NaN}')[0], 400)
+        self.assertEqual(self.req("GET", "/api/maps")[1], [], "nada gravado")
+        ok = b'{"version": 0, "root": {"text": "\\ud83d\\ude80", "children": []}}'  # par válido (emoji)
+        self.assertEqual(self.req("PUT", "/api/maps/abc", raw=ok)[0], 200)
+        self.assertEqual(self.req("GET", "/api/maps/abc")[1]["root"]["text"], "\U0001f680")
+
     def test_folder_validation_limits(self):
         folder = lambda i, parent: {"id": f"f{i}", "name": "p", "parent": parent}
         tree = lambda folders, place=None: {"version": 0, "folders": folders, "place": place or {}}
@@ -604,6 +621,17 @@ class ApiTest(unittest.TestCase):
         started = time.monotonic()
         self.assertEqual(self.req("PUT", "/api/folders", chain)[0], 200, "2000 pastas uma dentro da outra")
         self.assertLess(time.monotonic() - started, 1, "checagem de ciclo linear")
+
+    def test_document_id_always_comes_from_the_row(self):
+        # um backup restaurado pode trazer outro id no corpo; a página monta as rotas com doc.id
+        self.server.history_interval = 0
+        self.put_text(0, "a")
+        self.put_text(1, "b")
+        with self.server.store._db() as db:
+            for table in ("docs", "history"):
+                db.execute(f"UPDATE {table} SET body = json_set(body, '$.id', '../settings/backup')")
+        self.assertEqual(self.req("GET", "/api/maps/abc")[1]["id"], "abc")
+        self.assertEqual(self.req("GET", "/api/maps/abc/history/1")[1]["id"], "abc")
 
     def test_history_survives_a_malformed_version(self):
         self.server.history_interval = 0
@@ -788,6 +816,14 @@ class AuthTest(unittest.TestCase):
         self.assertEqual(self.call("HEAD", "/login.html")[0], 200)
         self.assertEqual(self.call("HEAD", "/app.js", cookie=self.cookie())[0], 200)
 
+    def test_login_with_a_lone_surrogate_is_401(self):
+        raw = b'{"user": "ana", "password": "\\ud800"}'
+        req = urllib.request.Request(self.base + "/api/login", data=raw, method="POST")
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(req)
+        e.exception.close()
+        self.assertEqual(e.exception.code, 401)
+
     def test_login_body_is_limited_before_reading(self):
         port = self.server.server_address[1]
         body = json.dumps({"user": "ana", "password": "s3gredo ç"}).encode()
@@ -833,6 +869,50 @@ class EnvFileTest(unittest.TestCase):
             finally:
                 for k in ("BRAINSTORM_T1", "BRAINSTORM_T2", "BRAINSTORM_T3"):
                     os.environ.pop(k, None)
+
+
+class MainTest(unittest.TestCase):
+    """Recusas na partida (main), sem abrir porta: make_server é trocado por um servidor de mentira."""
+
+    class Out(io.StringIO):
+        flushed = ""
+
+        def flush(self):
+            self.flushed = self.getvalue()
+
+    def main(self, **env):
+        # devolve (mensagem de recusa ou None, umask depois do main, saída já descarregada)
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("BRAINSTORM_")}
+        server = mock.Mock(**{"serve_forever.side_effect": KeyboardInterrupt})
+        out, old = self.Out(), os.umask(0o022)
+        try:
+            with mock.patch.dict(os.environ, {**clean, **env}, clear=True), mock.patch("sys.argv", ["app.py", "0"]), \
+                    mock.patch("app.load_env"), mock.patch("app.watch"), mock.patch("app.make_server", return_value=server), \
+                    contextlib.redirect_stdout(out):
+                app.main()
+            refused = None
+        except SystemExit as e:
+            refused = str(e.code)
+        finally:
+            umask = os.umask(old)
+        return refused, umask, out.flushed
+
+    def test_no_login_on_a_network_address_is_refused(self):
+        for host in ("0.0.0.0", "192.168.0.10", "::", ""):
+            refused, _, _ = self.main(BRAINSTORM_HOST=host)
+            self.assertIn("BRAINSTORM_ALLOW_NO_LOGIN", refused or "", host)
+        for host in ("127.0.0.1", "127.0.0.2", "localhost", "::1"):
+            self.assertIsNone(self.main(BRAINSTORM_HOST=host)[0], host)
+        self.assertIsNone(self.main()[0], "padrão: 127.0.0.1")
+        self.assertIsNone(self.main(BRAINSTORM_HOST="0.0.0.0", BRAINSTORM_ALLOW_NO_LOGIN="1")[0])
+        self.assertIsNotNone(self.main(BRAINSTORM_HOST="0.0.0.0", BRAINSTORM_ALLOW_NO_LOGIN="sim")[0], "só 1 libera")
+        self.assertIsNone(self.main(BRAINSTORM_HOST="0.0.0.0", BRAINSTORM_USER="ana", BRAINSTORM_PASSWORD="s3gredo ç")[0])
+
+    def test_example_password_is_refused(self):
+        refused, _, _ = self.main(BRAINSTORM_USER="ana", BRAINSTORM_PASSWORD="troque-esta-senha")
+        self.assertIn(".env.example", refused or "")
+        example = (Path(app.__file__).with_name(".env.example")).read_text()
+        self.assertIn("BRAINSTORM_PASSWORD=troque-esta-senha", example, "a recusa acompanha o exemplo")
 
 
 class MigrationTest(unittest.TestCase):

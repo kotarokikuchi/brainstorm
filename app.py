@@ -1,5 +1,6 @@
 """Servidor local do editor de mapas mentais: arquivos estáticos + API JSON."""
 import hmac
+import ipaddress
 import json
 import mimetypes
 import os
@@ -16,7 +17,7 @@ from urllib.parse import unquote, urlsplit
 
 from backup import NAME_RE, Backup, BackupError, Busy, NotConfigured, clean_config, hint, text_ok
 from s3 import S3Error
-from store import ID_RE, Store, migrate_legacy, valid_doc, valid_folders
+from store import ID_RE, Store, load_json, migrate_legacy, valid_doc, valid_folders
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 5_000_000
@@ -32,6 +33,7 @@ SESSION_RE = re.compile(rf"(?:^|;)\s*{SESSION_COOKIE}=([A-Za-z0-9_-]+)\s*(?:;|$)
 SESSION_TTL = 30 * 86400
 PUBLIC = {"/login.html", "/login.js", "/style.css", "/i18n.js"}  # e /fonts/ e /locales/ (visual e textos da página de login)
 PUBLIC_DIRS = ("/fonts/", "/locales/")
+EXAMPLE_PASSWORD = "troque-esta-senha"  # a do .env.example: o app não abre com ela
 LOGIN_MAX_FAILS, LOGIN_WINDOW = 10, 600
 # scripts só do próprio app; estilo inline é usado nos SVG; data:/blob: para exportar PNG e baixar arquivos
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
@@ -142,8 +144,9 @@ class Handler(SimpleHTTPRequestHandler):
         want_user, want_password = self.server.auth
         # compara os dois sempre e em tempo constante: a resposta não indica qual dos dois errou
         ok = isinstance(user, str) and isinstance(password, str)
-        ok = hmac.compare_digest((user if ok else "").encode(), want_user.encode()) & \
-            hmac.compare_digest((password if ok else "").encode(), want_password.encode()) & ok
+        # surrogatepass: um surrogate solto no JSON vira bytes (e não confere) em vez de derrubar a requisição
+        ok = hmac.compare_digest((user if ok else "").encode(errors="surrogatepass"), want_user.encode()) & \
+            hmac.compare_digest((password if ok else "").encode(errors="surrogatepass"), want_password.encode()) & ok
         if not ok:
             time.sleep(self.server.login_delay)  # atrasa quem tenta adivinhar (o erro já foi contado)
             self._send(401, {"error": "invalid credentials"})
@@ -246,10 +249,7 @@ class Handler(SimpleHTTPRequestHandler):
         length = self._length(MAX_BODY)
         if length is None:
             return
-        try:
-            body = json.loads(self.rfile.read(length))
-        except (ValueError, RecursionError):
-            body = None
+        body = load_json(self.rfile.read(length))
         if not valid_doc(body):
             self._send(400, {"error": "invalid map"})
             return
@@ -280,13 +280,10 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _duplicate(self, map_id):
         # corpo opcional {"suffix": "..."}: o que acrescentar ao título (no idioma da interface); inválido ou ausente = padrão
-        length = self._length(MAX_LOGIN_BODY)
-        if length is None:
+        responded, body = self._json()
+        if responded:
             return
-        try:
-            suffix = json.loads(self.rfile.read(length)).get("suffix")
-        except (ValueError, RecursionError, AttributeError):
-            suffix = None
+        suffix = body.get("suffix") if isinstance(body, dict) else None
         if not isinstance(suffix, str) or not 0 < len(suffix) <= 40 or not suffix.isprintable():
             suffix = " (cópia)"
         new_id = self.server.store.duplicate(map_id, suffix)
@@ -318,10 +315,7 @@ class Handler(SimpleHTTPRequestHandler):
         raw = self.rfile.read(length)
         label = None
         if raw:
-            try:
-                body = json.loads(raw)
-            except (ValueError, RecursionError):
-                body = None
+            body = load_json(raw)
             if not isinstance(body, dict):
                 self._send(400, {"error": "invalid body"})
                 return
@@ -414,10 +408,7 @@ class Handler(SimpleHTTPRequestHandler):
         length = self._length(MAX_BODY)
         if length is None:
             return
-        try:
-            body = json.loads(self.rfile.read(length))
-        except (ValueError, RecursionError):
-            body = None
+        body = load_json(self.rfile.read(length))
         if not valid_folders(body):
             self._send(400, {"error": "invalid folders"})
             return
@@ -425,14 +416,11 @@ class Handler(SimpleHTTPRequestHandler):
         self._send(200 if ok else 409, saved)
 
     def _json(self, limit=MAX_LOGIN_BODY):
-        # (respondeu?, corpo): corpo None se não for JSON válido
+        # (respondeu?, corpo): corpo None se não for JSON válido (ver load_json)
         length = self._length(limit)
         if length is None:
             return True, None
-        try:
-            return False, json.loads(self.rfile.read(length))
-        except (ValueError, RecursionError):
-            return False, None
+        return False, load_json(self.rfile.read(length))
 
     # ---- Configurações (segredos nunca voltam: só o final mascarado) ----
     def _settings(self, method, path):
@@ -605,6 +593,13 @@ def load_env(path):
         os.environ.setdefault(key, value)
 
 
+def loopback(host):
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return host == "localhost"  # "" (todas as interfaces) e outros nomes: rede
+
+
 def main():
     load_env(ROOT / ".env")
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
@@ -615,6 +610,12 @@ def main():
     user, password = os.environ.get("BRAINSTORM_USER", ""), os.environ.get("BRAINSTORM_PASSWORD", "")
     if bool(user) != bool(password):
         sys.exit("Defina BRAINSTORM_USER e BRAINSTORM_PASSWORD juntos (no .env ou no ambiente), ou nenhum dos dois.")
+    if password == EXAMPLE_PASSWORD:
+        sys.exit("BRAINSTORM_PASSWORD ainda é a senha de exemplo do .env.example: troque por uma sua.")
+    if not user and not loopback(host) and os.environ.get("BRAINSTORM_ALLOW_NO_LOGIN") != "1":
+        sys.exit(f"Sem BRAINSTORM_USER/BRAINSTORM_PASSWORD o app abre sem login, e BRAINSTORM_HOST={host!r} aceita conexões "
+                 "de outras máquinas. Defina o login ou, se só esta máquina alcança a porta (ex.: Docker publicado em "
+                 "127.0.0.1), BRAINSTORM_ALLOW_NO_LOGIN=1.")
     if not user:
         print("Aviso: sem BRAINSTORM_USER/BRAINSTORM_PASSWORD, o app abre sem login.", flush=True)
     server = make_server(Path(os.environ.get("BRAINSTORM_DATA") or ROOT / "data"), port, host,
