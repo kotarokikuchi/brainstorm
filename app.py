@@ -286,7 +286,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
         suffix = body.get("suffix") if isinstance(body, dict) else None
         if not isinstance(suffix, str) or not 0 < len(suffix) <= 40 or not suffix.isprintable():
-            suffix = " (cópia)"
+            suffix = " (copy)"
         new_id = self.server.store.duplicate(map_id, suffix)
         self._send(*((201, {"id": new_id}) if new_id else (404, {"error": "not found"})))
 
@@ -343,7 +343,7 @@ class Handler(SimpleHTTPRequestHandler):
             length = self._length(MAX_FILE)
             if length is None:
                 return
-            name = unquote(self.headers.get("X-Filename") or "arquivo")
+            name = unquote(self.headers.get("X-Filename") or "file")
             ext = Path(name).suffix.lower()
             if not re.fullmatch(r"\.[a-z0-9]{1,10}", ext):
                 ext = ""

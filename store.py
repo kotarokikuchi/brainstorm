@@ -220,11 +220,11 @@ class Store:
                 item["tags"] = json.loads(r["body"]).get("tags", [])
         return out
 
-    def duplicate(self, doc_id, suffix=" (cópia)"):
+    def duplicate(self, doc_id, suffix=" (copy)"):
         body = self.get(doc_id)
         if body is None:
             return None
-        new_id = f"{doc_id[:48]}-copia-{uuid.uuid4().hex[:6]}"
+        new_id = f"{doc_id[:48]}-copy-{uuid.uuid4().hex[:6]}"
         if body.get("type") in ("board", "skill"):
             body["title"] = f"{body.get('title', '')}{suffix}"
         else:

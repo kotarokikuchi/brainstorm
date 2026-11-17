@@ -279,7 +279,7 @@ class ApiTest(unittest.TestCase):
         self.assertRegex(new, r"^[a-z0-9-]{1,64}$")
         self.assertNotEqual(new, "abc")
         status, m = self.req("GET", f"/api/maps/{new}")
-        self.assertEqual((status, m["root"]["text"], m["version"], m["id"]), (200, "a (cópia)", 1, new))
+        self.assertEqual((status, m["root"]["text"], m["version"], m["id"]), (200, "a (copy)", 1, new))
         self.assertEqual(self.raw_get(f"/api/maps/{new}/files/{info['id']}")[0], 200, "files copied")
         self.assertEqual(self.req("POST", "/api/maps/zzz/duplicate", raw=b"")[0], 404)
 
@@ -292,8 +292,8 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(title(body={"suffix": " (copy)"}), "a (copy)")
         self.assertEqual(title(body={"suffix": " (コピー)"}), "a (コピー)")
         for bad in ({"suffix": "x" * 41}, {"suffix": "a\nb"}, {"suffix": "a\x00"}, {"suffix": 5}, {"suffix": ""}, {}, [], "texto"):
-            self.assertEqual(title(body=bad), "a (cópia)", bad)
-        self.assertEqual(title(raw=b"{nao e json"), "a (cópia)")
+            self.assertEqual(title(body=bad), "a (copy)", bad)
+        self.assertEqual(title(raw=b"{nao e json"), "a (copy)")
         self.assertEqual(self.req("POST", "/api/maps/abc/duplicate", raw=b"x" * 10_001)[0], 413, "body is limited")
         self.req("PUT", "/api/maps/qd", self.board())
         _, dup = self.req("POST", "/api/maps/qd/duplicate", {"suffix": " (copia)"})
@@ -323,7 +323,7 @@ class ApiTest(unittest.TestCase):
         hist = self.req("GET", "/api/maps/qd/history")[1]
         self.assertEqual((hist[0]["title"], hist[0]["nodes"]), ("Quadro", 1))
         _, dup = self.req("POST", "/api/maps/qd/duplicate", raw=b"")
-        self.assertEqual(self.req("GET", f"/api/maps/{dup['id']}")[1]["title"], "Quadro 2 (cópia)")
+        self.assertEqual(self.req("GET", f"/api/maps/{dup['id']}")[1]["title"], "Quadro 2 (copy)")
         self.req("DELETE", "/api/maps/qd")
         self.assertEqual(self.req("GET", "/api/trash")[1][0]["title"], "Quadro 2")
 
@@ -348,7 +348,7 @@ class ApiTest(unittest.TestCase):
     def test_duplicate_skill(self):
         self.req("PUT", "/api/maps/sk", self.skill())
         _, dup = self.req("POST", "/api/maps/sk/duplicate", raw=b"")
-        self.assertEqual(self.req("GET", f"/api/maps/{dup['id']}")[1]["title"], "Revisão (cópia)")
+        self.assertEqual(self.req("GET", f"/api/maps/{dup['id']}")[1]["title"], "Revisão (copy)")
 
     def test_named_version(self):
         self.server.history_interval = 0
