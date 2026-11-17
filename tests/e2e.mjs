@@ -1556,7 +1556,7 @@ await key('Enter');
 await sleep(900);
 assert.ok((await secMap()).children.find(c => c.text === 'cor').children.some(c => c.text === 'depois'), 'mapa continua salvando depois das colagens forjadas');
 
-// seletor de idioma: a escolha fica guardada e a página recarrega; sem dicionário para o idioma, a interface segue em português
+// seletor de idioma: a escolha fica guardada, a página recarrega e os textos vêm do dicionário do idioma
 await ev(`location.hash = '#/'`); await sleep(800);
 assert.deepEqual(await ev(`[...document.querySelectorAll('#lang option')].map(o => o.textContent)`), ['Português (Brasil)', 'English', 'Español', '日本語']);
 assert.equal(await ev(`document.querySelector('#lang').title`), 'Idioma');
@@ -1565,10 +1565,12 @@ const pickLang = async (code) => {
   await sleep(1500);
   return ev(`[window.sameDocument ?? 'reloaded', localStorage.getItem('galho:lang'), document.querySelector('#lang').value, document.documentElement.lang]`);
 };
-assert.deepEqual(await pickLang('ja'), ['reloaded', 'ja', 'ja', 'ja'], 'escolher outro idioma guarda a escolha e recarrega');
-assert.deepEqual(await ev(`[document.querySelector('#new-map').textContent, document.querySelector('#search').placeholder, document.querySelector('#logout-btn').title]`),
-  ['Novo mapa', 'Buscar mapas, quadros e pastas', 'Sair'], 'idioma ainda sem dicionário: interface em português');
-assert.ok((await ev(`document.querySelector('#trash summary').textContent`)).startsWith('Lixeira ('), 'textos montados em JS também caem no português');
+const uiTexts = () => ev(`[document.querySelector('#new-map').textContent, document.querySelector('#search').placeholder, document.querySelector('#logout-btn').title, document.querySelector('#trash summary').textContent.replace(/\\d+/, '{n}')]`);
+for (const code of ['en', 'es', 'ja']) {
+  const d = (await import(new URL(`../static/locales/${code}.js`, import.meta.url))).default;
+  assert.deepEqual(await pickLang(code), ['reloaded', code, code, code], `escolher ${code} guarda a escolha e recarrega`);
+  assert.deepEqual(await uiTexts(), [d['list.newMap'], d['list.searchPlaceholder'], d['topbar.logout'], d['trash.title']], `interface em ${code} (HTML e textos montados em JS)`);
+}
 assert.deepEqual(await pickLang('pt-BR'), ['reloaded', 'pt-BR', 'pt-BR', 'pt-BR'], 'volta para o português');
 
 // Sair: encerra a sessão e volta para a página de login
