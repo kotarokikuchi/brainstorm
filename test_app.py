@@ -416,6 +416,14 @@ class AuthTest(unittest.TestCase):
         self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
         self.assertEqual(self.call("GET", "/api/maps", cookie=c)[0], 401)
 
+    def test_database_has_no_fast_hash_of_the_password(self):
+        import hashlib, sqlite3
+        db = sqlite3.connect(self.data / "brainstorm.db")
+        value = json.loads(db.execute("SELECT value FROM meta WHERE key = 'auth_fingerprint'").fetchone()[0])
+        db.close()
+        self.assertEqual(sorted(value), ["fp", "salt"], "scrypt com sal")
+        self.assertNotIn(hashlib.sha256(b"s3gredo \xc3\xa7").hexdigest(), json.dumps(value))
+
     def test_concurrent_attempts_cannot_pass_the_limit(self):
         self.server.login_delay = 0.3
         with ThreadPoolExecutor(30) as pool:

@@ -198,13 +198,17 @@ class Store:
         return bool(row) and row["expires"] > time.time()
 
     def reset_sessions_if_auth_changed(self, user, password):
-        # guarda só uma impressão (sha256) das credenciais; se mudou, apaga todas as sessões
-        fp = hashlib.sha256(f"brainstorm-auth\0{user}\0{password}".encode()).hexdigest()
+        # impressão das credenciais com scrypt (lento) e sal aleatório desta instalação: uma cópia do
+        # banco (ex.: backup externo) não serve para testar senhas rápido. Se mudou, apaga as sessões.
         with self._db() as db:
             row = db.execute("SELECT value FROM meta WHERE key = 'auth_fingerprint'").fetchone()
-            if row is None or row["value"] != fp:
+            stored = json.loads(row["value"]) if row and row["value"].startswith("{") else None
+            salt = bytes.fromhex(stored["salt"]) if stored else secrets.token_bytes(16)
+            fp = hashlib.scrypt(f"{user}\0{password}".encode(), salt=salt, n=2**14, r=8, p=1).hex()
+            if not stored or not secrets.compare_digest(stored["fp"], fp):
                 db.execute("DELETE FROM sessions")
-                db.execute("INSERT OR REPLACE INTO meta VALUES ('auth_fingerprint', ?)", (fp,))
+                db.execute("INSERT OR REPLACE INTO meta VALUES ('auth_fingerprint', ?)",
+                           (json.dumps({"salt": salt.hex(), "fp": fp}),))
 
     def end_session(self, token):
         with self._db() as db:
