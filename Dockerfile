@@ -1,4 +1,4 @@
-# Brainstorm: só a biblioteca padrão do Python, nenhuma dependência para instalar
+# Brainstorm: only Python's standard library, no dependencies to install
 FROM python:3.13-slim
 
 ENV BRAINSTORM_HOST=0.0.0.0 \
@@ -10,7 +10,7 @@ WORKDIR /app
 COPY app.py store.py s3.py backup.py ./
 COPY static ./static
 
-# roda sem root; o docker-compose troca o usuário pelo seu (arquivos de ./data ficam seus)
+# runs as non-root; docker-compose swaps in your own user (so the files in ./data stay yours)
 RUN useradd --uid 1000 --create-home brainstorm && mkdir /data && chown brainstorm /data
 USER brainstorm
 
