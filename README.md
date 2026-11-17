@@ -12,6 +12,10 @@ Abra http://127.0.0.1:8000. Os dados ficam em `./data` (mapas, quadros, anexos, 
 lixeira e pastas). Para parar: `docker compose down`. Depois de mudar o código, rode o
 `docker compose up -d --build` de novo.
 
+Se `docker ps` mostrar a coluna PORTS vazia, a porta 8000 estava ocupada quando o container
+subiu (por exemplo, pelo `python app.py`). Pare o outro servidor e rode
+`docker compose up -d --force-recreate`.
+
 Outra porta: troque `127.0.0.1:8000:8000` por, por exemplo, `127.0.0.1:8080:8000` no
 `docker-compose.yml`.
 
