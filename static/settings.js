@@ -3,7 +3,7 @@ import { t, fmtDateTime } from './i18n.js';
 import { fmtSize } from './model.js';
 
 const $ = (s) => document.querySelector(s);
-const PROVIDERS = { anthropic: 'Anthropic', openai: 'OpenAI', gemini: 'Google Gemini', openrouter: 'OpenRouter' };
+const PROVIDERS = { anthropic: 'Anthropic', openai: 'OpenAI', gemini: 'Google Gemini', deepseek: 'DeepSeek', openrouter: 'OpenRouter' };
 // regiões do Wasabi (docs.wasabi.com, "service URLs"): escolher uma preenche o endpoint
 const WASABI = {
   'us-east-1': 'N. Virginia', 'us-east-2': 'N. Virginia', 'us-central-1': 'Texas', 'us-west-1': 'Oregon', 'us-west-2': 'San Jose',
