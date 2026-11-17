@@ -14,7 +14,7 @@ test('roughLine with roughness 0 is a straight segment', () => {
   assert.equal(roughLine(0, 0, 100, 0, rng(1), 0), 'M0,0 Q50,0 100,0');
   const wobbly = roughLine(0, 0, 100, 0, rng(1), 2);
   assert.notEqual(wobbly, 'M0,0 Q50,0 100,0');
-  assert.equal(wobbly, roughLine(0, 0, 100, 0, rng(1), 2), 'mesma semente, mesmo traço');
+  assert.equal(wobbly, roughLine(0, 0, 100, 0, rng(1), 2), 'same seed, same stroke');
 });
 
 test('createElement + resizeTo normalize a drag in any direction', () => {
@@ -29,7 +29,7 @@ test('createElement + resizeTo normalize a drag in any direction', () => {
   const fd = createElement('freedraw', [0, 0]);
   resizeTo(fd, [5, 5]);
   resizeTo(fd, [10, 3]);
-  assert.deepEqual(fd.points, [[0, 0], [5, 5], [10, 3]], 'lápis acumula pontos');
+  assert.deepEqual(fd.points, [[0, 0], [5, 5], [10, 3]], 'pencil accumulates points');
 });
 
 test('elementBounds covers lines with negative points', () => {
@@ -44,37 +44,37 @@ test('elementBounds covers lines with negative points', () => {
 test('elementPaths draw each shape (two passes when rough) and arrowheads', () => {
   const mk = (type, roughness) => { const e = createElement(type, [0, 0], { seed: 3, roughness }); resizeTo(e, [100, 60]); return e; };
   const rect0 = elementPaths(mk('rectangle', 0));
-  assert.equal(rect0.length, 1, 'sem desleixo: uma passada');
+  assert.equal(rect0.length, 1, 'no sloppiness: one pass');
   for (const corner of ['0,0', '100,0', '100,60', '0,60']) assert.ok(rect0[0].includes(corner), corner);
-  assert.equal(elementPaths(mk('rectangle', 1)).length, 1, 'Artista (padrão): um traço só, sem linha duplicada');
+  assert.equal(elementPaths(mk('rectangle', 1)).length, 1, 'Artist (default): a single stroke, no duplicate line');
   assert.equal(elementPaths(mk('line', 1)).length, 1);
-  assert.equal(elementPaths(mk('rectangle', 2)).length, 2, 'Cartunista: duas passadas de propósito');
-  assert.ok(elementPaths(mk('diamond', 0))[0].includes('50,0'), 'losango pelos pontos médios');
+  assert.equal(elementPaths(mk('rectangle', 2)).length, 2, 'Cartoonist: two passes on purpose');
+  assert.ok(elementPaths(mk('diamond', 0))[0].includes('50,0'), 'diamond through the midpoints');
   assert.match(elementPaths(mk('ellipse', 0))[0], /^M/);
   const arrow = elementPaths(mk('arrow', 0));
-  assert.equal(arrow.length, 2, 'haste + ponta');
+  assert.equal(arrow.length, 2, 'shaft + tip');
   assert.equal(elementPaths(mk('line', 0)).length, 1);
   const fd = createElement('freedraw', [0, 0]);
   for (const p of [[5, 5], [10, 3], [20, 8]]) resizeTo(fd, p);
   assert.match(elementPaths(fd)[0], /^M0,0 /);
 });
 
-// ---- Entrega 3: seleção e edição ----
+// ---- Delivery 3: selection and editing ----
 import { hitTest, elementAt, elementsInBox, moveElements, resizeElement, selectionBounds, bringToFront, sendToBack, duplicateElements } from '../static/board-model.js';
 
 const shape = (type, x, y, w, h, extra = {}) => ({ ...createElement(type, [x, y], { seed: 1 }), w, h, ...extra });
 
 test('hitTest: outline of empty shapes, inside of filled shapes, near lines', () => {
   const r = shape('rectangle', 0, 0, 100, 50);
-  assert.equal(hitTest(r, [1, 25], 6), true, 'na borda');
-  assert.equal(hitTest(r, [50, 25], 6), false, 'miolo vazio não pega');
-  assert.equal(hitTest({ ...r, backgroundColor: '#a5d8ff' }, [50, 25], 6), true, 'preenchido pega no miolo');
+  assert.equal(hitTest(r, [1, 25], 6), true, 'on the border');
+  assert.equal(hitTest(r, [50, 25], 6), false, 'empty interior does not hit');
+  assert.equal(hitTest({ ...r, backgroundColor: '#a5d8ff' }, [50, 25], 6), true, 'filled hits in the interior');
   const e = shape('ellipse', 0, 0, 100, 50);
   assert.equal(hitTest(e, [100, 25], 6), true);
   assert.equal(hitTest(e, [50, 25], 6), false);
   const d = shape('diamond', 0, 0, 100, 100);
-  assert.equal(hitTest(d, [25, 25], 6), true, 'aresta do losango');
-  assert.equal(hitTest(d, [2, 2], 6), false, 'canto vazio do losango');
+  assert.equal(hitTest(d, [25, 25], 6), true, 'diamond edge');
+  assert.equal(hitTest(d, [2, 2], 6), false, 'empty corner of the diamond');
   const ln = createElement('line', [0, 0]); resizeTo(ln, [100, 100]);
   assert.equal(hitTest(ln, [50, 52], 6), true);
   assert.equal(hitTest(ln, [50, 80], 6), false);
@@ -101,7 +101,7 @@ test('resizeElement by handle: shapes keep positive size, lines scale their poin
   const start = structuredClone(r);
   resizeElement(r, 'se', [150, 80], start);
   assert.deepEqual([r.x, r.y, r.w, r.h], [0, 0, 150, 80]);
-  resizeElement(r, 'nw', [120, 70], start);  // passou do canto oposto: inverte sem tamanho negativo
+  resizeElement(r, 'nw', [120, 70], start);  // crossed past the opposite corner: flips without a negative size
   assert.deepEqual([r.x, r.y, r.w, r.h], [100, 50, 20, 20]);
   const ln = createElement('line', [0, 0]); resizeTo(ln, [100, 50]);
   resizeElement(ln, 'e', [200, 0], structuredClone(ln));
@@ -118,7 +118,7 @@ test('layer order and duplicate', () => {
   assert.deepEqual([copies[0].x, copies[0].y, copies[0].type], [b.x + 10, b.y + 10, 'ellipse']);
 });
 
-// ---- Entrega 4: texto e borracha ----
+// ---- Delivery 4: text and eraser ----
 import { elementsHitBy } from '../static/board-model.js';
 
 test('text elements: no stroke paths, hit by their box, resize scales the font', () => {
@@ -128,55 +128,55 @@ test('text elements: no stroke paths, hit by their box, resize scales the font',
   assert.equal(hitTest(t, [80, 20], 0), false);
   const start = structuredClone(t);
   resizeElement(t, 'se', [90, 60], start);
-  assert.deepEqual([t.x, t.y, t.w, t.h, t.fontSize], [10, 10, 80, 50, 40], 'escala proporcional pela altura');
+  assert.deepEqual([t.x, t.y, t.w, t.h, t.fontSize], [10, 10, 80, 50, 40], 'proportional scale by height');
 });
 
 test('elementsHitBy finds what an eraser stroke crosses', () => {
   const ln = createElement('line', [0, 50]); resizeTo(ln, [100, 50]);
   const r = { ...createElement('rectangle', [200, 0]), w: 50, h: 50 };
-  assert.deepEqual(elementsHitBy([ln, r], [50, 0], [50, 100], 4), [ln.id], 'cruza a linha');
-  assert.deepEqual(elementsHitBy([ln, r], [150, 0], [150, 100], 4), [], 'não toca em nada');
-  assert.deepEqual(elementsHitBy([ln, r], [190, 25], [260, 25], 4), [r.id], 'cruza a borda do retângulo');
+  assert.deepEqual(elementsHitBy([ln, r], [50, 0], [50, 100], 4), [ln.id], 'crosses the line');
+  assert.deepEqual(elementsHitBy([ln, r], [150, 0], [150, 100], 4), [], 'touches nothing');
+  assert.deepEqual(elementsHitBy([ln, r], [190, 25], [260, 25], 4), [r.id], 'crosses the rectangle border');
 });
 
-// ---- Balde de tinta ----
+// ---- Paint bucket ----
 import { paint } from '../static/board-model.js';
 
 test('paint fills closed shapes and recolors lines and text; elementAt inside hits empty shapes', () => {
   const st = { backgroundColor: '#ffc9c9', fillStyle: 'solid', strokeColor: '#e03131' };
   const r = paint(shape('rectangle', 0, 0, 100, 50), st);
-  assert.deepEqual([r.backgroundColor, r.fillStyle, r.strokeColor], ['#ffc9c9', 'solid', '#1e1e1e'], 'forma: fundo');
+  assert.deepEqual([r.backgroundColor, r.fillStyle, r.strokeColor], ['#ffc9c9', 'solid', '#1e1e1e'], 'shape: fill');
   const ln = paint({ ...createElement('line', [0, 0]), points: [[0, 0], [100, 0]] }, st);
-  assert.deepEqual([ln.backgroundColor, ln.strokeColor], ['transparent', '#e03131'], 'linha: cor do traço');
+  assert.deepEqual([ln.backgroundColor, ln.strokeColor], ['transparent', '#e03131'], 'line: stroke colour');
   const empty = shape('rectangle', 0, 0, 100, 50);
-  assert.equal(elementAt([empty], [50, 25], 6), null, 'clique comum no miolo vazio não pega');
-  assert.equal(elementAt([empty], [50, 25], 6, true), empty.id, 'balde pega no miolo');
+  assert.equal(elementAt([empty], [50, 25], 6), null, 'a plain click in the empty interior does not hit');
+  assert.equal(elementAt([empty], [50, 25], 6, true), empty.id, 'bucket hits in the interior');
 });
 
-// ---- Laço ----
+// ---- Lasso ----
 import { elementsInPolygon } from '../static/board-model.js';
 
 test('elementsInPolygon keeps only elements fully inside the free outline', () => {
   const a = shape('rectangle', 10, 10, 20, 20), b = shape('ellipse', 100, 10, 40, 40);
   const ln = { ...createElement('line', [10, 60]), points: [[0, 0], [30, 0]] };
-  const tri = [[0, 0], [80, 0], [0, 80]];  // triângulo: pega a e a linha? a linha vai até x=40 em y=60 (fora)
+  const tri = [[0, 0], [80, 0], [0, 80]];  // triangle: does it catch a and the line? the line runs to x=40 at y=60 (outside)
   assert.deepEqual(elementsInPolygon([a, b, ln], tri), [a.id]);
   const all = [[0, 0], [200, 0], [200, 100], [0, 100]];
   assert.deepEqual(elementsInPolygon([a, b, ln], all), [a.id, b.id, ln.id]);
-  assert.deepEqual(elementsInPolygon([a], [[0, 0], [50, 50]]), [], 'contorno com menos de 3 pontos');
+  assert.deepEqual(elementsInPolygon([a], [[0, 0], [50, 50]]), [], 'outline with fewer than 3 points');
 });
 
-// ---- Imagem ----
+// ---- Image ----
 test('image elements hit by their whole box and resize freely', () => {
   const im = { ...createElement('image', [10, 10]), w: 80, h: 40, fileId: 'a'.repeat(32) + '.png' };
-  assert.equal(hitTest(im, [50, 30], 6), true, 'miolo da imagem');
+  assert.equal(hitTest(im, [50, 30], 6), true, 'image interior');
   assert.equal(hitTest(im, [200, 30], 6), false);
-  assert.deepEqual(elementPaths(im), [], 'sem traço');
+  assert.deepEqual(elementPaths(im), [], 'no stroke');
   resizeElement(im, 'se', [130, 70], { ...im });
   assert.deepEqual([im.w, im.h], [120, 60]);
 });
 
-// ---- Camadas, um passo ----
+// ---- Layers, one step ----
 import { forwardOne, backwardOne } from '../static/board-model.js';
 
 test('forwardOne / backwardOne move the selection one layer', () => {
@@ -184,11 +184,11 @@ test('forwardOne / backwardOne move the selection one layer', () => {
   const ids = (xs) => xs.map(x => x.id).join('');
   assert.equal(ids(forwardOne(els, ['a'])), 'bacd');
   assert.equal(ids(forwardOne(els, ['a', 'c'])), 'badc');
-  assert.equal(ids(forwardOne(els, ['d'])), 'abcd', 'já no topo');
-  assert.equal(ids(forwardOne(els, ['c', 'd'])), 'abcd', 'bloco no topo não se embaralha');
+  assert.equal(ids(forwardOne(els, ['d'])), 'abcd', 'already on top');
+  assert.equal(ids(forwardOne(els, ['c', 'd'])), 'abcd', 'a block on top is not shuffled');
   assert.equal(ids(backwardOne(els, ['c'])), 'acbd');
-  assert.equal(ids(backwardOne(els, ['a', 'b'])), 'abcd', 'bloco no fundo não se embaralha');
-  assert.equal(ids(els), 'abcd', 'não altera a lista original');
+  assert.equal(ids(backwardOne(els, ['a', 'b'])), 'abcd', 'a block at the bottom is not shuffled');
+  assert.equal(ids(els), 'abcd', 'does not change the original list');
 });
 
 test('paint recolors sticky notes like closed shapes', () => {
@@ -199,16 +199,16 @@ test('paint recolors sticky notes like closed shapes', () => {
 import { okElement, sanitizeElement } from '../static/board-model.js';
 
 test('okElement rejects pasted elements the renderer cannot draw', () => {
-  assert.equal(okElement({ id: '1', type: 'text', x: 0, y: 0 }), false, 'texto sem text');
+  assert.equal(okElement({ id: '1', type: 'text', x: 0, y: 0 }), false, 'text without text');
   assert.equal(okElement({ id: '1', type: 'note', x: 0, y: 0, text: 5 }), false);
-  assert.equal(okElement({ id: '1', type: 'arrow', x: 0, y: 0 }), false, 'seta sem pontos');
-  assert.equal(okElement({ id: '1', type: 'line', x: 0, y: 0, points: [[0, 0]] }), false, 'linha com 1 ponto');
+  assert.equal(okElement({ id: '1', type: 'arrow', x: 0, y: 0 }), false, 'arrow without points');
+  assert.equal(okElement({ id: '1', type: 'line', x: 0, y: 0, points: [[0, 0]] }), false, 'line with 1 point');
   assert.equal(okElement({ id: '1', type: 'freedraw', x: 0, y: 0, points: [] }), false);
   assert.equal(okElement({ id: '1', type: 'arrow', x: 0, y: 0, points: [[0, 0], [1, 'a']] }), false);
   assert.equal(okElement({ id: '1', type: 'script', x: 0, y: 0 }), false);
   assert.equal(okElement({ id: '1', type: 'rectangle', x: 0, y: null }), false);
   assert.equal(okElement(null), false);
-  assert.ok(okElement({ id: '1', type: 'rectangle', x: 0, y: 0, link: 5 }), 'sem pontos e com link ruim: aceito (e limpo depois)');
+  assert.ok(okElement({ id: '1', type: 'rectangle', x: 0, y: 0, link: 5 }), 'no points and a bad link: accepted (and cleaned later)');
   assert.ok(okElement({ id: '1', type: 'text', x: 0, y: 0, text: '' }));
   assert.ok(okElement({ id: '1', type: 'freedraw', x: 0, y: 0, points: [[0, 0]] }));
   assert.ok(okElement({ id: '1', type: 'arrow', x: 0, y: 0, points: [[0, 0], [5, 5]] }));

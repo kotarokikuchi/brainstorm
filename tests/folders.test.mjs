@@ -9,8 +9,8 @@ const tree = {
 };
 
 test('folderOf, childFolders and folderPath', () => {
-  assert.deepEqual([folderOf(tree, 'm1'), folderOf(tree, 'm3'), folderOf(tree, 'x')], ['c', null, null], 'pasta que sumiu = Início');
-  assert.deepEqual(childFolders(tree, null).map(f => f.id), ['a', 'w'], 'em ordem alfabética');
+  assert.deepEqual([folderOf(tree, 'm1'), folderOf(tree, 'm3'), folderOf(tree, 'x')], ['c', null, null], 'a folder that vanished = Home');
+  assert.deepEqual(childFolders(tree, null).map(f => f.id), ['a', 'w'], 'in alphabetical order');
   assert.deepEqual(childFolders(tree, 'w').map(f => f.id), ['c']);
   assert.deepEqual(folderPath(tree, 'c').map(f => f.name), ['Trabalho', 'Clientes']);
   assert.deepEqual(folderPath(tree, null), []);
@@ -18,11 +18,11 @@ test('folderOf, childFolders and folderPath', () => {
 
 test('removeFolder moves subfolders and documents one level up', () => {
   const t = removeFolder(tree, 'w');
-  assert.deepEqual(t.folders.map(f => [f.id, f.parent]), [['c', null], ['a', null]], 'Clientes sobe para o Início');
-  assert.deepEqual(t.place, { m1: 'c', m3: 'sumiu' }, 'm2 vai para o Início');
+  assert.deepEqual(t.folders.map(f => [f.id, f.parent]), [['c', null], ['a', null]], 'Clientes moves up to Home');
+  assert.deepEqual(t.place, { m1: 'c', m3: 'sumiu' }, 'm2 goes to Home');
   const t2 = removeFolder(tree, 'c');
-  assert.equal(t2.place.m1, 'w', 'documento sobe para Trabalho');
-  assert.equal(tree.folders.length, 3, 'não altera o original');
+  assert.equal(t2.place.m1, 'w', 'the document moves up to Trabalho');
+  assert.equal(tree.folders.length, 3, 'does not change the original');
 });
 
 test('placeDoc sets or clears the folder', () => {
@@ -32,10 +32,10 @@ test('placeDoc sets or clears the folder', () => {
 
 test('moveFolder refuses itself and descendants; folderOptions lists the tree', () => {
   assert.deepEqual([...subtree(tree, 'w')].sort(), ['c', 'w']);
-  assert.equal(moveFolder(tree, 'w', 'c'), null, 'não entra numa subpasta dela');
-  assert.equal(moveFolder(tree, 'w', 'w'), null, 'nem nela mesma');
+  assert.equal(moveFolder(tree, 'w', 'c'), null, 'cannot go into one of its own subfolders');
+  assert.equal(moveFolder(tree, 'w', 'w'), null, 'nor into itself');
   assert.equal(moveFolder(tree, 'c', 'a').folders.find(f => f.id === 'c').parent, 'a');
-  assert.equal(moveFolder(tree, 'c', null).folders.find(f => f.id === 'c').parent, null, 'para o Início');
+  assert.equal(moveFolder(tree, 'c', null).folders.find(f => f.id === 'c').parent, null, 'to Home');
   assert.deepEqual(folderOptions(tree).map(o => [o.name, o.depth]), [['Arquivo', 0], ['Trabalho', 0], ['Clientes', 1]]);
 });
 
@@ -51,15 +51,15 @@ test('sortItems orders folders by name and documents by date or name', () => {
   const ids = (r) => [r.folders.map(f => f.id).join(''), r.docs.map(d => d.id).join(',')];
   assert.deepEqual(ids(sortItems({ folders: tree.folders, docs }, 'recent')), ['acw', 'd4,d2,d1,d3']);
   assert.deepEqual(ids(sortItems({ folders: tree.folders, docs }, 'oldest')), ['acw', 'd3,d1,d2,d4']);
-  assert.deepEqual(ids(sortItems({ folders: tree.folders, docs }, 'az')), ['acw', 'd2,d1,d4,d3'], 'acento e número natural');
+  assert.deepEqual(ids(sortItems({ folders: tree.folders, docs }, 'az')), ['acw', 'd2,d1,d4,d3'], 'accents and natural number order');
   assert.deepEqual(ids(sortItems({ folders: tree.folders, docs }, 'za')), ['wca', 'd3,d4,d1,d2']);
 });
 
 test('searchItems finds folders and documents anywhere, ignoring accents and case', () => {
   const docs = [{ id: 'm1', title: 'Reunião de Sexta' }, { id: 'm2', title: 'Plano' }];
   const r = searchItems(tree, docs, 'reuniao sex');
-  assert.deepEqual(r.docs.map(d => d.id), ['m1'], 'todas as palavras, sem acento');
-  assert.deepEqual(searchItems(tree, docs, 'CLI').folders.map(f => f.id), ['c'], 'subpasta também');
+  assert.deepEqual(r.docs.map(d => d.id), ['m1'], 'all the words, accent-insensitive');
+  assert.deepEqual(searchItems(tree, docs, 'CLI').folders.map(f => f.id), ['c'], 'subfolder too');
   assert.deepEqual(searchItems(tree, docs, 'nada').docs, []);
 });
 
