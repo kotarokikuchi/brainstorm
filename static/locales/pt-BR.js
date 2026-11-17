@@ -338,4 +338,12 @@ export default {
   'login.tooManyAttempts': 'Muitas tentativas erradas. Espere alguns minutos e tente de novo.',
   'login.failed': 'Não foi possível entrar (HTTP {status}).',
   'login.noConnection': 'Sem conexão com o servidor.',
+  'topbar.skills': 'Skills',
+  'topbar.listSkills': 'Listar skills',
+  'list.newSkill': 'Novo skill',
+  'list.noSkills': 'Nenhum skill ainda.',
+  'doc.untitledSkill': 'Skill sem título',
+  'doc.trashConfirmSkill': 'Mover o skill "{title}" para a lixeira?',
+  'list.createSkillError': 'Não foi possível criar o skill.',
+  'skill.template': '# {title}\n\n## Quando usar\n\n## Instruções\n',
 };

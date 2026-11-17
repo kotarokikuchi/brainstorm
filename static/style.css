@@ -30,11 +30,14 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 #status { margin-left: auto; font-size: 13px; color: var(--muted); }
 #status.error { color: var(--danger); font-weight: 600; }
 
-body:not([data-view="editor"]) #editor-view, body:not([data-view="list"]) #list-view, body:not([data-view="board"]) #board-view { display: none; }
+body:not([data-view="editor"]) #editor-view, body:not([data-view="list"]) #list-view, body:not([data-view="board"]) #board-view, body:not([data-view="skill"]) #skill-view { display: none; }
 /* no quadro, os controles do mapa mental não se aplicam */
 body[data-view="board"] #present-btn, body[data-view="board"] #history-btn,
 body[data-view="board"] #export-menu [data-export="md"], body[data-view="board"] #export-menu [data-export="pdf"],
 body[data-view="board"] #undo, body[data-view="board"] #redo { display: none; }
+/* no skill, só o texto: sem apresentar, histórico, exportar nem desfazer do mapa */
+body[data-view="skill"] #present-btn, body[data-view="skill"] #history-btn, body[data-view="skill"] #export-btn,
+body[data-view="skill"] #undo, body[data-view="skill"] #redo { display: none; }
 body[data-view="list"] #title, body[data-view="list"] #status, body[data-view="list"] .history-btns, body[data-view="list"] #map-menu-btn { display: none; }
 
 /* Lista de mapas */
@@ -68,6 +71,7 @@ body[data-view="list"] #title, body[data-view="list"] #status, body[data-view="l
 .crumb-current { cursor: text; border-radius: 6px; padding: 0 4px; margin: 0 -4px; }
 .crumb-current:hover, .crumb-current:focus-visible { background: #e8e7f3; outline: none; }
 .inline-input { font: inherit; color: inherit; background: #fff; border: none; border-bottom: 2px solid var(--accent); padding: 0; outline: none; min-width: 3ch; }
+#maps .tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #e0dfff; color: #4338ca; font-size: 12px; }
 #maps li.folder a svg { opacity: .8; color: #e0a106; }
 #maps li.drop-over, #list-title a.drop-over { outline: 2px dashed var(--accent); outline-offset: 2px; }
 #move-menu { position: fixed; z-index: 20; min-width: 260px; max-height: 60vh; overflow: auto; }

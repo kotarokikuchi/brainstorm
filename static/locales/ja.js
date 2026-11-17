@@ -338,4 +338,12 @@ export default {
   'login.tooManyAttempts': 'ログインの失敗が多すぎます。数分待ってから再度お試しください。',
   'login.failed': 'ログインできませんでした（HTTP {status}）。',
   'login.noConnection': 'サーバーに接続できません。',
+  'topbar.skills': 'スキル',
+  'topbar.listSkills': 'スキル一覧',
+  'list.newSkill': '新しいスキル',
+  'list.noSkills': 'スキルはまだありません。',
+  'doc.untitledSkill': '無題のスキル',
+  'doc.trashConfirmSkill': 'スキル「{title}」をゴミ箱に移動しますか？',
+  'list.createSkillError': 'スキルを作成できませんでした。',
+  'skill.template': '# {title}\n\n## 使うタイミング\n\n## 手順\n',
 };

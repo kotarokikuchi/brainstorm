@@ -72,3 +72,11 @@ test('list survives titles and folder names that are not strings', () => {
   assert.deepEqual(searchItems(tree, docs, '7').folders.map(f => f.id), ['f']);
   assert.deepEqual(childFolders(tree, null).map(f => f.id), ['f', 'g']);
 });
+
+test('searchItems matches each word against the title or a tag', () => {
+  const tree = { version: 0, folders: [], place: {} };
+  const docs = [{ id: 's', title: 'Revisão', tags: ['python'] }, { id: 'm', title: 'Mapa' }];
+  assert.deepEqual(searchItems(tree, docs, 'pyth').docs.map(d => d.id), ['s']);
+  assert.deepEqual(searchItems(tree, docs, 'revi pyth').docs.map(d => d.id), ['s']);
+  assert.deepEqual(searchItems(tree, docs, 'mapa').docs.map(d => d.id), ['m']);
+});

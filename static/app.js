@@ -4,6 +4,7 @@ import {
 } from './model.js';
 import { folderOf, childFolders, folderPath, removeFolder, placeDoc, subtree, moveFolder, folderOptions, sortItems, searchItems } from './folders.js';
 import { initBoard, openBoard, closeBoard, currentBoard, newBoard, boardSvg, boardPlace, renameBoard } from './board.js';
+import { initSkill, openSkill, closeSkill, currentSkill, newSkill, renameSkill } from './skill.js';
 import { LANGS, lang, setLang, t, applyI18n, fmtDateTime } from './i18n.js';
 
 const $ = (s) => document.querySelector(s);
@@ -41,7 +42,7 @@ const api = (method, path = '', body) => fetch('/api/maps' + path, {
 // ---------- Onde parou: posição, zoom e seleção de cada documento (só neste navegador) ----------
 const PLACE = 'galho:place:';
 function savePlace() {
-  const board = currentBoard(), id = map?.id ?? board?.id;
+  const board = currentBoard(), id = map?.id ?? board?.id ?? currentSkill()?.id;
   const place = map ? { view: { ...view }, selected, focusId, outlineOn } : board ? boardPlace() : null;
   try { if (id) localStorage.setItem(PLACE + id, JSON.stringify(place)); } catch { /* armazenamento bloqueado: só não lembra */ }
 }
@@ -153,11 +154,11 @@ async function route() {
   savePlace();  // ainda com o documento anterior aberto
   finishEdit(true);  // navegar no meio da digitação confirma o texto
   await flushSave();
-  const m = location.hash.match(/^#\/(map|board)\/([a-z0-9-]+)$/);
+  const m = location.hash.match(/^#\/(map|board|skill)\/([a-z0-9-]+)$/);
   // saindo de um documento que não conseguiu salvar: pergunta antes de abandonar as alterações
   if (dirty && pending && pending.id !== m?.[2]) {
     if (!confirm(t('doc.unsavedLeaveConfirm'))) {
-      const kind = pending.type === 'board' ? 'board' : 'map';
+      const kind = ['board', 'skill'].includes(pending.type) ? pending.type : 'map';
       window.history.replaceState(null, '', `#/${kind}/${pending.id}`);  // volta o endereço sem nova navegação
       return;
     }
@@ -167,11 +168,12 @@ async function route() {
     retryTimer = null;
   }
   closeBoard();
+  closeSkill();
   if (m) { await loadTree(); $('.brand').href = folderHref(folderOf(tree, m[2])); }  // voltar cai na pasta do documento
   searchInput.value = '';  // navegar (abrir pasta, voltar) limpa a busca
-  if (m?.[1] === 'board') { map = null; openBoard(m[2]); } else if (m) openMap(m[2]);
+  if (m?.[1] === 'board') { map = null; openBoard(m[2]); } else if (m?.[1] === 'skill') { map = null; openSkill(m[2]); } else if (m) openMap(m[2]);
   else {
-    const kind = { '#/maps': 'map', '#/boards': 'board' }[location.hash] ?? null;  // "Listar mapas / quadros"
+    const kind = { '#/maps': 'map', '#/boards': 'board', '#/skills': 'skill' }[location.hash] ?? null;  // "Listar mapas / quadros"
     showList(location.hash.match(/^#\/folder\/([a-z0-9-]+)$/)?.[1] ?? null, kind);
   }
 }
@@ -179,11 +181,13 @@ async function route() {
 // duplicar: o sufixo do título da cópia vai no idioma da interface
 const duplicateDoc = (id) => fetch(`/api/maps/${id}/duplicate`, { method: 'POST', body: JSON.stringify({ suffix: t('doc.copySuffix') }) });
 // apagar documento: pergunta antes (vai para a lixeira, dá para restaurar)
-const confirmTrash = (type, title) =>
-  confirm(type === 'board' ? t('doc.trashConfirmBoard', { title: title || t('doc.untitled') }) : t('doc.trashConfirmMap', { title: title || t('doc.untitled') }));
+const confirmTrash = (type, title) => {
+  const o = { title: title || t('doc.untitled') };
+  return confirm(type === 'board' ? t('doc.trashConfirmBoard', o) : type === 'skill' ? t('doc.trashConfirmSkill', o) : t('doc.trashConfirmMap', o));
+};
 
 // ---------- Pastas ----------
-let tree = { version: 0, folders: [], place: {} }, listFolder = null, listKind = null;  // listKind: 'map' | 'board' | null
+let tree = { version: 0, folders: [], place: {} }, listFolder = null, listKind = null;  // listKind: 'map' | 'board' | 'skill' | null
 const folderHref = (id) => (id ? `#/folder/${id}` : '#/');
 async function loadTree() {
   const r = await fetch('/api/folders');
@@ -226,7 +230,7 @@ function renderList() {
   const { items, trash } = listData, query = searchInput.value.trim();
   // trilha: Meus mapas › Trabalho › Clientes
   const crumbs = [{ id: null, name: t('list.root') }, ...folderPath(tree, listFolder)];
-  if (listKind) crumbs.push({ kind: true, name: listKind === 'board' ? t('topbar.boards') : t('topbar.maps') });
+  if (listKind) crumbs.push({ kind: true, name: { board: t('topbar.boards'), skill: t('topbar.skills') }[listKind] ?? t('topbar.maps') });
   $('#list-title').replaceChildren(...crumbs.flatMap((c, i) => {
     const sep = Object.assign(document.createElement('span'), { className: 'crumb-sep', textContent: '›' });
     if (c.kind) return [sep, Object.assign(document.createElement('span'), { className: 'crumb-kind', textContent: c.name })];
@@ -251,7 +255,7 @@ function renderList() {
   };
   // buscando ou listando só mapas/quadros: itens de todas as pastas, com o lugar de cada um;
   // senão, o conteúdo da pasta aberta
-  const ofKind = listKind ? items.filter(it => (it.type === 'board' ? 'board' : 'map') === listKind) : items;
+  const ofKind = listKind ? items.filter(it => (it.type ?? 'map') === listKind) : items;
   const found = query ? searchItems(tree, ofKind, query)
     : listKind ? { folders: [], docs: ofKind }
     : { folders: childFolders(tree, listFolder, lang), docs: items.filter(it => folderOf(tree, it.id) === listFolder) };
@@ -280,11 +284,13 @@ function renderList() {
   $('#maps').replaceChildren(...subfolders, ...docs.map(it => {
     const li = document.createElement('li');
     const a = document.createElement('a');
-    const kind = it.type === 'board' ? 'board' : 'map';
+    const kind = it.type ?? 'map';
     li.classList.toggle('board', kind === 'board');
+    li.classList.toggle('skill', kind === 'skill');
     a.href = `#/${kind}/${it.id}`;
-    a.innerHTML = `<svg viewBox="0 0 24 24"><use href="#i-${kind === 'board' ? 'brush' : 'sitemap'}"/></svg>`;
+    a.innerHTML = `<svg viewBox="0 0 24 24"><use href="#i-${{ board: 'brush', skill: 'file-text' }[kind] ?? 'sitemap'}"/></svg>`;
     a.append(it.title || t('doc.untitled'));
+    for (const tag of (it.tags ?? []).slice(0, 5)) a.append(Object.assign(document.createElement('span'), { className: 'tag', textContent: tag }));
     const time = document.createElement('time');
     time.textContent = fmtDateTime(new Date(it.updated));
     li.dataset.drag = `doc:${it.id}`;
@@ -296,7 +302,7 @@ function renderList() {
   const trashShown = query ? searchItems(tree, trash, query).docs : trash;
   $('#empty').hidden = subfolders.length + docs.length > 0 || (!!query && trashShown.length > 0);
   $('#empty').textContent = query ? t('list.searchNoResults', { query })
-    : listKind === 'board' ? t('list.noBoards') : listKind === 'map' ? t('list.noMaps')
+    : listKind === 'board' ? t('list.noBoards') : listKind === 'skill' ? t('list.noSkills') : listKind === 'map' ? t('list.noMaps')
     : listFolder ? t('list.emptyFolder') : t('list.empty');
   // lixeira só no Início; buscando, aparece (aberta) com o que bate com a busca, de qualquer pasta
   $('#trash').hidden = !trashShown.length || ((!!listFolder || !!listKind) && !query);
@@ -421,6 +427,7 @@ const titleEl = $('#title');
 const editTitle = () => {
   if (map) inlineEdit(titleEl, map.root.text, (t) => mutate(() => { map.root.text = t; }));
   else if (currentBoard()) inlineEdit(titleEl, currentBoard().title, renameBoard);
+  else if (currentSkill()) inlineEdit(titleEl, currentSkill().title, renameSkill);
 };
 titleEl.onclick = editTitle;
 titleEl.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); editTitle(); } };
@@ -449,6 +456,14 @@ $('#new-board').onclick = async () => {
   if (r.ok && listFolder) await saveTree(t => placeDoc(t, b.id, listFolder));  // nasce na pasta aberta
   if (r.ok) location.hash = `#/board/${b.id}`;
   else alert(t('list.createBoardError'));
+};
+
+$('#new-skill').onclick = async () => {
+  const sk = newSkill(uid(), t('doc.untitledSkill'), t('skill.template', { title: t('doc.untitledSkill') }));
+  const r = await api('PUT', `/${sk.id}`, sk);
+  if (r.ok && listFolder) await saveTree(t => placeDoc(t, sk.id, listFolder));  // nasce na pasta aberta
+  if (r.ok) location.hash = `#/skill/${sk.id}`;
+  else alert(t('list.createSkillError'));
 };
 
 $('#new-map').onclick = async () => {
@@ -1420,7 +1435,7 @@ document.addEventListener('pointerdown', (e) => {
 }, true);
 
 // menus do topo: um aberto por vez; clicar de novo no botão fecha
-const topPops = () => [$('#export-menu'), $('#history-panel'), $('#map-menu'), $('#maps-menu'), $('#boards-menu')];
+const topPops = () => [$('#export-menu'), $('#history-panel'), $('#map-menu'), $('#maps-menu'), $('#boards-menu'), $('#skills-menu')];
 function toggleTop(pop) {
   const show = pop.hidden;
   for (const p of topPops()) p.hidden = true;
@@ -1432,7 +1447,9 @@ $('#maps-menu-btn').onclick = () => toggleTop($('#maps-menu'));
 $('#boards-menu-btn').onclick = () => toggleTop($('#boards-menu'));
 $('#list-maps').onclick = () => { location.hash = '#/maps'; };
 $('#list-boards').onclick = () => { location.hash = '#/boards'; };
-for (const m of [$('#maps-menu'), $('#boards-menu')]) m.addEventListener('click', (e) => { if (e.target.closest('button')) m.hidden = true; });
+$('#skills-menu-btn').onclick = () => toggleTop($('#skills-menu'));
+$('#list-skills').onclick = () => { location.hash = '#/skills'; };
+for (const m of [$('#maps-menu'), $('#boards-menu'), $('#skills-menu')]) m.addEventListener('click', (e) => { if (e.target.closest('button')) m.hidden = true; });
 
 // ---------- Curvar ligações ----------
 let bending = null;  // {link, a, b, pushed} enquanto arrasta o ponto de controle
@@ -2132,14 +2149,14 @@ mapMenu.addEventListener('click', async (e) => {
   const action = e.target.closest('[data-map-action]')?.dataset.mapAction;
   if (!action) return;
   mapMenu.hidden = true;
-  const doc = map ?? currentBoard(), id = doc.id, kind = doc.type === 'board' ? 'board' : 'map';
+  const doc = map ?? currentBoard() ?? currentSkill(), id = doc.id, kind = doc.type ?? 'map';
   await flushSave();
   if (action === 'duplicate') {
     const r = await duplicateDoc(id);
     if (r.ok) location.hash = `#/${kind}/${(await r.json()).id}`;
     else alert(t('doc.duplicateError'));
   } else if (action === 'trash') {
-    if (!confirmTrash(kind, kind === 'board' ? doc.title : doc.root.text)) return;
+    if (!confirmTrash(kind, kind === 'map' ? doc.root.text : doc.title)) return;
     dirty = false;  // o mapa vai inteiro para a lixeira; nada pendente a perguntar
     pending = null;
     await api('DELETE', `/${id}`);
@@ -2201,6 +2218,9 @@ $('#branch-layout-row').addEventListener('click', (e) => {
   nodeMenu.hidden = true;
   setStyle({ branchLayout: v || null });
 });
+
+// ---------- Skills (Markdown) ----------
+initSkill({ api, setStatus, scheduleSave, resetSave: () => { if (conflict) dirty = false; conflict = false; } });
 
 // ---------- Quadros (lousa) ----------
 initBoard({

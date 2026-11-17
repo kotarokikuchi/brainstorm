@@ -76,9 +76,9 @@ export function sortItems({ folders, docs }, mode, locale = 'pt-BR') {
   return { folders: fs, docs: ds };
 }
 
-// busca em todas as pastas, pelo nome; cada palavra precisa aparecer (sem diferença de acento/maiúscula)
+// busca em todas as pastas, pelo nome (ou tag, nos documentos); cada palavra precisa aparecer (sem diferença de acento/maiúscula)
 export function searchItems(tree, docs, query) {
   const words = fold(query).split(/\s+/).filter(Boolean);
-  const hit = (s) => words.every(w => fold(s).includes(w));
-  return { folders: tree.folders.filter(f => hit(f.name)), docs: docs.filter(d => hit(d.title)) };
+  const hit = (...texts) => words.every(w => texts.some(s => fold(s).includes(w)));
+  return { folders: tree.folders.filter(f => hit(f.name)), docs: docs.filter(d => hit(d.title, ...(d.tags ?? []))) };
 }
