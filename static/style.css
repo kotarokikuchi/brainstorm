@@ -26,7 +26,7 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .topbar { height: 52px; display: flex; align-items: center; gap: 16px; padding: 0 16px; background: #fff; border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; color: var(--ink); text-decoration: none; }
 .logo { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, #e43fa4, #8b3fd9); }
-#title { font-weight: 600; }
+#title { font-weight: 400; font-size: 16px; }
 #status { margin-left: auto; font-size: 13px; color: var(--muted); }
 #status.error { color: var(--danger); font-weight: 600; }
 
@@ -367,6 +367,8 @@ body[data-view="list"] .topbar .new-buttons { margin-left: auto; }
 
 /* menus Mapas / Quadros no topo */
 .top-menus { display: flex; gap: 2px; }
+/* nome do documento aberto: separado dos menus por uma divisória e sem o negrito dos itens de menu */
+body:not([data-view="list"]) .top-menus { padding-right: 12px; border-right: 1px solid var(--line); }
 .top-menu { position: relative; }
 .top-menu-btn { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; padding: 6px 8px; font-weight: 600; color: var(--ink); }
 .top-menu-btn:hover { background: #f0f0f6; }
