@@ -43,12 +43,12 @@ class Handler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         # arquivos do app: o navegador sempre confere se mudaram (304 barato) em vez de usar JS antigo do cache;
-        # respostas da API (dados do usuário) não ficam em cache nenhum; anexos (id único, nunca mudam)
-        # ficam 1 h só no cache do próprio navegador, senão cada redesenho baixaria as imagens de novo
+        # respostas da API (dados do usuário) não ficam em cache nenhum. Exceção: o anexo entregue com
+        # sucesso (id único, nunca muda) fica 1 h só no cache do próprio navegador, senão cada redesenho
+        # baixaria as imagens de novo; erros (401, 404) nunca ficam em cache e o "Sair" limpa o cache
         path = urlsplit(getattr(self, "path", "")).path
-        attachment = re.fullmatch(r"/api/maps/[^/]+/files/[^/]+", path) and self.command == "GET"
-        self.send_header("Cache-Control", "private, max-age=3600" if attachment
-                         else "no-store" if path.startswith("/api/") else "no-cache")
+        self.send_header("Cache-Control", getattr(self, "cache_control", None)
+                         or ("no-store" if path.startswith("/api/") else "no-cache"))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
@@ -154,7 +154,9 @@ class Handler(SimpleHTTPRequestHandler):
         token = self._token()
         if token:
             self.server.store.end_session(token)
-        self._send(204, None, {"Set-Cookie": f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"})
+        # Clear-Site-Data: tira do navegador as imagens/anexos guardados em cache durante a sessão
+        self._send(204, None, {"Set-Cookie": f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0",
+                               "Clear-Site-Data": '"cache"'})
 
     def _length(self, limit):
         # tamanho do corpo, ou None (já respondeu). Só dígitos: int() aceitaria "-1", e read(-1) lê sem limite
@@ -321,6 +323,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
         data = path.read_bytes()
         inline = INLINE.get(path.suffix)
+        self.cache_control = "private, max-age=3600"
         self.send_response(200)
         self.send_header("Content-Type", inline or "application/octet-stream")
         if not inline:
