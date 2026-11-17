@@ -3,6 +3,7 @@ data
 docs
 tests
 test_app.py
+test_backup.py
 __pycache__
 .superpowers
 .env
@@ -10,3 +11,5 @@ __pycache__
 *.db-wal
 *.db-shm
 backup*
+!backup.py
+.claude
