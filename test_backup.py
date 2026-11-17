@@ -25,12 +25,12 @@ from backup import NAME_RE, Backup, BackupError, NotConfigured, clean_config
 from s3 import S3, S3Error, sign
 from store import Store
 
-app.Handler.log_message = lambda *a: None  # silencia o log de requisições
+app.Handler.log_message = lambda *a: None  # silence the request log
 ACCESS, SECRET = "AKFAKEACCESS", "fake-secret-key-0123456789"
 
 
 class FakeS3(BaseHTTPRequestHandler):
-    """S3 de mentira: um bucket "bkt" num dict; confere a assinatura de cada requisição."""
+    """Fake S3: one bucket "bkt" in a dict; verifies the signature of every request."""
 
     def log_message(self, *a):
         pass
@@ -85,7 +85,7 @@ class FakeS3(BaseHTTPRequestHandler):
             return self._reply(200, self.server.objects[key][0], "application/octet-stream")
         names = sorted(k for k in self.server.objects if k.startswith(query.get("prefix", "")))
         start = int(query.get("continuation-token", 0))
-        page = names[start:start + 2]  # páginas de 2: exercita a paginação
+        page = names[start:start + 2]  # pages of 2: exercises pagination
         more = start + 2 < len(names)
         items = "".join(f"<Contents><Key>{escape(k)}</Key><LastModified>{self.server.objects[k][1]}</LastModified>"
                         f"<Size>{len(self.server.objects[k][0])}</Size></Contents>" for k in page)
@@ -105,7 +105,7 @@ def start_fake_s3(test):
 
 
 class SigV4Test(unittest.TestCase):
-    # exemplos oficiais: docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html
+    # official examples: docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html
     AK, SK = "AKIAIOSFODNN7EXAMPLE", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
 
     def test_get_object_example(self):
@@ -133,7 +133,7 @@ class S3ClientTest(unittest.TestCase):
         src.write_bytes(b"x" * 3000)
         for name in ("p/1 ç.bin", "p/2.bin", "p/3.bin", "outro/4.bin"):
             self.client.put_file(name, src)
-        self.assertEqual(sorted(o["key"] for o in self.client.list("p/")), ["p/1 ç.bin", "p/2.bin", "p/3.bin"], "todas as páginas")
+        self.assertEqual(sorted(o["key"] for o in self.client.list("p/")), ["p/1 ç.bin", "p/2.bin", "p/3.bin"], "all pages")
         self.assertEqual(self.client.list("p/")[0]["size"], 3000)
         self.client.get_file("p/1 ç.bin", self.tmp / "b.bin")
         self.assertEqual((self.tmp / "b.bin").read_bytes(), b"x" * 3000)
@@ -166,7 +166,7 @@ class BackupTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp)
         self.store = Store(self.tmp / "brainstorm.db", self.tmp / "attachments")
         self.backup = Backup(self.store)
-        # sem https: o S3 falso é http (a validação da API, que exige https, é testada à parte)
+        # no https: the fake S3 is http (the API validation, which requires https, is tested separately)
         self.store.set_setting("backup", {"endpoint": self.endpoint, "region": "eu-central-2", "bucket": "bkt", "prefix": "bs/",
                                           "accessKey": ACCESS, "secretKey": SECRET, "interval": 24, "keep": 3, "enabled": True})
         self.store.set_setting("llm", {"providers": {"openai": {"key": "sk-llm-segredo-1234"}}})
@@ -181,7 +181,7 @@ class BackupTest(unittest.TestCase):
         return tarfile.open(fileobj=io.BytesIO(self.fake.objects["bs/" + name][0]), mode="r:gz")
 
     def test_archive_has_data_but_no_secrets(self):
-        (self.store.files("m1") / ".DS_Store").write_bytes(b"x")  # o restore recusaria: nem entra
+        (self.store.files("m1") / ".DS_Store").write_bytes(b"x")  # restore would refuse it: it does not even go in
         (self.store.files_dir / ".restore-old").mkdir()
         name = self.backup.run()
         self.assertRegex(name, NAME_RE)
@@ -198,9 +198,9 @@ class BackupTest(unittest.TestCase):
             self.assertEqual(db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 0)
             self.assertEqual(db.execute("SELECT COUNT(*) FROM docs").fetchone()[0], 1)
             self.assertEqual(sorted(r[0] for r in db.execute("SELECT key FROM meta")), ["folders", "schema"])
-        self.assertFalse((self.store.files_dir / ".backup-tmp").exists(), "temporários apagados")
+        self.assertFalse((self.store.files_dir / ".backup-tmp").exists(), "temporary files removed")
         self.assertEqual(self.backup.view()["status"]["lastName"], name)
-        self.backup.restore(name)  # tudo o que foi para o arquivo volta
+        self.backup.restore(name)  # everything that went into the archive comes back
         self.assertIsNone(self.backup.view()["status"]["lastError"])
 
     def test_failure_goes_to_the_status(self):
@@ -219,27 +219,27 @@ class BackupTest(unittest.TestCase):
         name = self.backup.run()
         self.assertEqual(set(self.fake.objects), others | {"bs/brainstorm-2020-01-02-000000.tar.gz", "bs/brainstorm-2020-01-03-000000.tar.gz", "bs/" + name})
         self.assertEqual([b["name"] for b in self.backup.list()],
-                         [name, "brainstorm-2020-01-03-000000.tar.gz", "brainstorm-2020-01-02-000000.tar.gz"], "mais novo primeiro, só do prefixo")
+                         [name, "brainstorm-2020-01-03-000000.tar.gz", "brainstorm-2020-01-02-000000.tar.gz"], "newest first, only from the prefix")
 
     def test_schedule_runs_only_when_due_and_changed(self):
         self.assertTrue(self.backup.tick())
         self.assertEqual(len(self.fake.objects), 1)
-        self.assertFalse(self.backup.tick(), "intervalo não passou")
+        self.assertFalse(self.backup.tick(), "interval has not passed")
         later = time.time() + 25 * 3600
-        self.assertFalse(self.backup.tick(later), "nada mudou")
+        self.assertFalse(self.backup.tick(later), "nothing changed")
         self.store.put("m2", doc("novo"), 0)
-        self.assertFalse(self.backup.tick(), "mudou, mas o intervalo não passou")
+        self.assertFalse(self.backup.tick(), "changed, but the interval has not passed")
         self.assertTrue(self.backup.tick(later))
         cfg = self.backup.config()
         self.store.set_setting("backup", {**cfg, "enabled": False})
         self.store.put("m3", doc("mais um"), 0)
-        self.assertFalse(self.backup.tick(later + 25 * 3600), "desligado")
+        self.assertFalse(self.backup.tick(later + 25 * 3600), "disabled")
 
     def test_schedule_waits_after_a_failure(self):
         self.fake.deny = True
         self.assertTrue(self.backup.tick())
         self.fake.deny = False
-        self.assertFalse(self.backup.tick(time.time() + 60), "não insiste a cada minuto")
+        self.assertFalse(self.backup.tick(time.time() + 60), "does not retry every minute")
         self.assertTrue(self.backup.tick(time.time() + 3601))
 
     def test_not_configured(self):
@@ -275,7 +275,7 @@ class BackupTest(unittest.TestCase):
         self.assertEqual((e.exception.code, json.loads(e.exception.read())), (502, {"error": "403 AccessDenied"}))
         e.exception.close()
 
-    # ---- revisão de segurança ----
+    # ---- security review ----
     def test_non_s3_xml_is_an_s3_error(self):
         orig = FakeS3.do_GET
         for junk in (b"<html><body>not s3</body></html>", b"<a",
@@ -285,7 +285,7 @@ class BackupTest(unittest.TestCase):
             with self.assertRaises(S3Error) as e:
                 self.backup.list()
             self.assertEqual(str(e.exception), "invalid response")
-        self.backup.run()  # o backup vale; a falha da retenção vai para o status
+        self.backup.run()  # the backup counts; the retention failure goes to the status
         self.assertEqual(self.backup.view()["status"]["lastError"], "retention: invalid response")
 
     def test_api_unexpected_error_is_500_without_the_message(self):
@@ -305,7 +305,7 @@ class BackupTest(unittest.TestCase):
         name = self.backup.run()
         self.change_everything()
         with mock.patch.object(Backup, "_backups", side_effect=ValueError(SECRET)):
-            self.backup.restore(name)  # não levanta: o restore já foi confirmado
+            self.backup.restore(name)  # does not raise: the restore was already committed
         self.assertEqual(self.store.get("m1")["root"]["text"], "primeiro")
         self.assertEqual(self.backup.restores, 1)
 
@@ -324,7 +324,7 @@ class BackupTest(unittest.TestCase):
         old = self.store.files_dir / ".restore-old"
         (old / "m9").mkdir(parents=True)
         (old / "m9" / "z.txt").write_bytes(b"z")
-        (old / "m1").mkdir()  # esse nome existe de novo: não sobrescreve
+        (old / "m1").mkdir()  # this name exists again: it must not be overwritten
         Backup(self.store)
         self.assertEqual((self.store.files("m9") / "z.txt").read_bytes(), b"z")
         self.assertEqual((self.store.files("m1") / "a.png").read_bytes(), b"imagem-1")
@@ -340,7 +340,7 @@ class BackupTest(unittest.TestCase):
             return orig(tar, name, *a, **k)
         with mock.patch.object(tarfile.TarFile, "add", spy):
             self.backup.run()
-        self.assertNotIn("brainstorm.db", seen)  # a cópia com segredos fica junto do banco
+        self.assertNotIn("brainstorm.db", seen)  # the copy with secrets stays next to the database
         scrub = self.tmp / ".backup-scrub.db"
         scrub.write_bytes(SECRET.encode())
         Backup(self.store)
@@ -350,7 +350,7 @@ class BackupTest(unittest.TestCase):
 
     def test_restore_refuses_archive_bigger_than_free_disk(self):
         name = self.backup.run()
-        free = mock.Mock(free=1 << 20)  # menos que a margem
+        free = mock.Mock(free=1 << 20)  # less than the margin
         with mock.patch("backup.shutil.disk_usage", return_value=free):
             with self.assertRaises(BackupError) as e:
                 self.backup.restore(name)
@@ -369,7 +369,7 @@ class BackupTest(unittest.TestCase):
                 client.put_file("bs/x", self.tmp / "brainstorm.db")
             self.assertEqual(str(e.exception), "timeout")
 
-    # ---- restauração ----
+    # ---- restore ----
     def snapshot(self):
         files = {str(f.relative_to(self.store.files_dir)): f.read_bytes() for f in self.store.files_dir.rglob("*") if f.is_file()}
         return [(d["id"], d["title"]) for d in self.store.list_docs()], self.store.folders(), files
@@ -390,13 +390,13 @@ class BackupTest(unittest.TestCase):
         self.backup.restore(name)
         self.assertEqual(self.snapshot(), before)
         self.assertEqual(self.store.get("m1")["root"]["text"], "primeiro")
-        self.assertTrue(self.store.session_ok(self.token), "não desloga")
-        self.assertEqual(self.store.setting("llm")["providers"]["openai"]["key"], "sk-llm-segredo-1234", "não perde as chaves")
+        self.assertTrue(self.store.session_ok(self.token), "no logout")
+        self.assertEqual(self.store.setting("llm")["providers"]["openai"]["key"], "sk-llm-segredo-1234", "keys are not lost")
         with self.store._db() as db:
             self.assertIsNotNone(db.execute("SELECT 1 FROM meta WHERE key = 'auth_fingerprint'").fetchone())
         self.assertEqual(self.backup.restores, 1)
-        self.assertEqual(sorted(p.name for p in self.store.files_dir.iterdir()), ["m1"], "sem temporários")
-        # o estado de antes do restore ficou guardado (desfazer um restore errado)
+        self.assertEqual(sorted(p.name for p in self.store.files_dir.iterdir()), ["m1"], "no temporary files")
+        # the pre-restore state was kept (to undo a wrong restore)
         pre = sorted(self.fake.objects)[-1]
         self.assertNotEqual(pre, "bs/" + name)
         self.backup.restore(pre[len("bs/"):])
@@ -448,7 +448,7 @@ class BackupTest(unittest.TestCase):
             if label == "newer schema":
                 self.assertIn("newer", str(e.exception))
         self.assertFalse((self.tmp / "evil").exists() or Path("/tmp/evil").exists())
-        self.assertEqual(sorted(p.name for p in self.store.files_dir.iterdir()), ["m1", "m2"], "sem temporários")
+        self.assertEqual(sorted(p.name for p in self.store.files_dir.iterdir()), ["m1", "m2"], "no temporary files")
         self.assertEqual(self.backup.restores, 0)
         self.assertFalse(self.backup.restoring)
 
@@ -460,8 +460,8 @@ class BackupTest(unittest.TestCase):
 
         def flaky(a, b):
             calls.append(a)
-            if len(calls) == 3:  # já tirou m1 e m2 do lugar; falha ao pôr a pasta restaurada
-                raise OSError("disco cheio")
+            if len(calls) == 3:  # already moved m1 and m2 out of the way; fails when putting the restored folder
+                raise OSError("disk full")
             real(a, b)
         with mock.patch("backup.os.rename", flaky), self.assertRaises(BackupError):
             self.backup.restore(name)
@@ -498,11 +498,11 @@ class BackupTest(unittest.TestCase):
                                    ("PUT", "/api/folders", {"version": 1, "folders": [], "place": {}}), ("POST", "/api/maps/m1/duplicate", {}),
                                    ("DELETE", "/api/trash/m1", None), ("POST", "/api/maps/m1/history", {})):
             self.assertEqual(call(method, path, body), 503, path)
-        self.assertEqual(call("GET", "/api/maps/m1"), 200, "leitura continua")
+        self.assertEqual(call("GET", "/api/maps/m1"), 200, "reading still works")
         server.backup.restoring = False
         self.assertEqual(call("PUT", "/api/maps/m1", {**doc("x"), "version": 1}), 200)
         server.backup.restores += 1
-        self.assertNotEqual(app.Handler._static_stamp(mock.Mock(server=server)), stamp, "as abas recarregam depois de um restore")
+        self.assertNotEqual(app.Handler._static_stamp(mock.Mock(server=server)), stamp, "tabs reload after a restore")
 
     def test_config_validation(self):
         good = {"endpoint": "https://s3.eu-central-2.wasabisys.com/", "region": "eu-central-2", "bucket": "meu-bucket",

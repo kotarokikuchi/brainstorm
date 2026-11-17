@@ -19,16 +19,16 @@ import app
 from app import Handler, load_env, make_server, watch
 from store import Store, migrate_legacy
 
-Handler.log_message = lambda *a: None  # silencia o log de requisições nos testes
+Handler.log_message = lambda *a: None  # silence the request log in tests
 
 
 def raw_request(port, head, body=b""):
-    """Requisição escrita à mão (cabeçalhos que o urllib não deixa mandar). Devolve (status, resposta inteira)."""
+    """Hand-written request (headers urllib does not let us send). Returns (status, whole response)."""
     with socket.create_connection(("127.0.0.1", port), timeout=0.5) as s:
         s.sendall(f"{head}\nHost: 127.0.0.1\n\n".replace("\n", "\r\n").encode())
         data = b""
         try:
-            # quem recusa pelo cabeçalho responde sem esperar o corpo (e sem corpo não lido não há RST)
+            # a server that refuses on the headers answers without waiting for the body (and with no unread body there is no RST)
             data = s.recv(65536)
         except TimeoutError:
             s.sendall(body)
@@ -116,14 +116,14 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in self.data.iterdir() if not p.name.startswith("brainstorm.db")), ["attachments"])
 
     def test_foreign_host_is_403(self):
-        # protege contra DNS rebinding: só aceita Host local
+        # protects against DNS rebinding: only a local Host is accepted
         self.assertEqual(self.req("GET", "/api/maps", headers={"Host": "evil.com"})[0], 403)
         body = {"version": 0, "root": {"text": "a", "children": []}}
         self.assertEqual(self.req("PUT", "/api/maps/abc", body, headers={"Host": "evil.com:80"})[0], 403)
         self.assertEqual(self.req("GET", "/api/maps/abc")[0], 404)
         port = self.server.server_address[1]
         self.assertEqual(self.req("GET", "/api/maps", headers={"Host": f"localhost:{port}"})[0], 200)
-        # porta publicada diferente (Docker): o nome local é o que importa
+        # different published port (Docker): the local name is what matters
         self.assertEqual(self.req("GET", "/api/maps", headers={"Host": "127.0.0.1:8080"})[0], 200)
         self.assertEqual(self.req("GET", "/api/maps", headers={"Host": "localhost"})[0], 200)
         for evil in ("localhost.evil.com:80", "127.0.0.1.evil.com", "localhost:80x", "evil.com:127.0.0.1"):
@@ -165,7 +165,7 @@ class ApiTest(unittest.TestCase):
 
     def test_cross_site_upload_is_blocked(self):
         self.make_map()
-        # sem X-Filename seria um POST "simples" (sem preflight) vindo de qualquer site
+        # without X-Filename it would be a "simple" POST (no preflight) coming from any site
         self.assertEqual(self.req("POST", "/api/maps/abc/files", raw=b"x", headers={"Content-Type": "text/plain"})[0], 400)
         evil = {"X-Filename": "a.png", "Origin": "http://evil.example"}
         self.assertEqual(self.req("POST", "/api/maps/abc/files", raw=b"x", headers=evil)[0], 403)
@@ -175,32 +175,32 @@ class ApiTest(unittest.TestCase):
         port = self.server.server_address[1]
         ok = {"X-Filename": "a.png", "Origin": f"http://127.0.0.1:{port}"}
         self.assertEqual(self.req("POST", "/api/maps/abc/files", raw=b"x", headers=ok)[0], 201)
-        # a origem precisa ser o próprio endereço da página (outra porta local também é outro site)
+        # the origin must be the page's own address (another local port is also another site)
         other = {"X-Filename": "a.png", "Origin": "http://localhost:3000"}
         self.assertEqual(self.req("POST", "/api/maps/abc/files", raw=b"x", headers=other)[0], 403)
         docker = {"X-Filename": "a.png", "Host": "localhost:8080", "Origin": "http://localhost:8080"}
         self.assertEqual(self.req("POST", "/api/maps/abc/files", raw=b"x", headers=docker)[0], 201)
         self.assertFalse((self.data / "files" / "zzz").exists())
-        self.assertEqual(self.upload("zzz", "a.png", b"x")[0], 404, "mapa inexistente")
+        self.assertEqual(self.upload("zzz", "a.png", b"x")[0], 404, "nonexistent map")
 
     def test_events_stream_announces_static_changes(self):
         static = self.data / "static"
         static.mkdir()
         (static / "app.js").write_text("1")
         self.server.static_dir = static
-        # timeout de conexão parada bem curto: o stream só escreve e não pode ser cortado por ele
+        # very short idle-connection timeout: the stream only writes and must not be cut off by it
         with mock.patch.object(Handler, "timeout", 1), urllib.request.urlopen(self.base + "/api/events", timeout=5) as resp:
             self.assertEqual(resp.headers["Content-Type"], "text/event-stream")
-            self.assertEqual(resp.headers.get_all("Cache-Control"), ["no-store"], "um valor só")
+            self.assertEqual(resp.headers.get_all("Cache-Control"), ["no-store"], "a single value")
             first = resp.readline()
             self.assertTrue(first.startswith(b"data: "), first)
-            resp.readline()  # linha em branco que fecha o evento
+            resp.readline()  # blank line that ends the event
             time.sleep(1.5)
             st = (static / "app.js").stat()
             os.utime(static / "app.js", (st.st_atime, st.st_mtime + 5))
             second = resp.readline()
             self.assertTrue(second.startswith(b"data: "), second)
-            self.assertNotEqual(first, second, "mudança em static/ gera novo carimbo")
+            self.assertNotEqual(first, second, "a change in static/ produces a new stamp")
 
     def put_text(self, version, text):
         return self.req("PUT", "/api/maps/abc", {"version": version, "root": {"text": text, "children": []}})
@@ -211,7 +211,7 @@ class ApiTest(unittest.TestCase):
             self.put_text(v, f"v{v}")
         status, items = self.req("GET", "/api/maps/abc/history")
         self.assertEqual(status, 200)
-        self.assertEqual([i["version"] for i in items], [2, 1], "mais recente primeiro")
+        self.assertEqual([i["version"] for i in items], [2, 1], "most recent first")
         self.assertEqual((items[0]["title"], items[0]["nodes"]), ("v1", 1))
         self.assertIn("saved", items[0])
         status, old = self.req("GET", "/api/maps/abc/history/1")
@@ -220,14 +220,14 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.req("GET", "/api/maps/abc/history/..%2Fx")[0], 400)
 
     def test_history_is_throttled_and_capped(self):
-        for v in range(3):  # intervalo padrão (2 min): só a primeira gravação guarda cópia
+        for v in range(3):  # default interval (2 min): only the first write keeps a copy
             self.put_text(v, f"v{v}")
         self.assertEqual(len(self.req("GET", "/api/maps/abc/history")[1]), 1)
         self.server.history_interval = 0
         for v in range(3, 60):
             self.put_text(v, f"v{v}")
         items = self.req("GET", "/api/maps/abc/history")[1]
-        self.assertEqual(len(items), 50, "no máximo 50 versões")
+        self.assertEqual(len(items), 50, "at most 50 versions")
         self.assertEqual(items[0]["version"], 59)
 
     def test_trash_keeps_history_until_permanent_delete(self):
@@ -236,10 +236,10 @@ class ApiTest(unittest.TestCase):
         self.put_text(1, "b")
         self.req("DELETE", "/api/maps/abc")
         self.req("POST", "/api/trash/abc/restore", raw=b"")
-        self.assertEqual(len(self.req("GET", "/api/maps/abc/history")[1]), 1, "histórico volta junto")
+        self.assertEqual(len(self.req("GET", "/api/maps/abc/history")[1]), 1, "history comes back too")
         self.req("DELETE", "/api/maps/abc")
         self.req("DELETE", "/api/trash/abc")
-        self.assertEqual(self.req("GET", "/api/maps/abc/history")[1], [], "apagar de vez leva o histórico")
+        self.assertEqual(self.req("GET", "/api/maps/abc/history")[1], [], "permanent delete takes the history with it")
 
     def test_delete_goes_to_trash_and_restores_everything(self):
         self.make_map()
@@ -252,22 +252,22 @@ class ApiTest(unittest.TestCase):
         self.assertIn("deleted", trash[0])
         self.assertEqual(self.req("POST", "/api/trash/abc/restore", raw=b""), (200, {"id": "abc"}))
         self.assertEqual(self.req("GET", "/api/maps/abc")[0], 200)
-        self.assertEqual(self.raw_get(f"/api/maps/abc/files/{info['id']}")[0], 200, "arquivos voltam junto")
+        self.assertEqual(self.raw_get(f"/api/maps/abc/files/{info['id']}")[0], 200, "files come back too")
         self.assertEqual(self.req("GET", "/api/trash")[1], [])
 
     def test_saving_trashed_document_and_permanent_delete(self):
         self.make_map()
         _, info = self.upload("abc", "foto.png", b"x")
         self.req("DELETE", "/api/maps/abc")
-        # aba antiga ainda salvando o documento apagado em outra aba: não recria por baixo da lixeira
+        # an old tab still saving a document deleted in another tab: must not recreate it behind the trash
         self.assertEqual(self.req("PUT", "/api/maps/abc", {"version": 1, "root": {"text": "b", "children": []}})[0], 410)
         self.assertEqual(self.req("POST", "/api/trash/zzz/restore", raw=b"")[0], 404)
         self.assertEqual(self.req("DELETE", "/api/trash/abc")[0], 204)
         self.assertEqual(self.req("GET", "/api/trash")[1], [])
-        self.assertFalse((self.data / "attachments" / "abc").exists(), "anexos saem junto")
+        self.assertFalse((self.data / "attachments" / "abc").exists(), "attachments go too")
         self.assertEqual(self.req("DELETE", "/api/trash/abc")[0], 404)
         self.assertEqual(self.req("DELETE", "/api/trash/..%2Fx")[0], 400)
-        self.make_map()  # o id fica livre de novo
+        self.make_map()  # the id is free again
         self.assertEqual(self.raw_get("/api/maps/abc")[0], 200)
 
     def test_duplicate_copies_map_and_files(self):
@@ -279,8 +279,8 @@ class ApiTest(unittest.TestCase):
         self.assertRegex(new, r"^[a-z0-9-]{1,64}$")
         self.assertNotEqual(new, "abc")
         status, m = self.req("GET", f"/api/maps/{new}")
-        self.assertEqual((status, m["root"]["text"], m["version"], m["id"]), (200, "a (cópia)", 1, new))
-        self.assertEqual(self.raw_get(f"/api/maps/{new}/files/{info['id']}")[0], 200, "arquivos copiados")
+        self.assertEqual((status, m["root"]["text"], m["version"], m["id"]), (200, "a (copy)", 1, new))
+        self.assertEqual(self.raw_get(f"/api/maps/{new}/files/{info['id']}")[0], 200, "files copied")
         self.assertEqual(self.req("POST", "/api/maps/zzz/duplicate", raw=b"")[0], 404)
 
     def test_duplicate_takes_the_title_suffix_from_the_client(self):
@@ -292,9 +292,9 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(title(body={"suffix": " (copy)"}), "a (copy)")
         self.assertEqual(title(body={"suffix": " (コピー)"}), "a (コピー)")
         for bad in ({"suffix": "x" * 41}, {"suffix": "a\nb"}, {"suffix": "a\x00"}, {"suffix": 5}, {"suffix": ""}, {}, [], "texto"):
-            self.assertEqual(title(body=bad), "a (cópia)", bad)
-        self.assertEqual(title(raw=b"{nao e json"), "a (cópia)")
-        self.assertEqual(self.req("POST", "/api/maps/abc/duplicate", raw=b"x" * 10_001)[0], 413, "corpo limitado")
+            self.assertEqual(title(body=bad), "a (copy)", bad)
+        self.assertEqual(title(raw=b"{nao e json"), "a (copy)")
+        self.assertEqual(self.req("POST", "/api/maps/abc/duplicate", raw=b"x" * 10_001)[0], 413, "body is limited")
         self.req("PUT", "/api/maps/qd", self.board())
         _, dup = self.req("POST", "/api/maps/qd/duplicate", {"suffix": " (copia)"})
         self.assertEqual(self.req("GET", f"/api/maps/{dup['id']}")[1]["title"], "Quadro (copia)")
@@ -323,7 +323,7 @@ class ApiTest(unittest.TestCase):
         hist = self.req("GET", "/api/maps/qd/history")[1]
         self.assertEqual((hist[0]["title"], hist[0]["nodes"]), ("Quadro", 1))
         _, dup = self.req("POST", "/api/maps/qd/duplicate", raw=b"")
-        self.assertEqual(self.req("GET", f"/api/maps/{dup['id']}")[1]["title"], "Quadro 2 (cópia)")
+        self.assertEqual(self.req("GET", f"/api/maps/{dup['id']}")[1]["title"], "Quadro 2 (copy)")
         self.req("DELETE", "/api/maps/qd")
         self.assertEqual(self.req("GET", "/api/trash")[1][0]["title"], "Quadro 2")
 
@@ -348,7 +348,7 @@ class ApiTest(unittest.TestCase):
     def test_duplicate_skill(self):
         self.req("PUT", "/api/maps/sk", self.skill())
         _, dup = self.req("POST", "/api/maps/sk/duplicate", raw=b"")
-        self.assertEqual(self.req("GET", f"/api/maps/{dup['id']}")[1]["title"], "Revisão (cópia)")
+        self.assertEqual(self.req("GET", f"/api/maps/{dup['id']}")[1]["title"], "Revisão (copy)")
 
     def test_named_version(self):
         self.server.history_interval = 0
@@ -359,19 +359,19 @@ class ApiTest(unittest.TestCase):
         self.put_text(2, "c")
         hist = self.req("GET", "/api/maps/abc/history")[1]
         self.assertEqual([(h["version"], h["label"]) for h in hist], [(2, "v1"), (1, None)])
-        self.assertEqual(self.req("POST", "/api/maps/abc/history", raw=b"")[0], 201, "sem rótulo")
+        self.assertEqual(self.req("POST", "/api/maps/abc/history", raw=b"")[0], 201, "no label")
 
     def test_history_post_keeps_label_and_validates_body(self):
         self.server.history_interval = 0
         self.put_text(0, "a")
         self.req("POST", "/api/maps/abc/history", {"label": "v1"})
         self.assertEqual(self.req("POST", "/api/maps/abc/history", {})[0], 201)
-        self.assertEqual(self.req("GET", "/api/maps/abc/history")[1][0]["label"], "v1", "sem rótulo não apaga o existente")
+        self.assertEqual(self.req("GET", "/api/maps/abc/history")[1][0]["label"], "v1", "no label does not erase the existing one")
         for raw in (b"{oops", b"[1]", b'"x"', b"null"):
             self.assertEqual(self.req("POST", "/api/maps/abc/history", raw=raw)[0], 400, raw)
         self.put_text(1, "b")
         self.req("POST", "/api/maps/abc/history", {"label": "   "})
-        self.assertIsNone(self.req("GET", "/api/maps/abc/history")[1][0]["label"], "só espaços = sem rótulo")
+        self.assertIsNone(self.req("GET", "/api/maps/abc/history")[1][0]["label"], "only spaces = no label")
 
     def test_named_version_survives_prune(self):
         self.server.history_interval = 0
@@ -413,7 +413,7 @@ class ApiTest(unittest.TestCase):
         with store._db() as db:
             self.assertEqual(db.execute("SELECT value FROM meta WHERE key = 'schema'").fetchone()[0], "1")
             db.execute("UPDATE meta SET value = '7' WHERE key = 'schema'")
-        Store(store.db_path, store.files_dir)  # abrir de novo não baixa a versão
+        Store(store.db_path, store.files_dir)  # reopening does not lower the version
         with store._db() as db:
             self.assertEqual(db.execute("SELECT value FROM meta WHERE key = 'schema'").fetchone()[0], "7")
         self.assertIsNone(store.setting("x"))
@@ -422,7 +422,7 @@ class ApiTest(unittest.TestCase):
         store.set_setting("x", None)
         self.assertIsNone(store.setting("x"))
 
-    # ---- Configurações: chaves de LLM ----
+    # ---- Settings: LLM keys ----
     def test_llm_key_never_comes_back(self):
         status, items = self.req("GET", "/api/settings/llm")
         self.assertEqual(status, 200)
@@ -435,7 +435,7 @@ class ApiTest(unittest.TestCase):
         _, _, raw = self.raw_get("/api/settings/llm")
         self.assertNotIn(b"segredo", raw)
         self.assertNotIn(b"segredo", self.raw_get("/")[2])
-        # sem "key": mantém a chave atual e só troca o modelo
+        # without "key": keep the current key and only change the model
         self.assertEqual(self.req("PUT", "/api/settings/llm/anthropic", {"model": "outro"})[1]["keyHint"], "…a9F2")
         self.assertEqual(self.server.store.setting("llm")["providers"]["anthropic"]["key"], key)
         self.assertEqual(self.req("DELETE", "/api/settings/llm/anthropic")[0], 204)
@@ -444,7 +444,7 @@ class ApiTest(unittest.TestCase):
     def test_llm_default_provider(self):
         defaults = lambda: [p["id"] for p in self.req("GET", "/api/settings/llm")[1] if p["default"]]
         self.assertEqual(defaults(), [])
-        # sem chave não pode ser o padrão
+        # without a key it cannot be the default
         self.assertEqual(self.req("PUT", "/api/settings/llm/openai", {"default": True})[0], 400)
         self.req("PUT", "/api/settings/llm/openai", {"key": "sk-openai-1111"})
         self.req("PUT", "/api/settings/llm/deepseek", {"key": "sk-deepseek-2222"})
@@ -452,9 +452,9 @@ class ApiTest(unittest.TestCase):
         self.assertEqual((status, saved["default"]), (200, True))
         self.assertEqual(defaults(), ["openai"])
         self.req("PUT", "/api/settings/llm/deepseek", {"default": True})
-        self.assertEqual(defaults(), ["deepseek"])  # um só padrão
+        self.assertEqual(defaults(), ["deepseek"])  # a single default
         self.assertEqual(self.req("PUT", "/api/settings/llm/openai", {"default": False})[0], 400)
-        # remover a chave do padrão: fica sem padrão
+        # removing the default's key: no default is left
         self.req("DELETE", "/api/settings/llm/deepseek")
         self.assertEqual(defaults(), [])
 
@@ -466,9 +466,9 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.req("DELETE", "/api/settings/llm/nope")[0], 404)
         self.assertEqual(self.req("PUT", "/api/settings/llm/custom", {"key": "k" * 20, "baseUrl": "http://localhost:11434/v1"})[1]["baseUrl"],
                          "http://localhost:11434/v1")
-        self.assertEqual(self.req("PUT", "/api/settings/llm/openai", {"key": "short"})[1]["keyHint"], "…", "chave curta não mostra o final")
+        self.assertEqual(self.req("PUT", "/api/settings/llm/openai", {"key": "short"})[1]["keyHint"], "…", "a short key does not show its tail")
 
-    # ---- Configurações: backup ----
+    # ---- Settings: backup ----
     BACKUP = {"endpoint": "https://s3.eu-central-2.wasabisys.com", "region": "eu-central-2", "bucket": "meu-bucket",
               "prefix": "brainstorm/", "accessKey": "AKIDEXEMPLO", "secretKey": "segredo-do-storage-x9Z1",
               "interval": 24, "keep": 14, "enabled": True}
@@ -482,9 +482,9 @@ class ApiTest(unittest.TestCase):
         self.assertEqual((view["secretHint"], view["configured"], view["accessKey"]), ("…x9Z1", True, "AKIDEXEMPLO"))
         self.assertNotIn(b"segredo-do-storage", self.raw_get("/api/settings/backup")[2])
         keep = {k: v for k, v in self.BACKUP.items() if k != "secretKey"}
-        self.assertEqual(self.req("PUT", "/api/settings/backup", {**keep, "keep": 3})[1]["secretHint"], "…x9Z1", "sem secretKey: mantém")
+        self.assertEqual(self.req("PUT", "/api/settings/backup", {**keep, "keep": 3})[1]["secretHint"], "…x9Z1", "without secretKey: keeps it")
         self.assertEqual(self.server.backup.config()["secretKey"], "segredo-do-storage-x9Z1")
-        self.assertEqual(self.req("PUT", "/api/settings/backup", {**self.BACKUP, "endpoint": "http://s3.wasabisys.com"})[0], 400, "só https")
+        self.assertEqual(self.req("PUT", "/api/settings/backup", {**self.BACKUP, "endpoint": "http://s3.wasabisys.com"})[0], 400, "https only")
         self.assertEqual(self.req("PUT", "/api/settings/backup", raw=b"nope")[0], 400)
 
     def test_backup_without_storage_is_400(self):
@@ -500,7 +500,7 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.req("POST", "/api/backup/restore", raw=b"[]")[0], 400)
 
     def test_static_files_are_revalidated(self):
-        # sem isso o navegador reaproveita JS antigo (cache heurístico) depois de uma atualização
+        # without this the browser reuses stale JS (heuristic cache) after an update
         status, headers, _ = self.raw_get("/app.js")
         self.assertEqual(status, 200)
         self.assertEqual(headers.get("Cache-Control"), "no-cache")
@@ -510,7 +510,7 @@ class ApiTest(unittest.TestCase):
         self.req("PUT", "/api/maps/abc", {"version": 0, "root": {"text": "a", "children": []}})
         _, info = self.upload("abc", "foto.png", b"x")
         self.assertEqual(self.req("DELETE", "/api/maps/abc")[0], 204)
-        self.assertEqual(self.req("GET", f"/api/maps/abc/files/{info['id']}")[0], 404, "documento na lixeira não serve arquivos")
+        self.assertEqual(self.req("GET", f"/api/maps/abc/files/{info['id']}")[0], 404, "a document in the trash does not serve files")
 
     def test_body_too_large_is_413(self):
         status, _ = self.req("PUT", "/api/maps/abc", raw=b"x", headers={"Content-Length": "5000001"})
@@ -523,7 +523,7 @@ class ApiTest(unittest.TestCase):
         status, saved = self.req("PUT", "/api/folders", tree)
         self.assertEqual((status, saved["version"]), (200, 1))
         self.assertEqual(self.req("GET", "/api/folders")[1]["place"], {"abc": "f2"})
-        self.assertEqual(self.req("PUT", "/api/folders", tree)[0], 409, "versão velha")
+        self.assertEqual(self.req("PUT", "/api/folders", tree)[0], 409, "stale version")
         bad = [
             {**tree, "version": 1, "folders": [{"id": "f1", "name": "  ", "parent": None}], "place": {}},
             {**tree, "version": 1, "folders": [{"id": "f1", "name": "a", "parent": "zz"}], "place": {}},
@@ -533,7 +533,7 @@ class ApiTest(unittest.TestCase):
         ]
         for b in bad:
             self.assertEqual(self.req("PUT", "/api/folders", b)[0], 400, b)
-        self.assertEqual([m["id"] for m in self.req("GET", "/api/maps")[1]], [], "pastas não aparecem como documento")
+        self.assertEqual([m["id"] for m in self.req("GET", "/api/maps")[1]], [], "folders do not show up as documents")
 
 
     def test_content_length_must_be_a_plain_number(self):
@@ -541,19 +541,19 @@ class ApiTest(unittest.TestCase):
         port = self.server.server_address[1]
         doc = json.dumps({"version": 1, "root": {"text": "b", "children": []}}).encode()
         tree = json.dumps({"version": 0, "folders": [], "place": {}}).encode()
-        for bad in ("-1", "abc", "+5", "1_0", "²"):  # int() aceitaria "-1", "+5" e "1_0"
+        for bad in ("-1", "abc", "+5", "1_0", "²"):  # int() would accept "-1", "+5" and "1_0"
             for head, body in ((f"PUT /api/maps/abc HTTP/1.1\nContent-Length: {bad}", doc),
                                (f"PUT /api/folders HTTP/1.1\nContent-Length: {bad}", tree),
                                (f"POST /api/maps/abc/files HTTP/1.1\nX-Filename: a.bin\nContent-Length: {bad}", b"x" * 10)):
                 self.assertEqual(raw_request(port, head, body)[0], 400, head)
         self.assertEqual(raw_request(port, "PUT /api/maps/abc HTTP/1.1\nContent-Length: " + "9" * 5000, doc)[0], 413)
-        self.assertEqual(self.req("GET", "/api/maps/abc")[1]["version"], 1, "nada foi gravado")
+        self.assertEqual(self.req("GET", "/api/maps/abc")[1]["version"], 1, "nothing was saved")
         self.assertEqual(list((self.data / "attachments").iterdir()), [])
 
     def test_idle_connection_is_closed(self):
-        self.assertTrue(Handler.timeout and Handler.timeout <= 60, "conexão parada não segura uma thread para sempre")
+        self.assertTrue(Handler.timeout and Handler.timeout <= 60, "a stalled connection does not hold a thread forever")
         with mock.patch.object(Handler, "timeout", 0.2), socket.create_connection(self.server.server_address, timeout=5) as s:
-            self.assertEqual(s.recv(1), b"", "o servidor fecha a conexão que não manda nada")
+            self.assertEqual(s.recv(1), b"", "the server closes a connection that sends nothing")
 
     def test_security_headers(self):
         _, headers, body = self.raw_get("/login.html")
@@ -562,36 +562,36 @@ class ApiTest(unittest.TestCase):
         csp = headers["Content-Security-Policy"]
         for part in ("default-src 'self'", "script-src 'self';", "object-src 'none'", "frame-ancestors 'none'"):
             self.assertIn(part, csp)
-        self.assertNotIn(b"<script>", body, "script-src 'self': nada de script dentro da página")
+        self.assertNotIn(b"<script>", body, "script-src 'self': no scripts inside the page")
         self.assertEqual(self.raw_get("/login.js")[0], 200)
-        self.assertEqual(headers["Server"].strip(), "Brainstorm", "sem a versão do Python")
+        self.assertEqual(headers["Server"].strip(), "Brainstorm", "no Python version")
         _, headers, _ = self.raw_get("/api/maps")
         self.assertEqual(headers["Cache-Control"], "no-store")
         self.assertEqual((headers["X-Content-Type-Options"], headers["X-Frame-Options"]), ("nosniff", "DENY"))
         self.make_map()
         _, info = self.upload("abc", "foto.png", b"x")
         _, headers, _ = self.raw_get(f"/api/maps/abc/files/{info['id']}")
-        self.assertEqual(headers["Cache-Control"], "private, max-age=3600", "anexo: cache só do navegador")
+        self.assertEqual(headers["Cache-Control"], "private, max-age=3600", "attachment: browser-only cache")
         r = urllib.request.Request(self.base + f"/api/maps/abc/files/{'0' * 32}.png")
         with self.assertRaises(urllib.error.HTTPError) as missing:
             urllib.request.urlopen(r)
-        self.assertEqual((missing.exception.code, missing.exception.headers["Cache-Control"]), (404, "no-store"), "erro não fica em cache")
+        self.assertEqual((missing.exception.code, missing.exception.headers["Cache-Control"]), (404, "no-store"), "errors are not cached")
         missing.exception.close()
 
     def test_no_directory_listing(self):
         self.assertEqual(self.req("GET", "/fonts/")[0], 404)
 
     def test_input_validation(self):
-        self.assertEqual(self.req("PUT", "/api/maps/abc", {"version": 0, "root": {"text": ["x"]}})[0], 400, "título é texto")
-        deep = b"[" * 200_000  # RecursionError no json.loads
+        self.assertEqual(self.req("PUT", "/api/maps/abc", {"version": 0, "root": {"text": ["x"]}})[0], 400, "the title is text")
+        deep = b"[" * 200_000  # RecursionError in json.loads
         self.assertEqual(self.req("PUT", "/api/maps/abc", raw=deep)[0], 400)
         self.assertEqual(self.req("PUT", "/api/folders", raw=deep)[0], 400)
         self.make_map()
-        for version in ("9" * 30, "%C2%B2", "1%0A"):  # estoura o inteiro do SQLite; "²".isdigit() é True
+        for version in ("9" * 30, "%C2%B2", "1%0A"):  # overflows the SQLite integer; "²".isdigit() is True
             self.assertEqual(self.req("GET", f"/api/maps/abc/history/{version}")[0], 400, version)
 
     def test_nan_and_lone_surrogates_are_400(self):
-        # NaN/Infinity não são JSON (o navegador não abriria o documento); surrogate sozinho não vira UTF-8
+        # NaN/Infinity are not JSON (the browser could not open the document); a lone surrogate does not encode to UTF-8
         lone = b'"\\ud800"'
         for raw in (b'{"version": 0, "root": {"text": "a", "children": [], "x": NaN}}',
                     b'{"version": 0, "root": {"text": "a", "children": [], "x": -Infinity}}',
@@ -601,8 +601,8 @@ class ApiTest(unittest.TestCase):
         folders = b'{"version": 0, "folders": [{"id": "f1", "name": ' + lone + b', "parent": null}], "place": {}}'
         self.assertEqual(self.req("PUT", "/api/folders", raw=folders)[0], 400)
         self.assertEqual(self.req("PUT", "/api/settings/llm/openai", raw=b'{"key": "abc", "model": NaN}')[0], 400)
-        self.assertEqual(self.req("GET", "/api/maps")[1], [], "nada gravado")
-        ok = b'{"version": 0, "root": {"text": "\\ud83d\\ude80", "children": []}}'  # par válido (emoji)
+        self.assertEqual(self.req("GET", "/api/maps")[1], [], "nothing saved")
+        ok = b'{"version": 0, "root": {"text": "\\ud83d\\ude80", "children": []}}'  # valid pair (emoji)
         self.assertEqual(self.req("PUT", "/api/maps/abc", raw=ok)[0], 200)
         self.assertEqual(self.req("GET", "/api/maps/abc")[1]["root"]["text"], "\U0001f680")
 
@@ -611,19 +611,19 @@ class ApiTest(unittest.TestCase):
         tree = lambda folders, place=None: {"version": 0, "folders": folders, "place": place or {}}
         bad = [
             tree([folder(i, None) for i in range(2001)]),
-            tree([folder(1, None)], {"abc": []}),  # valor que nem serve de chave: antes dava TypeError
+            tree([folder(1, None)], {"abc": []}),  # a value that cannot even be a key: it used to raise TypeError
             tree([{"id": "f1\n", "name": "p", "parent": None}]),
-            tree([folder(i, f"f{i + 1}") for i in range(1999)] + [folder(1999, "f0")]),  # ciclo comprido
+            tree([folder(i, f"f{i + 1}") for i in range(1999)] + [folder(1999, "f0")]),  # long cycle
         ]
         for b in bad:
             self.assertEqual(self.req("PUT", "/api/folders", b)[0], 400, str(b)[:80])
         chain = tree([folder(i, f"f{i + 1}") for i in range(1999)] + [folder(1999, None)], {"abc": "f0"})
         started = time.monotonic()
-        self.assertEqual(self.req("PUT", "/api/folders", chain)[0], 200, "2000 pastas uma dentro da outra")
-        self.assertLess(time.monotonic() - started, 1, "checagem de ciclo linear")
+        self.assertEqual(self.req("PUT", "/api/folders", chain)[0], 200, "2000 folders nested one inside the other")
+        self.assertLess(time.monotonic() - started, 1, "linear cycle check")
 
     def test_document_id_always_comes_from_the_row(self):
-        # um backup restaurado pode trazer outro id no corpo; a página monta as rotas com doc.id
+        # a restored backup may carry another id in the body; the page builds its routes from doc.id
         self.server.history_interval = 0
         self.put_text(0, "a")
         self.put_text(1, "b")
@@ -644,7 +644,7 @@ class ApiTest(unittest.TestCase):
 
 
 class AuthTest(unittest.TestCase):
-    """Com BRAINSTORM_USER/BRAINSTORM_PASSWORD: tudo exige login, menos a página de login."""
+    """With BRAINSTORM_USER/BRAINSTORM_PASSWORD: everything requires login except the login page."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -689,18 +689,18 @@ class AuthTest(unittest.TestCase):
         self.assertEqual(self.call("GET", "/api/maps")[0], 401)
         self.assertEqual(self.call("PUT", "/api/maps/abc", {"version": 0, "root": {"text": "a", "children": []}})[0], 401)
         status, headers, _ = self.call("GET", "/")
-        self.assertEqual((status, headers.get("Location")), (302, "/login.html"), "abrir o app leva ao login")
+        self.assertEqual((status, headers.get("Location")), (302, "/login.html"), "opening the app redirects to login")
         self.assertEqual(self.call("GET", "/app.js")[0], 302)
         status, headers, _ = self.call("GET", f"/api/maps/abc/files/{'0' * 32}.png")
-        self.assertEqual((status, headers["Cache-Control"]), (401, "no-store"), "401 de anexo não fica em cache")
+        self.assertEqual((status, headers["Cache-Control"]), (401, "no-store"), "an attachment 401 is not cached")
         for public in ("/login.html", "/style.css", "/fonts/kalam-latin-400-normal.woff2"):
             self.assertEqual(self.call("GET", public)[0], 200, public)
 
     def test_login_page_texts_are_public(self):
-        # a página de login carrega o i18n.js e os dicionários sem sessão; o resto continua fechado
+        # the login page loads i18n.js and the dictionaries without a session; everything else stays closed
         for public in ("/i18n.js", "/locales/pt-BR.js"):
             self.assertEqual(self.call("GET", public)[0], 200, public)
-        self.assertEqual(self.call("GET", "/locales/nao-existe.js")[0], 404, "idioma sem dicionário: 404, não o login")
+        self.assertEqual(self.call("GET", "/locales/nao-existe.js")[0], 404, "language without a dictionary: 404, not the login")
         for path in ("/locales/../app.js", "/locales/%2e%2e/app.js", "/locales/..%2fapp.js", "//locales/../index.html",
                      "/i18n.js/../app.js", "/locales/./../app.js", "/locales//../app.js", "/locales"):
             self.assertEqual(self.call("GET", path)[0], 302, path)
@@ -726,7 +726,7 @@ class AuthTest(unittest.TestCase):
         for _ in range(6):
             self.login(password="errada")
         status, headers, _ = self.login()
-        self.assertEqual(status, 429, "10 erros em 10 min bloqueiam até a senha certa")
+        self.assertEqual(status, 429, "10 failures in 10 min lock out even the right password")
         self.assertIn("Retry-After", headers)
 
     def test_logout_ends_the_session(self):
@@ -734,7 +734,7 @@ class AuthTest(unittest.TestCase):
         status, headers, _ = self.call("POST", "/api/logout", cookie=c)
         self.assertEqual(status, 204)
         self.assertIn("Max-Age=0", headers["Set-Cookie"])
-        self.assertEqual(headers["Clear-Site-Data"], '"cache"', "Sair limpa as imagens em cache")
+        self.assertEqual(headers["Clear-Site-Data"], '"cache"', "Log out clears the cached images")
         self.assertEqual(self.call("GET", "/api/maps", cookie=c)[0], 401)
 
     def test_session_survives_server_restart(self):
@@ -756,14 +756,14 @@ class AuthTest(unittest.TestCase):
         db = sqlite3.connect(self.data / "brainstorm.db")
         value = json.loads(db.execute("SELECT value FROM meta WHERE key = 'auth_fingerprint'").fetchone()[0])
         db.close()
-        self.assertEqual(sorted(value), ["fp", "salt"], "scrypt com sal")
+        self.assertEqual(sorted(value), ["fp", "salt"], "scrypt with salt")
         self.assertNotIn(hashlib.sha256(b"s3gredo \xc3\xa7").hexdigest(), json.dumps(value))
 
     def test_concurrent_attempts_cannot_pass_the_limit(self):
         self.server.login_delay = 0.3
         with ThreadPoolExecutor(30) as pool:
             codes = list(pool.map(lambda _: self.login(password="errada")[0], range(30)))
-        self.assertEqual(codes.count(401), 10, "só 10 tentativas chegam a conferir a senha")
+        self.assertEqual(codes.count(401), 10, "only 10 attempts get as far as checking the password")
         self.assertEqual(codes.count(429), 20)
         self.assertEqual(self.login()[0], 429)
 
@@ -771,7 +771,7 @@ class AuthTest(unittest.TestCase):
         for _ in range(9):
             self.login(password="errada")
         self.assertEqual(self.login()[0], 200)
-        self.assertEqual(self.login(password="errada")[0], 401, "contagem zerada: não bloqueia")
+        self.assertEqual(self.login(password="errada")[0], 401, "count reset: no lockout")
 
     def test_login_from_another_site_is_blocked(self):
         status, headers, _ = self.call("POST", "/api/login", {"user": "ana", "password": "s3gredo ç"}, headers={"Origin": "http://evil.example"})
@@ -794,7 +794,7 @@ class AuthTest(unittest.TestCase):
             self.assertEqual(self.call("HEAD", path)[0], 302, path)
         self.assertEqual(self.call("GET", "/login.js")[0], 200)
         c = self.cookie()
-        self.assertEqual(self.call("GET", "/fonts/../app.js", cookie=c)[0], 200, "com sessão, continua servindo")
+        self.assertEqual(self.call("GET", "/fonts/../app.js", cookie=c)[0], 200, "with a session, it still serves")
 
     def test_settings_need_login_and_same_origin(self):
         for method, path in (("GET", "/api/settings/llm"), ("PUT", "/api/settings/llm/openai"), ("DELETE", "/api/settings/llm/openai"),
@@ -834,7 +834,7 @@ class AuthTest(unittest.TestCase):
         self.assertEqual(raw_request(port, "POST /api/login HTTP/1.1\nContent-Length: 10001", body)[0], 413)
 
     def test_lockout_is_global_not_per_address(self):
-        # um processo local escolhe o endereço de origem (127.x.y.z): cada um não pode valer um limite novo
+        # a local process chooses the source address (127.x.y.z): each one must not get a fresh limit
         port, codes = self.server.server_address[1], []
         for i in range(11):
             conn = http.client.HTTPConnection("127.0.0.1", port, source_address=(f"127.0.0.{i + 2}", 0))
@@ -842,7 +842,7 @@ class AuthTest(unittest.TestCase):
             codes.append(conn.getresponse().status)
             conn.close()
         self.assertEqual(codes, [401] * 10 + [429])
-        self.assertEqual(self.server.login_fails.__class__, list, "contagem única: não cresce com os endereços")
+        self.assertEqual(self.server.login_fails.__class__, list, "single count: it does not grow with the addresses")
 
     def test_other_malformed_cookies_do_not_log_out(self):
         c = self.cookie()
@@ -872,7 +872,7 @@ class EnvFileTest(unittest.TestCase):
 
 
 class MainTest(unittest.TestCase):
-    """Recusas na partida (main), sem abrir porta: make_server é trocado por um servidor de mentira."""
+    """Refusals at startup (main), without opening a port: make_server is replaced by a fake server."""
 
     class Out(io.StringIO):
         flushed = ""
@@ -881,7 +881,7 @@ class MainTest(unittest.TestCase):
             self.flushed = self.getvalue()
 
     def main(self, **env):
-        # devolve (mensagem de recusa ou None, umask depois do main, saída já descarregada)
+        # returns (refusal message or None, umask after main, output already flushed)
         clean = {k: v for k, v in os.environ.items() if not k.startswith("BRAINSTORM_")}
         server = mock.Mock(**{"serve_forever.side_effect": KeyboardInterrupt})
         out, old = self.Out(), os.umask(0o022)
@@ -903,20 +903,22 @@ class MainTest(unittest.TestCase):
             self.assertIn("BRAINSTORM_ALLOW_NO_LOGIN", refused or "", host)
         for host in ("127.0.0.1", "127.0.0.2", "localhost", "::1"):
             self.assertIsNone(self.main(BRAINSTORM_HOST=host)[0], host)
-        self.assertIsNone(self.main()[0], "padrão: 127.0.0.1")
+        self.assertIsNone(self.main()[0], "default: 127.0.0.1")
         self.assertIsNone(self.main(BRAINSTORM_HOST="0.0.0.0", BRAINSTORM_ALLOW_NO_LOGIN="1")[0])
-        self.assertIsNotNone(self.main(BRAINSTORM_HOST="0.0.0.0", BRAINSTORM_ALLOW_NO_LOGIN="sim")[0], "só 1 libera")
+        self.assertIsNotNone(self.main(BRAINSTORM_HOST="0.0.0.0", BRAINSTORM_ALLOW_NO_LOGIN="sim")[0], "only 1 allows it")
         self.assertIsNone(self.main(BRAINSTORM_HOST="0.0.0.0", BRAINSTORM_USER="ana", BRAINSTORM_PASSWORD="s3gredo ç")[0])
 
     def test_example_password_is_refused(self):
-        refused, _, _ = self.main(BRAINSTORM_USER="ana", BRAINSTORM_PASSWORD="troque-esta-senha")
+        refused, _, _ = self.main(BRAINSTORM_USER="ana", BRAINSTORM_PASSWORD="change-this-password")
         self.assertIn(".env.example", refused or "")
+        refused, _, _ = self.main(BRAINSTORM_USER="ana", BRAINSTORM_PASSWORD="troque-esta-senha")
+        self.assertIn(".env.example", refused or "", "the example password of older versions is refused too")
         example = (Path(app.__file__).with_name(".env.example")).read_text()
-        self.assertIn("BRAINSTORM_PASSWORD=troque-esta-senha", example, "a recusa acompanha o exemplo")
+        self.assertIn("BRAINSTORM_PASSWORD=change-this-password", example, "the refusal follows the example")
 
 
 class MigrationTest(unittest.TestCase):
-    """Formato antigo (um .json por documento) importado para o banco na primeira partida."""
+    """Old format (one .json per document) imported into the database on first start."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -959,11 +961,11 @@ class MigrationTest(unittest.TestCase):
         self.assertEqual(self.get(f"/api/maps/a/files/{'f' * 32}.png"), (200, b"img"))
         self.assertEqual([(t["id"], t["title"]) for t in self.get("/api/trash")[1]], [("t", "Lixo")])
         self.assertEqual(self.get("/api/folders")[1]["place"], {"a": "p"})
-        self.assertTrue((self.data / "attachments" / "t" / ("e" * 32 + ".png")).exists(), "anexos da lixeira também")
+        self.assertTrue((self.data / "attachments" / "t" / ("e" * 32 + ".png")).exists(), "trash attachments too")
         backups = list(self.data.glob("legacy-*"))
         self.assertEqual(len(backups), 1)
         self.assertEqual(sorted(p.name for p in backups[0].iterdir()), ["a.json", "bad.json", "files", "folders", "history", "trash"],
-                         "nada apagado: o formato antigo inteiro vai para o backup (inclusive o corrompido)")
+                         "nothing deleted: the whole old format goes to the backup (including the corrupted file)")
         self.assertFalse((self.data / "a.json").exists())
 
     def test_second_start_does_not_import_again(self):
@@ -977,7 +979,7 @@ class MigrationTest(unittest.TestCase):
 
 
 class MigrationSafetyTest(unittest.TestCase):
-    """A importação do formato antigo só aceita o que a API aceitaria e não segue links simbólicos."""
+    """Importing the old format only accepts what the API would accept and does not follow symlinks."""
 
     def test_bad_ids_symlinks_and_invalid_folders_stay_in_the_backup(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1004,7 +1006,7 @@ class MigrationSafetyTest(unittest.TestCase):
             self.assertEqual(sorted(p.name for p in (d / "attachments").rglob("*")), ["a", "f" * 32 + ".png"])
             self.assertEqual(store.folders(), {"version": 0, "folders": [], "place": {}})
             backup = next(d.glob("legacy-*"))
-            self.assertEqual(len(list(backup.iterdir())), 8, "nada apagado: tudo no backup")
+            self.assertEqual(len(list(backup.iterdir())), 8, "nothing deleted: everything in the backup")
             self.assertEqual((outside / "secret.png").read_bytes(), b"segredo")
 
 
@@ -1015,10 +1017,10 @@ class WatchTest(unittest.TestCase):
             f.write_text("a")
             changed = threading.Event()
             watch([f], changed.set, interval=0.05)
-            self.assertFalse(changed.wait(0.2), "sem mudança, sem callback")
+            self.assertFalse(changed.wait(0.2), "no change, no callback")
             f.write_text("b")
             os.utime(f, (f.stat().st_atime, f.stat().st_mtime + 5))
-            self.assertTrue(changed.wait(2), "mudança dispara o callback")
+            self.assertTrue(changed.wait(2), "a change triggers the callback")
 
 
 if __name__ == "__main__":

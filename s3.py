@@ -1,30 +1,30 @@
-"""Cliente S3 mínimo (Wasabi e outros compatíveis) só com a stdlib: endereço path-style e assinatura SigV4."""
+"""Minimal S3 client (Wasabi and other compatible services) using only the stdlib: path-style addressing and SigV4 signing."""
 import hashlib
 import hmac
 import http.client
 import time
 import urllib.error
 import urllib.request
-# respostas XML do próprio endpoint configurado; o expat da stdlib não busca entidades externas e,
-# desde o 2.4.1 (Python 3.13 traz um mais novo), barra a expansão em cadeia ("billion laughs")
+# XML responses from the configured endpoint itself; the stdlib expat does not fetch external entities and,
+# since 2.4.1 (Python 3.13 ships a newer one), blocks chained expansion ("billion laughs")
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from urllib.parse import quote, urlsplit
 
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
-TRANSFER_DEADLINE = 1800  # s por envio/download: o timeout do socket é por operação, um servidor lento seguraria o lock para sempre
+TRANSFER_DEADLINE = 1800  # seconds per upload/download: the socket timeout is per operation, a slow server would hold the lock forever
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args):
-        return None  # redirecionamento vira erro: a requisição assinada não vai para outro endereço
+        return None  # a redirect becomes an error: the signed request must not go to another address
 
 
 _opener = urllib.request.build_opener(_NoRedirect)
 
 
 class S3Error(Exception):
-    """Erro curto (status + código S3, ou falha de rede), sem endereço nem credenciais."""
+    """Short error (status + S3 code, or network failure), with no address or credentials."""
 
 
 def _hmac(key, msg):
@@ -32,10 +32,10 @@ def _hmac(key, msg):
 
 
 def sign(method, host, path, query, headers, payload_hash, access_key, secret_key, region, amz_date):
-    """Valor do cabeçalho Authorization (AWS Signature Version 4, serviço s3).
+    """Value of the Authorization header (AWS Signature Version 4, s3 service).
 
-    path já codificado como vai na requisição; query: dict de valores crus; headers: os que entram na assinatura
-    (host, x-amz-date e x-amz-content-sha256 são acrescentados aqui).
+    path is already encoded as it goes in the request; query: dict of raw values; headers: the ones that are signed
+    (host, x-amz-date and x-amz-content-sha256 are added here).
     """
     signed = {k.lower(): str(v).strip() for k, v in headers.items()}
     signed.update({"host": host, "x-amz-date": amz_date, "x-amz-content-sha256": payload_hash})
@@ -60,7 +60,7 @@ def file_sha256(path):
 
 
 class _Deadline:
-    """Leitura de arquivo (envio) que desiste quando o prazo total estoura."""
+    """File reader (for uploads) that gives up when the total deadline is exceeded."""
 
     def __init__(self, f):
         self.f, self.end = f, time.monotonic() + TRANSFER_DEADLINE
@@ -98,12 +98,12 @@ class S3:
             except ET.ParseError:
                 code = ""
             raise S3Error(f"{e.code} {code}".strip()) from None
-        except (OSError, http.client.HTTPException, ValueError) as e:  # URLError é OSError
+        except (OSError, http.client.HTTPException, ValueError) as e:  # URLError is an OSError
             raise S3Error(f"network error: {getattr(e, 'reason', e) or type(e).__name__}") from None
 
     def put_file(self, key, path):
         size = path.stat().st_size
-        with open(path, "rb") as f:  # sha256 calculado antes (o corpo vai em streaming, assinado)
+        with open(path, "rb") as f:  # sha256 computed beforehand (the body is streamed, signed)
             self._request("PUT", key, data=_Deadline(f), payload_hash=file_sha256(path),
                           headers={"Content-Length": str(size), "Content-Type": "application/gzip"}).close()
 
@@ -115,20 +115,20 @@ class S3:
                     if time.monotonic() > end:
                         raise S3Error("timeout")
                     f.write(chunk)
-            except (OSError, http.client.HTTPException) as e:  # conexão caiu no meio do download
+            except (OSError, http.client.HTTPException) as e:  # connection dropped mid-download
                 raise S3Error(f"network error: {e or type(e).__name__}") from None
 
     def delete(self, key):
         self._request("DELETE", key).close()
 
     def list(self, prefix):
-        """[{key, size, modified}] de tudo com esse prefixo (ListObjectsV2, todas as páginas)."""
+        """[{key, size, modified}] of everything with this prefix (ListObjectsV2, all pages)."""
         out, token = [], None
         while True:
             query = {"list-type": "2", "prefix": prefix, **({"continuation-token": token} if token else {})}
             with self._request("GET", query=query) as resp:
                 body = resp.read()
-            try:  # 200 com XML que não é de S3 (endereço errado, proxy)
+            try:  # 200 with XML that is not from S3 (wrong address, proxy)
                 root = ET.fromstring(body)
                 if not root.tag.endswith("ListBucketResult"):
                     raise ValueError
