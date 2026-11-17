@@ -1,7 +1,7 @@
 services:
-  galho:
+  brainstorm:
     build: .
-    image: galho
+    image: brainstorm
     # só na sua máquina (127.0.0.1): ninguém na rede acessa. O app fala HTTP puro: para usar de outra
     # máquina, túnel SSH ou proxy reverso com TLS; nunca troque para 0.0.0.0
     ports:

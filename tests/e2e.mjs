@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import assert from 'node:assert/strict';
 // portas configuráveis: vários e2e (ex.: agentes em worktrees) podem rodar ao mesmo tempo
 const PORT = Number(process.env.E2E_PORT ?? 8765), CDP = Number(process.env.E2E_CDP_PORT ?? 9333), BASE = `http://127.0.0.1:${PORT}`;
-const tmp = mkdtempSync(join(tmpdir(), 'galho-e2e-'));
+const tmp = mkdtempSync(join(tmpdir(), 'brainstorm-e2e-'));
 const server = spawn('python3', ['-c',
   'import sys; from pathlib import Path; from app import make_server; make_server(Path(sys.argv[1]), int(sys.argv[2]), auth=("e2e", "senha-e2e")).serve_forever()',
   join(tmp, 'data'), String(PORT)], { cwd: new URL('..', import.meta.url).pathname, stdio: 'ignore' });
@@ -63,7 +63,7 @@ await cmd('Page.enable');
 await cmd('Page.navigate', { url: BASE + '/' }); await sleep(1200);
 assert.equal(await ev(`location.pathname`), '/login.html', 'sem login, vai para a página de login');
 // se as opções do Chrome não bastarem nesta máquina, a escolha guardada garante o pt-BR
-if (await ev(`navigator.language`) !== 'pt-BR') { await ev(`localStorage.setItem('galho:lang', 'pt-BR')`); await cmd('Page.navigate', { url: BASE + '/login.html' }); await sleep(1200); }
+if (await ev(`navigator.language`) !== 'pt-BR') { await ev(`localStorage.setItem('brainstorm:lang', 'pt-BR')`); await cmd('Page.navigate', { url: BASE + '/login.html' }); await sleep(1200); }
 assert.deepEqual(await ev(`[document.documentElement.lang, document.querySelector('#lang').value, document.querySelector('#lang').options.length, document.title]`),
   ['pt-BR', 'pt-BR', 4, 'Entrar · Brainstorm'], 'página de login carrega os textos e o seletor de idioma sem sessão');
 const submitLogin = (u, p) => ev(`(() => { document.querySelector('#login-user').value = '${u}'; document.querySelector('#login-password').value = '${p}'; document.querySelector('#login-form').requestSubmit(); })()`);
@@ -1329,17 +1329,17 @@ const clipEvent = (type, data = {}) => ev(`(() => { const dt = new DataTransfer(
   for (const [k, v] of Object.entries(${JSON.stringify(data)})) dt.setData(k, v);
   const e = new ClipboardEvent('${type}', { clipboardData: dt, bubbles: true, cancelable: true });
   document.dispatchEvent(e);
-  return { prevented: e.defaultPrevented, types: [...dt.types], text: dt.getData('text/plain'), json: dt.getData('application/x-galho-board') || dt.getData('application/x-galho-branch') }; })()`);
+  return { prevented: e.defaultPrevented, types: [...dt.types], text: dt.getData('text/plain'), json: dt.getData('application/x-brainstorm-board') || dt.getData('application/x-brainstorm-branch') }; })()`);
 await clickNode('Planejamento 2027');
 const mcopy = await clipEvent('copy');
-assert.ok(mcopy.prevented && mcopy.json && mcopy.text.startsWith('Planejamento 2027\n  '), 'copiar ramo: Galho + lista com recuo');
+assert.ok(mcopy.prevented && mcopy.json && mcopy.text.startsWith('Planejamento 2027\n  '), 'copiar ramo: Brainstorm + lista com recuo');
 const kidsBefore = (await getMap()).root.children.length;
 await clipEvent('paste', { 'text/plain': 'Ideia A\n  Detalhe A1\nIdeia B' });
 await sleep(900);
 const rootKids = (await getMap()).root.children;
 assert.equal(rootKids.length, kidsBefore + 2, 'texto colado vira tópicos');
 assert.deepEqual(rootKids.find(c => c.text === 'Ideia A').children.map(c => c.text), ['Detalhe A1'], 'recuo vira filho');
-await clipEvent('paste', { 'application/x-galho-branch': '{"text": 1}' });
+await clipEvent('paste', { 'application/x-brainstorm-branch': '{"text": 1}' });
 await sleep(500);
 assert.equal((await getMap()).root.children.length, kidsBefore + 2, 'ramo inválido é ignorado');
 
@@ -1350,13 +1350,13 @@ const nSel = await selCount(), nBoard = (await boardEls()).length;
 const bcopy = await clipEvent('copy');
 assert.ok(bcopy.prevented && JSON.parse(bcopy.json).length === nSel, 'copiar elementos para o sistema');
 await cmd('Page.reload'); await sleep(1500);
-await clipEvent('paste', { 'application/x-galho-board': bcopy.json });
+await clipEvent('paste', { 'application/x-brainstorm-board': bcopy.json });
 await sleep(900);
 assert.equal((await boardEls()).length, nBoard + nSel, 'colar depois de recarregar');
 await clipEvent('paste', { 'text/plain': 'Texto colado' });
 await sleep(900);
 assert.deepEqual([(await boardEls()).at(-1).type, (await boardEls()).at(-1).text], ['text', 'Texto colado'], 'texto de fora vira texto');
-await clipEvent('paste', { 'application/x-galho-board': '[{"type":"script","x":0,"y":0}]' });
+await clipEvent('paste', { 'application/x-brainstorm-board': '[{"type":"script","x":0,"y":0}]' });
 await sleep(500);
 assert.equal((await boardEls()).length, nBoard + nSel + 1, 'elemento desconhecido é ignorado');
 
@@ -1370,7 +1370,7 @@ const bcut = await clipEvent('cut');
 await sleep(900);
 assert.ok(bcut.prevented && JSON.parse(bcut.json)[0].id === cutId, 'recortar copia para o sistema');
 assert.equal((await boardEls()).length, nCut - 1, 'recortar apaga');
-await clipEvent('paste', { 'application/x-galho-board': bcut.json });
+await clipEvent('paste', { 'application/x-brainstorm-board': bcut.json });
 await sleep(900);
 assert.equal((await boardEls()).length, nCut, 'colar devolve o recortado');
 await key('x', 2);
@@ -1394,7 +1394,7 @@ await ev(`location.hash = '#/board/qa'`); await sleep(1200);
 await key('a', 2);
 const qcopy = await clipEvent('copy');
 await ev(`location.hash = '#/board/qb'`); await sleep(1200);
-await clipEvent('paste', { 'application/x-galho-board': qcopy.json });
+await clipEvent('paste', { 'application/x-brainstorm-board': qcopy.json });
 await sleep(1200);
 const qbImg = (await (await fetch(BASE + '/api/maps/qb')).json()).elements[0];
 assert.ok(qbImg && qbImg.fileId !== qaFile && !('fileSrc' in qbImg), 'imagem colada ganha arquivo próprio no outro quadro');
@@ -1408,7 +1408,7 @@ await clickNode('Com arquivos');
 const mcopy2 = await clipEvent('copy');
 await ev(`location.hash = '#/map/demo'`); await sleep(1200);
 await clickNode('Planejamento 2027');
-await clipEvent('paste', { 'application/x-galho-branch': mcopy2.json });
+await clipEvent('paste', { 'application/x-brainstorm-branch': mcopy2.json });
 await sleep(1500);
 const pasted = (await getMap()).root.children.find(c => c.text === 'Com arquivos');
 assert.ok(pasted && pasted.image.id !== maImg && pasted.attachments[0].id !== maAtt && !('src' in pasted), 'ramo colado ganha arquivos próprios');
@@ -1517,11 +1517,11 @@ const secEls = async () => (await (await fetch(BASE + '/api/maps/secb')).json())
 const secDom = () => ev(`document.querySelectorAll('#board-root .el').length`);
 await ev(`location.hash = '#/board/secb'`); await sleep(1200);
 for (const bad of ['[{"id":"1","type":"text","x":0,"y":0}]', '[{"id":"1","type":"arrow","x":0,"y":0}]', JSON.stringify([{ id: '1', type: 'text', x: 0, y: 0, text: 'a'.repeat(1000001) }])]) {
-  await clipEvent('paste', { 'application/x-galho-board': bad });
+  await clipEvent('paste', { 'application/x-brainstorm-board': bad });
   await sleep(700);
   assert.deepEqual([(await secEls()).length, await secDom()], [1, 1], 'colagem forjada recusada: ' + bad.slice(0, 40));
 }
-await clipEvent('paste', { 'application/x-galho-board': '[{"id":"1","type":"rectangle","x":0,"y":0,"link":5}]' });
+await clipEvent('paste', { 'application/x-brainstorm-board': '[{"id":"1","type":"rectangle","x":0,"y":0,"link":5}]' });
 await sleep(900);
 const secPasted = (await secEls()).at(-1);
 assert.deepEqual([(await secEls()).length, await secDom(), secPasted.type, 'link' in secPasted], [2, 2, 'rectangle', false], 'link inválido sai e o resto é colado');
@@ -1533,20 +1533,20 @@ await fetch(BASE + '/api/maps/secm', { method: 'PUT', body: JSON.stringify({ ver
 const secMap = async () => (await (await fetch(BASE + '/api/maps/secm')).json()).root;
 const secNodes = () => ev(`document.querySelectorAll('#viewport .node').length`);
 await ev(`location.hash = '#/map/secm'`); await sleep(1200);
-await clipEvent('paste', { 'application/x-galho-branch': '{"text":"a","children":[{"text":"b","children":[],"shape":"rect","color":5}]}' });
+await clipEvent('paste', { 'application/x-brainstorm-branch': '{"text":"a","children":[{"text":"b","children":[],"shape":"rect","color":5}]}' });
 await sleep(900);
 const secA = (await secMap()).children[0];
 assert.deepEqual([secA.text, secA.children[0].text, secA.children[0].shape, 'color' in secA.children[0]], ['a', 'b', 'rect', false], 'cor inválida sai do ramo colado');
 assert.equal(await secNodes(), 3, 'mapa continua desenhado depois da colagem forjada');
 await clickNode('Seguro');
-await clipEvent('paste', { 'application/x-galho-branch': '{"text":"cor","children":[],"borderColor":"url(https://attacker.example/p.gif)","lineColor":"#e5383b"}' });
+await clipEvent('paste', { 'application/x-brainstorm-branch': '{"text":"cor","children":[],"borderColor":"url(https://attacker.example/p.gif)","lineColor":"#e5383b"}' });
 await sleep(900);
 const secCor = (await secMap()).children.find(c => c.text === 'cor');
 assert.deepEqual(['borderColor' in secCor, secCor.lineColor], [false, '#e5383b'], 'cor url(...) não é guardada; a hexadecimal fica');
 await clickNode('cor');
 await ev(`document.querySelector('#style-btn').click()`);
 assert.equal(await ev(`document.querySelectorAll('#style-pop [style*="url("], #viewport [stroke*="url(h"], #viewport [fill*="url(h"]').length`), 0, 'nenhuma cor url(...) chega ao painel nem ao desenho');
-await clipEvent('paste', { 'application/x-galho-branch': JSON.stringify({ text: 'x'.repeat(1000001), children: [] }) });
+await clipEvent('paste', { 'application/x-brainstorm-branch': JSON.stringify({ text: 'x'.repeat(1000001), children: [] }) });
 await sleep(700);
 assert.equal(await secNodes(), 4, 'ramo grande demais é recusado');
 await key('Escape');
@@ -1563,7 +1563,7 @@ assert.equal(await ev(`document.querySelector('#lang').title`), 'Idioma');
 const pickLang = async (code) => {
   await ev(`(() => { window.sameDocument = true; const s = document.querySelector('#lang'); s.value = '${code}'; s.dispatchEvent(new Event('change')); })()`);
   await sleep(1500);
-  return ev(`[window.sameDocument ?? 'reloaded', localStorage.getItem('galho:lang'), document.querySelector('#lang').value, document.documentElement.lang]`);
+  return ev(`[window.sameDocument ?? 'reloaded', localStorage.getItem('brainstorm:lang'), document.querySelector('#lang').value, document.documentElement.lang]`);
 };
 const uiTexts = () => ev(`[document.querySelector('#new-map').textContent, document.querySelector('#search').placeholder, document.querySelector('#logout-btn').title, document.querySelector('#trash summary').textContent.replace(/\\d+/, '{n}')]`);
 for (const code of ['en', 'es', 'ja']) {

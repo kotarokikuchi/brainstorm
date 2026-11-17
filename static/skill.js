@@ -6,7 +6,7 @@ let deps = null;   // {api, scheduleSave, flushSave, setStatus, resetSave, loadP
 let skill = null;
 
 const $ = (s) => document.querySelector(s);
-const MODE = 'galho:skillMode', MODES = ['edit', 'split', 'preview'];
+const MODE = 'brainstorm:skillMode', MODES = ['edit', 'split', 'preview'];
 let mode = 'split', raf = 0, bound = false;
 
 export const initSkill = (d) => { deps = d; };

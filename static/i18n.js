@@ -8,7 +8,7 @@ export const LANGS = [
   { code: 'es', name: 'Español' },
   { code: 'ja', name: '日本語' },
 ];
-const STORE = 'galho:lang', codes = LANGS.map(l => l.code);
+const STORE = 'brainstorm:lang', codes = LANGS.map(l => l.code);
 
 // escolha guardada > idioma do navegador (pt* → pt-BR, en* → en...) > pt-BR
 function pick() {

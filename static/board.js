@@ -379,7 +379,7 @@ const imageInput = $('#board-image-input');
 let pendingPaste = 0;
 imageInput.addEventListener('change', () => { const f = imageInput.files[0]; imageInput.value = ''; insertImage(f); });
 // área de transferência do sistema: vale entre abas e depois de recarregar (a variável clipboard é só o plano B)
-const CLIP = 'application/x-galho-board', MAX_CLIP = 1e6;
+const CLIP = 'application/x-brainstorm-board', MAX_CLIP = 1e6;
 const boardKeys = (e) => board && document.body.dataset.view === 'board' && !e.target.closest?.('input, textarea, select');
 let pendingCut = 0;
 const selected = () => board.elements.filter(x => selection.includes(x.id));
@@ -415,7 +415,7 @@ document.addEventListener('cut', (e) => {  // recortar = copiar e apagar
   copyTo(e);
   act('delete');
 });
-// colar: elementos do Galho > imagem > texto (vira um texto no centro da tela)
+// colar: elementos do Brainstorm > imagem > texto (vira um texto no centro da tela)
 document.addEventListener('paste', (e) => {
   if (!boardKeys(e) || !e.clipboardData) return;
   const json = e.clipboardData.getData(CLIP);

@@ -41,7 +41,7 @@ const api = (method, path = '', body) => fetch('/api/maps' + path, {
 });
 
 // ---------- Onde parou: posição, zoom e seleção de cada documento (só neste navegador) ----------
-const PLACE = 'galho:place:';
+const PLACE = 'brainstorm:place:';
 function savePlace() {
   const board = currentBoard(), id = map?.id ?? board?.id ?? currentSkill()?.id;
   const place = map ? { view: { ...view }, selected, focusId, outlineOn } : board ? boardPlace() : currentSkill() ? skillPlace() : null;
@@ -58,7 +58,7 @@ function loadPlace(id) {
 window.addEventListener('pagehide', savePlace);  // recarregar (F5 ou automática) e fechar a aba
 
 // ---------- Área de transferência do mapa (sistema): entre abas, depois de recarregar e com outros programas ----------
-const BRANCH = 'application/x-galho-branch', MAX_CLIP = 1e6;
+const BRANCH = 'application/x-brainstorm-branch', MAX_CLIP = 1e6;
 let pendingMapPaste = 0, pendingMapCut = 0;
 // o que vem colado pode ter sido posto por outro site: só ramos com texto e filhos bem formados
 const okBranch = (b, depth = 0) => !!b && typeof b === 'object' && typeof b.text === 'string'
@@ -77,7 +77,7 @@ document.addEventListener('cut', (e) => {  // recortar = copiar e apagar (o nó 
   copyBranchTo(e);
   deleteSelected();
 });
-// colar: ramo do Galho > texto (cada linha vira um tópico, recuo vira filho) — sob o tópico selecionado
+// colar: ramo do Brainstorm > texto (cada linha vira um tópico, recuo vira filho) — sob o tópico selecionado
 document.addEventListener('paste', (e) => {
   if (!mapKeys(e) || !e.clipboardData || !selected) return;
   const json = e.clipboardData.getData(BRANCH), text = e.clipboardData.getData('text/plain');
@@ -212,9 +212,9 @@ async function saveTree(change) {
 // ---------- Lista de mapas ----------
 // ordenação (lembrada neste navegador) e busca (em todas as pastas, pelo nome)
 const searchInput = $('#search'), sortSelect = $('#sort');
-try { sortSelect.value = localStorage.getItem('galho:sort') || 'recent'; } catch { /* sem armazenamento */ }
+try { sortSelect.value = localStorage.getItem('brainstorm:sort') || 'recent'; } catch { /* sem armazenamento */ }
 if (!sortSelect.value) sortSelect.value = 'recent';
-sortSelect.onchange = () => { try { localStorage.setItem('galho:sort', sortSelect.value); } catch { /* idem */ } renderList(); sortSelect.blur(); };
+sortSelect.onchange = () => { try { localStorage.setItem('brainstorm:sort', sortSelect.value); } catch { /* idem */ } renderList(); sortSelect.blur(); };
 searchInput.addEventListener('input', () => renderList());
 searchInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') { searchInput.value = ''; renderList(); } });
 let listData = { items: [], trash: [] };
@@ -379,17 +379,17 @@ window.addEventListener('scroll', () => { moveMenu.hidden = true; });
 const listView = $('#list-view');
 listView.addEventListener('dragstart', (e) => {
   const src = e.target.closest?.('[data-drag]');
-  if (src) e.dataTransfer.setData('text/x-galho', src.dataset.drag);
+  if (src) e.dataTransfer.setData('text/x-brainstorm', src.dataset.drag);
 });
 listView.addEventListener('dragover', (e) => {
   const target = e.target.closest?.('[data-drop]');
-  if (!target || !e.dataTransfer.types.includes('text/x-galho')) return;
+  if (!target || !e.dataTransfer.types.includes('text/x-brainstorm')) return;
   e.preventDefault();
   target.classList.add('drop-over');
 });
 listView.addEventListener('dragleave', (e) => e.target.closest?.('[data-drop]')?.classList.remove('drop-over'));
 listView.addEventListener('drop', (e) => {
-  const target = e.target.closest?.('[data-drop]'), data = e.dataTransfer.getData('text/x-galho');
+  const target = e.target.closest?.('[data-drop]'), data = e.dataTransfer.getData('text/x-brainstorm');
   if (!target || !data) return;
   e.preventDefault();
   target.classList.remove('drop-over');
