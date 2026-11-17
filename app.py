@@ -37,7 +37,7 @@ LOGIN_MAX_FAILS, LOGIN_WINDOW = 10, 600
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
        "font-src 'self' data:; connect-src 'self' blob: data:; object-src 'none'; base-uri 'none'; "
        "form-action 'self'; frame-ancestors 'none'")
-LLM_PROVIDERS = ("anthropic", "openai", "gemini", "openrouter", "custom")  # custom = compatível com OpenAI (baseUrl)
+LLM_PROVIDERS = ("anthropic", "openai", "gemini", "deepseek", "openrouter", "custom")  # custom = compatível com OpenAI (baseUrl)
 INLINE = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 
 

@@ -425,7 +425,7 @@ class ApiTest(unittest.TestCase):
     def test_llm_key_never_comes_back(self):
         status, items = self.req("GET", "/api/settings/llm")
         self.assertEqual(status, 200)
-        self.assertEqual([p["id"] for p in items], ["anthropic", "openai", "gemini", "openrouter", "custom"])
+        self.assertEqual([p["id"] for p in items], ["anthropic", "openai", "gemini", "deepseek", "openrouter", "custom"])
         self.assertFalse(any(p["configured"] for p in items))
         key = "sk-ant-segredo-a9F2"
         status, saved = self.req("PUT", "/api/settings/llm/anthropic", {"key": key, "model": "claude-x"})

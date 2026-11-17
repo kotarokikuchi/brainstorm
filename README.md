@@ -81,7 +81,7 @@ confirme: antes, o app faz um backup do estado atual (dá para desfazer); a troc
 desloga ninguém e mantém as configurações; durante ela as gravações esperam (respondem 503) e as abas
 abertas recarregam no fim. Backup de uma versão mais nova do app é recusado.
 
-Em **Configurar LLM** ficam as chaves de API (Anthropic, OpenAI, Gemini, OpenRouter ou um servidor
+Em **Configurar LLM** ficam as chaves de API (Anthropic, OpenAI, Gemini, DeepSeek, OpenRouter ou um servidor
 compatível com OpenAI) para funcionalidades futuras: guardadas só no servidor, a tela mostra apenas o
 final mascarado.
 
