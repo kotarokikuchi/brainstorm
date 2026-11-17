@@ -19,6 +19,19 @@ subiu (por exemplo, pelo `python app.py`). Pare o outro servidor e rode
 Outra porta: troque `127.0.0.1:8000:8000` por, por exemplo, `127.0.0.1:8080:8000` no
 `docker-compose.yml`.
 
+## Login
+
+Para proteger o acesso, crie um `.env` (modelo em `.env.example`):
+
+```bash
+cp .env.example .env    # e troque usuário e senha
+```
+
+Com `BRAINSTORM_USER` e `BRAINSTORM_PASSWORD` definidos (no `.env` ou como variáveis de ambiente,
+que têm prioridade), o app pede login; sem eles, abre sem login. A sessão dura 30 dias; o botão
+"Sair" fica no canto do topo. Depois de 10 senhas erradas em 10 minutos, o login fica bloqueado
+por um tempo. No Docker, depois de criar ou mudar o `.env`, rode `docker compose up -d`.
+
 ## Onde ficam os dados
 
 ```
@@ -54,8 +67,9 @@ python app.py        # http://127.0.0.1:8000  (ou: python app.py 8080)
 Nesse modo o servidor reinicia sozinho quando `app.py` muda, e a página recarrega quando
 `static/` muda.
 
-Variáveis opcionais: `BRAINSTORM_HOST` (padrão `127.0.0.1`), `BRAINSTORM_DATA` (padrão `./data`) e
-`BRAINSTORM_FILES` (padrão `<BRAINSTORM_DATA>/attachments`).
+Variáveis opcionais: `BRAINSTORM_HOST` (padrão `127.0.0.1`), `BRAINSTORM_DATA` (padrão `./data`),
+`BRAINSTORM_FILES` (padrão `<BRAINSTORM_DATA>/attachments`) e `BRAINSTORM_USER` / `BRAINSTORM_PASSWORD`
+(login; veja acima).
 
 ## Testes
 

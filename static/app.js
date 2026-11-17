@@ -115,6 +115,20 @@ async function bringNodeFiles(n, src) {
   for (const c of n.children) await bringNodeFiles(c, src);
 }
 
+// ---------- Login: sessão expirada ou encerrada em outra aba leva à página de login ----------
+const plainFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const r = await plainFetch(...args);
+  if (r.status === 401) location.href = '/login.html';
+  return r;
+};
+fetch('/api/session').then(r => r.json()).then(s => { $('#logout-btn').hidden = !s.auth; }).catch(() => {});
+$('#logout-btn').onclick = async () => {
+  await flushSave();  // nada se perde ao sair
+  await plainFetch('/api/logout', { method: 'POST' });
+  location.href = '/login.html';
+};
+
 // ---------- Rotas ----------
 window.addEventListener('hashchange', route);
 route();

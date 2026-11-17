@@ -3,7 +3,9 @@
 Tudo que não é arquivo anexado fica num único banco (fácil de copiar/arquivar); imagens e anexos
 ficam em <pasta de anexos>/<id do documento>/<arquivo>.
 """
+import hashlib
 import json
+import secrets
 import shutil
 from contextlib import contextmanager
 import sqlite3
@@ -32,6 +34,10 @@ CREATE TABLE IF NOT EXISTS history (
     PRIMARY KEY (doc_id, version)
 );
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,       -- sha256 do cookie (o cookie em si não fica guardado)
+    expires    REAL NOT NULL
+);
 """
 
 EMPTY_FOLDERS = {"version": 0, "folders": [], "place": {}}
@@ -173,6 +179,27 @@ class Store:
         with self._db() as db:
             row = db.execute("SELECT body FROM history WHERE doc_id = ? AND version = ?", (doc_id, version)).fetchone()
         return json.loads(row["body"]) if row else None
+
+    # ---- sessões de login (sobrevivem a reinícios do servidor) ----
+    @staticmethod
+    def _hash(token):
+        return hashlib.sha256(token.encode()).hexdigest()
+
+    def create_session(self, ttl):
+        token = secrets.token_urlsafe(32)
+        with self._db() as db:
+            db.execute("DELETE FROM sessions WHERE expires < ?", (time.time(),))
+            db.execute("INSERT INTO sessions VALUES (?, ?)", (self._hash(token), time.time() + ttl))
+        return token
+
+    def session_ok(self, token):
+        with self._db() as db:
+            row = db.execute("SELECT expires FROM sessions WHERE token_hash = ?", (self._hash(token),)).fetchone()
+        return bool(row) and row["expires"] > time.time()
+
+    def end_session(self, token):
+        with self._db() as db:
+            db.execute("DELETE FROM sessions WHERE token_hash = ?", (self._hash(token),))
 
     # ---- pastas: a árvore inteira num JSON (validada pelo servidor) ----
     def folders(self):

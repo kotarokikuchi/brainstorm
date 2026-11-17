@@ -1,4 +1,5 @@
 """Servidor local do editor de mapas mentais: arquivos estáticos + API JSON."""
+import hmac
 import json
 import mimetypes
 import os
@@ -8,6 +9,7 @@ import threading
 import time
 import uuid
 from functools import partial
+from http.cookies import CookieError, SimpleCookie
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -22,6 +24,11 @@ MAX_FILE = 20_000_000
 HISTORY_INTERVAL = 120  # s entre cópias no histórico (autosave grava a cada edição)
 FILE_RE = re.compile(r"^[a-f0-9]{32}(\.[a-z0-9]{1,10})?$")
 # só estes tipos abrem no navegador; o resto (inclusive SVG/HTML) sempre baixa como anexo
+# login: cookie de sessão, páginas abertas sem login e limite de tentativas erradas por endereço
+SESSION_COOKIE = "brainstorm_session"
+SESSION_TTL = 30 * 86400
+PUBLIC = {"/login.html", "/style.css"}  # e /fonts/ (o visual da página de login)
+LOGIN_MAX_FAILS, LOGIN_WINDOW = 10, 600
 INLINE = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 
 
@@ -69,18 +76,91 @@ class Handler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_GET(self):
-        if self._foreign_host() or self._api("GET"):
+        if self._foreign_host() or self._gate("GET") or self._api("GET"):
             return
         super().do_GET()
 
     def do_PUT(self):
-        self._foreign_host() or self._foreign_origin() or self._api("PUT") or self._send(404, {"error": "not found"})
+        self._foreign_host() or self._foreign_origin() or self._gate("PUT") or self._api("PUT") or self._send(404, {"error": "not found"})
 
     def do_POST(self):
-        self._foreign_host() or self._foreign_origin() or self._api("POST") or self._send(404, {"error": "not found"})
+        self._foreign_host() or self._foreign_origin() or self._gate("POST") or self._api("POST") or self._send(404, {"error": "not found"})
 
     def do_DELETE(self):
-        self._foreign_host() or self._foreign_origin() or self._api("DELETE") or self._send(404, {"error": "not found"})
+        self._foreign_host() or self._foreign_origin() or self._gate("DELETE") or self._api("DELETE") or self._send(404, {"error": "not found"})
+
+    # ---- Login (só quando BRAINSTORM_USER/BRAINSTORM_PASSWORD estão definidos) ----
+    def _gate(self, method):
+        # True = já respondeu: login/logout, ou falta de sessão (401 na API, página de login no resto)
+        path = urlsplit(self.path).path
+        if path == "/api/login" and method == "POST":
+            self._login()
+            return True
+        if path == "/api/logout" and method == "POST":
+            self._logout()
+            return True
+        if not self.server.auth or path in PUBLIC or path.startswith("/fonts/") or self._logged_in():
+            return False
+        if path.startswith("/api/"):
+            self._send(401, {"error": "login required"})
+        else:
+            self.send_response(302)
+            self.send_header("Location", "/login.html")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+        return True
+
+    def _token(self):
+        cookie = SimpleCookie()
+        try:
+            cookie.load(self.headers.get("Cookie") or "")
+        except CookieError:
+            return None
+        return cookie[SESSION_COOKIE].value if SESSION_COOKIE in cookie else None
+
+    def _logged_in(self):
+        token = self._token()
+        return bool(token) and self.server.store.session_ok(token)
+
+    def _login(self):
+        if not self.server.auth:
+            self._send(404, {"error": "login disabled"})
+            return
+        ip, now = self.client_address[0], time.time()
+        with self.server.login_lock:
+            fails = [t for t in self.server.login_fails.get(ip, []) if now - t < LOGIN_WINDOW]
+            self.server.login_fails[ip] = fails
+        if len(fails) >= LOGIN_MAX_FAILS:
+            self._send(429, {"error": "too many attempts"}, {"Retry-After": str(int(LOGIN_WINDOW - (now - fails[0])) + 1)})
+            return
+        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            body = json.loads(self.rfile.read(min(length, 10_000)) or b"{}")
+        except ValueError:
+            body = {}
+        user, password = (body.get(k) if isinstance(body, dict) else None for k in ("user", "password"))
+        want_user, want_password = self.server.auth
+        # compara os dois sempre e em tempo constante: a resposta não indica qual dos dois errou
+        ok = isinstance(user, str) and isinstance(password, str)
+        ok = hmac.compare_digest((user if ok else "").encode(), want_user.encode()) & \
+            hmac.compare_digest((password if ok else "").encode(), want_password.encode()) & ok
+        if not ok:
+            time.sleep(self.server.login_delay)  # atrasa quem tenta adivinhar
+            with self.server.login_lock:
+                self.server.login_fails.setdefault(ip, []).append(time.time())
+            self._send(401, {"error": "invalid credentials"})
+            return
+        with self.server.login_lock:
+            self.server.login_fails.pop(ip, None)
+        token = self.server.store.create_session(SESSION_TTL)
+        # HttpOnly: o JavaScript não lê; SameSite=Strict: outros sites não mandam o cookie
+        self._send(200, {"ok": True}, {"Set-Cookie": f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_TTL}"})
+
+    def _logout(self):
+        token = self._token()
+        if token:
+            self.server.store.end_session(token)
+        self._send(204, None, {"Set-Cookie": f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"})
 
     def _foreign_origin(self):
         # escrita vinda de outra origem (página de outro site aberta no navegador) é recusada:
@@ -105,6 +185,9 @@ class Handler(SimpleHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/api/trash" or path.startswith("/api/trash/"):
             self._trash(method, path[len("/api/trash"):].strip("/"))
+            return True
+        if path == "/api/session" and method == "GET":  # a página sabe se mostra o botão Sair
+            self._send(200, {"auth": bool(self.server.auth)})
             return True
         if path == "/api/events" and method == "GET":
             self._events()
@@ -292,9 +375,11 @@ class Handler(SimpleHTTPRequestHandler):
         ok, saved = self.server.store.put_folders(body)
         self._send(200 if ok else 409, saved)
 
-    def _send(self, status, payload):
+    def _send(self, status, payload, headers=None):
         data = b"" if payload is None else json.dumps(payload, ensure_ascii=False).encode()
         self.send_response(status)
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         if payload is not None:
             self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
@@ -302,7 +387,8 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(data)
 
 
-def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: Path | None = None) -> ThreadingHTTPServer:
+def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: Path | None = None,
+                auth: tuple[str, str] | None = None) -> ThreadingHTTPServer:
     # banco em <dados>/brainstorm.db; anexos em <dados>/attachments (ou files_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
     store = Store(data_dir / "brainstorm.db", files_dir or data_dir / "attachments")
@@ -310,6 +396,8 @@ def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: P
         print(f"{migrated} documentos do formato antigo importados para o banco (backup em {data_dir}/legacy-*)", flush=True)
     server = ThreadingHTTPServer((host, port), partial(Handler, directory=str(ROOT / "static")))
     server.store = store
+    server.auth = auth  # (usuário, senha) ou None = sem login
+    server.login_delay, server.login_fails, server.login_lock = 1.0, {}, threading.Lock()
     server.data_dir = data_dir
     server.static_dir = ROOT / "static"
     server.history_interval = HISTORY_INTERVAL
@@ -337,13 +425,35 @@ def restart():
     os.execv(sys.executable, [sys.executable, *sys.argv])
 
 
+def load_env(path):
+    """Lê KEY=valor do .env (comentários, aspas e "export" opcionais); variável já definida no ambiente vence."""
+    if not path.is_file():
+        return
+    for line in path.read_text("utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.removeprefix("export ").partition("=")
+        key, value = key.strip(), value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        os.environ.setdefault(key, value)
+
+
 def main():
+    load_env(ROOT / ".env")
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
     # BRAINSTORM_HOST/BRAINSTORM_DATA: no Docker, escuta em 0.0.0.0 dentro do container e guarda em /data
     # BRAINSTORM_FILES: pasta dos anexos (ex.: um disco externo); padrão <dados>/attachments
     host = os.environ.get("BRAINSTORM_HOST", "127.0.0.1")
     files = os.environ.get("BRAINSTORM_FILES")
-    server = make_server(Path(os.environ.get("BRAINSTORM_DATA") or ROOT / "data"), port, host, Path(files) if files else None)
+    user, password = os.environ.get("BRAINSTORM_USER", ""), os.environ.get("BRAINSTORM_PASSWORD", "")
+    if bool(user) != bool(password):
+        sys.exit("Defina BRAINSTORM_USER e BRAINSTORM_PASSWORD juntos (no .env ou no ambiente), ou nenhum dos dois.")
+    if not user:
+        print("Aviso: sem BRAINSTORM_USER/BRAINSTORM_PASSWORD, o app abre sem login.", flush=True)
+    server = make_server(Path(os.environ.get("BRAINSTORM_DATA") or ROOT / "data"), port, host,
+                         Path(files) if files else None, (user, password) if user else None)
     # recarrega sozinho ao editar o servidor (HTML/CSS/JS já vêm frescos a cada F5)
     watch([Path(__file__).resolve()], restart)
     print(f"Abra http://127.0.0.1:{port}")

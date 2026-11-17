@@ -9,7 +9,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from app import Handler, make_server, watch
+from app import Handler, load_env, make_server, watch
 
 Handler.log_message = lambda *a: None  # silencia o log de requisições nos testes
 
@@ -318,6 +318,126 @@ class ApiTest(unittest.TestCase):
         for b in bad:
             self.assertEqual(self.req("PUT", "/api/folders", b)[0], 400, b)
         self.assertEqual([m["id"] for m in self.req("GET", "/api/maps")[1]], [], "pastas não aparecem como documento")
+
+
+class AuthTest(unittest.TestCase):
+    """Com BRAINSTORM_USER/BRAINSTORM_PASSWORD: tudo exige login, menos a página de login."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.data = Path(self.tmp.name)
+        self.start()
+
+    def start(self):
+        self.server = make_server(self.data, 0, auth=("ana", "s3gredo ç"))
+        self.server.login_delay = 0
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+
+    def stop(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+    def tearDown(self):
+        self.stop()
+        self.tmp.cleanup()
+
+    def call(self, method, path, body=None, cookie=None, headers=None):
+        h = {**(headers or {}), **({"Cookie": cookie} if cookie else {})}
+        data = None if body is None else json.dumps(body).encode()
+        req = urllib.request.Request(self.base + path, data=data, method=method, headers=h)
+        opener = urllib.request.build_opener(NoRedirect)
+        try:
+            with opener.open(req) as r:
+                return r.status, dict(r.headers), r.read()
+        except urllib.error.HTTPError as e:
+            with e:
+                return e.code, dict(e.headers), e.read()
+
+    def login(self, user="ana", password="s3gredo ç"):
+        return self.call("POST", "/api/login", {"user": user, "password": password})
+
+    def cookie(self):
+        status, headers, _ = self.login()
+        self.assertEqual(status, 200)
+        return headers["Set-Cookie"].split(";")[0]
+
+    def test_everything_needs_login_except_the_login_page(self):
+        self.assertEqual(self.call("GET", "/api/maps")[0], 401)
+        self.assertEqual(self.call("PUT", "/api/maps/abc", {"version": 0, "root": {"text": "a", "children": []}})[0], 401)
+        status, headers, _ = self.call("GET", "/")
+        self.assertEqual((status, headers.get("Location")), (302, "/login.html"), "abrir o app leva ao login")
+        self.assertEqual(self.call("GET", "/app.js")[0], 302)
+        for public in ("/login.html", "/style.css", "/fonts/kalam-latin-400-normal.woff2"):
+            self.assertEqual(self.call("GET", public)[0], 200, public)
+
+    def test_login_sets_a_safe_cookie_and_unlocks_the_app(self):
+        status, headers, _ = self.login()
+        self.assertEqual(status, 200)
+        cookie = headers["Set-Cookie"]
+        for flag in ("HttpOnly", "SameSite=Strict", "Path=/", "Max-Age="):
+            self.assertIn(flag, cookie)
+        c = cookie.split(";")[0]
+        self.assertEqual(self.call("GET", "/api/maps", cookie=c)[0], 200)
+        self.assertEqual(self.call("GET", "/", cookie=c)[0], 200)
+        self.assertEqual(json.loads(self.call("GET", "/api/session", cookie=c)[2]), {"auth": True})
+        self.assertEqual(self.call("GET", "/api/maps", cookie="brainstorm_session=inventado")[0], 401)
+
+    def test_wrong_credentials_and_lockout(self):
+        self.assertEqual(self.login(password="errada")[0], 401)
+        self.assertEqual(self.login(user="outro")[0], 401)
+        self.assertEqual(self.call("POST", "/api/login", {"user": 1, "password": None})[0], 401)
+        self.assertEqual(self.call("POST", "/api/login", None)[0], 401)
+        for _ in range(6):
+            self.login(password="errada")
+        status, headers, _ = self.login()
+        self.assertEqual(status, 429, "10 erros em 10 min bloqueiam até a senha certa")
+        self.assertIn("Retry-After", headers)
+
+    def test_logout_ends_the_session(self):
+        c = self.cookie()
+        status, headers, _ = self.call("POST", "/api/logout", cookie=c)
+        self.assertEqual(status, 204)
+        self.assertIn("Max-Age=0", headers["Set-Cookie"])
+        self.assertEqual(self.call("GET", "/api/maps", cookie=c)[0], 401)
+
+    def test_session_survives_server_restart(self):
+        c = self.cookie()
+        self.stop()
+        self.start()
+        self.assertEqual(self.call("GET", "/api/maps", cookie=c)[0], 200)
+
+    def test_login_from_another_site_is_blocked(self):
+        status, headers, _ = self.call("POST", "/api/login", {"user": "ana", "password": "s3gredo ç"}, headers={"Origin": "http://evil.example"})
+        self.assertEqual(status, 403)
+        self.assertNotIn("Set-Cookie", headers)
+
+    def test_without_credentials_the_app_is_open(self):
+        self.stop()
+        self.server = make_server(self.data, 0)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        self.assertEqual(self.call("GET", "/api/maps")[0], 200)
+        self.assertEqual(json.loads(self.call("GET", "/api/session")[2]), {"auth": False})
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+class EnvFileTest(unittest.TestCase):
+    def test_env_file_is_read_and_real_env_wins(self):
+        with tempfile.TemporaryDirectory() as d:
+            env = Path(d) / ".env"
+            env.write_text('# comentário\nBRAINSTORM_T1=um\nexport BRAINSTORM_T2="dois = 2"\nBRAINSTORM_T3=\'tres\'\nlixo\n')
+            os.environ["BRAINSTORM_T1"] = "do ambiente"
+            try:
+                load_env(env)
+                self.assertEqual([os.environ[k] for k in ("BRAINSTORM_T1", "BRAINSTORM_T2", "BRAINSTORM_T3")], ["do ambiente", "dois = 2", "tres"])
+            finally:
+                for k in ("BRAINSTORM_T1", "BRAINSTORM_T2", "BRAINSTORM_T3"):
+                    os.environ.pop(k, None)
 
 
 class MigrationTest(unittest.TestCase):

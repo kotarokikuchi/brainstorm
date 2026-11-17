@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 const PORT = Number(process.env.E2E_PORT ?? 8765), CDP = Number(process.env.E2E_CDP_PORT ?? 9333), BASE = `http://127.0.0.1:${PORT}`;
 const tmp = mkdtempSync(join(tmpdir(), 'galho-e2e-'));
 const server = spawn('python3', ['-c',
-  'import sys; from pathlib import Path; from app import make_server; make_server(Path(sys.argv[1]), int(sys.argv[2])).serve_forever()',
+  'import sys; from pathlib import Path; from app import make_server; make_server(Path(sys.argv[1]), int(sys.argv[2]), auth=("e2e", "senha-e2e")).serve_forever()',
   join(tmp, 'data'), String(PORT)], { cwd: new URL('..', import.meta.url).pathname, stdio: 'ignore' });
 const chrome = spawn('google-chrome', ['--headless=new', '--disable-gpu', '--remote-debugging-port=' + CDP,
   '--window-size=1400,800', '--user-data-dir=' + join(tmp, 'chrome'), 'about:blank'], { stdio: 'ignore' });
@@ -46,12 +46,26 @@ const status = () => ev(`document.querySelector('#status').textContent`);
 
 const n = (text, kids = [], side = null, color = null) => ({ id: 'n' + Math.random().toString(36).slice(2), text, color, shape: null, collapsed: false, side, children: kids });
 for (let i = 0; i < 50; i++) { try { await fetch(BASE + '/api/maps'); break; } catch { await sleep(100); } }
+// o servidor do e2e exige login: os fetch do Node usam uma sessão própria (a do navegador é feita pela página)
+const apiLogin = await fetch(BASE + '/api/login', { method: 'POST', body: JSON.stringify({ user: 'e2e', password: 'senha-e2e' }) });
+assert.equal(apiLogin.status, 200, 'login pela API');
+const sessionCookie = apiLogin.headers.get('set-cookie').split(';')[0];
+const nodeFetch = globalThis.fetch;
+globalThis.fetch = (url, opts = {}) => nodeFetch(url, String(url).startsWith(BASE) ? { ...opts, headers: { ...(opts.headers ?? {}), Cookie: sessionCookie } } : opts);
 await fetch(BASE + '/api/maps/demo', { method: 'PUT', body: JSON.stringify({ version: 0, layout: 'map', root: n('Planejamento', [
   n('Recursos', [n('Time'), n('Orçamento')], 'left', '#2f5bea'),
   n('Cronograma', [n('Q1'), n('Q2')], 'right', '#e5383b'),
 ]) }) });
 await cmd('Runtime.enable');
 await cmd('Page.enable');
+// página de login: sem sessão o app manda para ela; senha errada avisa; a certa entra
+await cmd('Page.navigate', { url: BASE + '/' }); await sleep(1200);
+assert.equal(await ev(`location.pathname`), '/login.html', 'sem login, vai para a página de login');
+const submitLogin = (u, p) => ev(`(() => { document.querySelector('#login-user').value = '${u}'; document.querySelector('#login-password').value = '${p}'; document.querySelector('#login-form').requestSubmit(); })()`);
+await submitLogin('e2e', 'errada'); await sleep(1600);
+assert.equal(await ev(`document.querySelector('#login-error').hidden ? '' : document.querySelector('#login-error').textContent`), 'Usuário ou senha incorretos.', 'senha errada avisa');
+await submitLogin('e2e', 'senha-e2e'); await sleep(1200);
+assert.equal(await ev(`location.pathname`), '/', 'senha certa entra no app');
 await cmd('Page.navigate', { url: BASE + '/#/map/demo' });
 await sleep(1500);
 const v0 = (await getMap()).version;
@@ -1490,6 +1504,13 @@ assert.match(await ev(`window.__asked[0]`), /^Apagar o quadro "Pergunta"\?/, 'pe
 assert.equal((await fetch(BASE + '/api/maps/pergunta')).status, 200, 'cancelar não apaga');
 await ev(`window.confirm = () => true; document.querySelector('#maps [data-delete="pergunta"]').click()`); await sleep(800);
 assert.equal((await fetch(BASE + '/api/maps/pergunta')).status, 404, 'confirmar apaga (vai para a lixeira)');
+
+// Sair: encerra a sessão e volta para a página de login
+await ev(`location.hash = '#/'`); await sleep(800);
+assert.equal(await ev(`!document.querySelector('#logout-btn').hidden`), true, 'botão Sair aparece com login ativo');
+await ev(`document.querySelector('#logout-btn').click()`); await sleep(1200);
+assert.equal(await ev(`location.pathname`), '/login.html', 'Sair volta para o login');
+assert.equal(await ev(`fetch('/api/maps').then(r => r.status)`), 401, 'sessão encerrada');
 
 assert.deepEqual(logs, [], 'sem erros no console');
 console.log('E2E OK');
