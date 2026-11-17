@@ -127,6 +127,14 @@ def valid_folders(body):
                for k, v in body["place"].items())
 
 
+def _with_id(row, doc_id):
+    # o id vem sempre da linha: um corpo restaurado com outro id faria a página gravar em outra rota
+    if not row:
+        return None
+    body = json.loads(row["body"])
+    return {**body, "id": doc_id} if isinstance(body, dict) else body
+
+
 class Store:
     def __init__(self, db_path: Path, files_dir: Path):
         self.db_path, self.files_dir = Path(db_path), Path(files_dir)
@@ -154,7 +162,7 @@ class Store:
     def get(self, doc_id):
         with self._db() as db:
             row = db.execute("SELECT body FROM docs WHERE id = ? AND deleted IS NULL", (doc_id,)).fetchone()
-        return json.loads(row["body"]) if row else None
+        return _with_id(row, doc_id)
 
     def exists(self, doc_id):
         return self.get(doc_id) is not None
@@ -267,7 +275,7 @@ class Store:
     def history_version(self, doc_id, version):
         with self._db() as db:
             row = db.execute("SELECT body FROM history WHERE doc_id = ? AND version = ?", (doc_id, version)).fetchone()
-        return json.loads(row["body"]) if row else None
+        return _with_id(row, doc_id)
 
     # ---- sessões de login (sobrevivem a reinícios do servidor) ----
     @staticmethod

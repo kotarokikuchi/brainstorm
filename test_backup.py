@@ -410,11 +410,14 @@ class BackupTest(unittest.TestCase):
                 tar.addfile(info, io.BytesIO(data) if data else None)
         self.fake.objects["bs/" + name] = (buf.getvalue(), "2020-01-01T00:00:00.000Z")
 
-    def valid_db(self, schema="1"):
-        path = self.tmp / f"src-{schema}.db"
+    def valid_db(self, schema="1", docs=()):
+        path = self.tmp / f"src-{schema}-{len(docs)}.db"
+        path.unlink(missing_ok=True)
         Store(path, self.tmp / "x")
         with closing(sqlite3.connect(path)) as db, db:
             db.execute("UPDATE meta SET value = ? WHERE key = 'schema'", (schema,))
+            for doc_id, body in docs:
+                db.execute("INSERT INTO docs VALUES (?, 'map', 't', 1, 0, NULL, ?)", (doc_id, body))
         return path.read_bytes()
 
     def test_bad_archives_are_refused_and_nothing_changes(self):
@@ -432,9 +435,12 @@ class BackupTest(unittest.TestCase):
             "no db": [(tarfile.TarInfo("attachments/m1/a.png"), b"x")],
             "not a db": [(tarfile.TarInfo("brainstorm.db"), b"nada")],
             "newer schema": [(tarfile.TarInfo("brainstorm.db"), self.valid_db("99"))],
+            "bad doc id": [(tarfile.TarInfo("brainstorm.db"), self.valid_db(docs=[("../settings", json.dumps({**doc("x"), "version": 1}))]))],
+            "bad doc body": [(tarfile.TarInfo("brainstorm.db"), self.valid_db(docs=[("ok", '{"version": 1, "root": 5}')]))],
+            "doc body not json": [(tarfile.TarInfo("brainstorm.db"), self.valid_db(docs=[("ok", "{")]))],
         }
         for i, (label, members) in enumerate(cases.items()):
-            name = f"brainstorm-2020-01-01-00000{i}.tar.gz"
+            name = f"brainstorm-2020-01-01-{i:06d}.tar.gz"
             self.put_tar(name, members)
             with self.assertRaises(BackupError, msg=label) as e:
                 self.backup.restore(name)

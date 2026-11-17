@@ -605,6 +605,17 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.req("PUT", "/api/folders", chain)[0], 200, "2000 pastas uma dentro da outra")
         self.assertLess(time.monotonic() - started, 1, "checagem de ciclo linear")
 
+    def test_document_id_always_comes_from_the_row(self):
+        # um backup restaurado pode trazer outro id no corpo; a página monta as rotas com doc.id
+        self.server.history_interval = 0
+        self.put_text(0, "a")
+        self.put_text(1, "b")
+        with self.server.store._db() as db:
+            for table in ("docs", "history"):
+                db.execute(f"UPDATE {table} SET body = json_set(body, '$.id', '../settings/backup')")
+        self.assertEqual(self.req("GET", "/api/maps/abc")[1]["id"], "abc")
+        self.assertEqual(self.req("GET", "/api/maps/abc/history/1")[1]["id"], "abc")
+
     def test_history_survives_a_malformed_version(self):
         self.server.history_interval = 0
         self.req("PUT", "/api/maps/abc", {"version": 0, "root": {"text": "a", "children": ["x"]}})
