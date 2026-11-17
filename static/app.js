@@ -2232,7 +2232,7 @@ $('#branch-layout-row').addEventListener('click', (e) => {
 });
 
 // ---------- Skills (Markdown) ----------
-initSkill({ api, setStatus, scheduleSave, flushSave, loadPlace, resetSave: () => { if (conflict) dirty = false; conflict = false; } });
+initSkill({ api, setStatus, scheduleSave, flushSave, isDirty: () => dirty, loadPlace, resetSave: () => { if (conflict) dirty = false; conflict = false; } });
 
 // ---------- Quadros (lousa) ----------
 initBoard({

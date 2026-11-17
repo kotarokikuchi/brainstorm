@@ -354,6 +354,7 @@ export default {
   'skill.versions': 'Versões',
   'skill.versionLabelPrompt': 'Nome da versão (opcional):',
   'skill.versionSaved': 'Versão salva',
+  'skill.versionError': 'Não foi possível salvar a versão.',
   'skill.compare': 'Comparar',
   'skill.closeCompare': 'Fechar comparação',
   'skill.restoreConfirm': 'Restaurar esta versão? O texto atual fica salvo no histórico.',

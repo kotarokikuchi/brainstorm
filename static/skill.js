@@ -122,13 +122,16 @@ function bind() {
   input.addEventListener('blur', () => { addTag(input.value); input.value = ''; });
   $('#skill-save-version').onclick = async () => {
     if (!skill) return;
-    const label = prompt(t('skill.versionLabelPrompt'));
-    if (label === null) return;
+    const label = prompt(t('skill.versionLabelPrompt'))?.trim();
+    if (label === undefined) return;
     const doc = skill;
     await deps.flushSave();
     if (skill !== doc) return;
-    const r = await deps.api('POST', `/${skill.id}/history`, label.trim() ? { label: label.trim() } : {});
-    if (!r.ok || skill !== doc) return;
+    // com conflito ou erro de gravação o rótulo iria para o texto de outra aba
+    if (deps.isDirty() || [...label].length > 100) { deps.setStatus(t('skill.versionError'), true); return; }
+    const r = await deps.api('POST', `/${skill.id}/history`, label ? { label } : {});
+    if (skill !== doc) return;
+    if (!r.ok) { deps.setStatus(t('skill.versionError'), true); return; }
     deps.setStatus(t('skill.versionSaved'));
     if (!$('#skill-versions').hidden) loadVersions();
   };

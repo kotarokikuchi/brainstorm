@@ -354,6 +354,7 @@ export default {
   'skill.versions': 'バージョン',
   'skill.versionLabelPrompt': 'バージョン名（任意）：',
   'skill.versionSaved': 'バージョンを保存しました',
+  'skill.versionError': 'バージョンを保存できませんでした。',
   'skill.compare': '比較',
   'skill.closeCompare': '比較を閉じる',
   'skill.restoreConfirm': 'このバージョンを復元しますか？現在のテキストは履歴に保存されます。',
