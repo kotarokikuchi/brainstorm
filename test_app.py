@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import tempfile
@@ -66,7 +68,7 @@ class ApiTest(unittest.TestCase):
         body = {"version": 0, "root": {"text": "x", "children": []}}
         self.assertEqual(self.req("GET", "/api/maps/..%2Fx")[0], 400)
         self.assertEqual(self.req("PUT", "/api/maps/ABC", body)[0], 400)
-        self.assertEqual(list(self.data.iterdir()), [])
+        self.assertEqual(self.req("GET", "/api/maps")[1], [])
 
     def test_invalid_json_is_400(self):
         self.assertEqual(self.req("PUT", "/api/maps/abc", raw=b"nope")[0], 400)
@@ -81,17 +83,19 @@ class ApiTest(unittest.TestCase):
         body["version"] = 1
         self.assertEqual(self.req("PUT", "/api/maps/abc", body), (200, {"version": 2}))
 
-    def test_corrupt_file_skipped_in_list(self):
-        (self.data / "bad.json").write_text("{")
-        status, lst = self.req("GET", "/api/maps")
-        self.assertEqual((status, lst), (200, []))
+    def test_storage_is_one_database_plus_attachments_folder(self):
+        self.make_map()
+        _, info = self.upload("abc", "foto.png", b"x")
+        self.assertTrue((self.data / "brainstorm.db").is_file())
+        self.assertEqual((self.data / "attachments" / "abc" / info["id"]).read_bytes(), b"x")
+        self.assertEqual(sorted(p.name for p in self.data.iterdir() if not p.name.startswith("brainstorm.db")), ["attachments"])
 
     def test_foreign_host_is_403(self):
         # protege contra DNS rebinding: só aceita Host local
         self.assertEqual(self.req("GET", "/api/maps", headers={"Host": "evil.com"})[0], 403)
         body = {"version": 0, "root": {"text": "a", "children": []}}
         self.assertEqual(self.req("PUT", "/api/maps/abc", body, headers={"Host": "evil.com:80"})[0], 403)
-        self.assertEqual(list(self.data.iterdir()), [])
+        self.assertEqual(self.req("GET", "/api/maps/abc")[0], 404)
         port = self.server.server_address[1]
         self.assertEqual(self.req("GET", "/api/maps", headers={"Host": f"localhost:{port}"})[0], 200)
         # porta publicada diferente (Docker): o nome local é o que importa
@@ -170,13 +174,6 @@ class ApiTest(unittest.TestCase):
             self.assertTrue(second.startswith(b"data: "), second)
             self.assertNotEqual(first, second, "mudança em static/ gera novo carimbo")
 
-    def test_corrupt_map_file_gives_clear_500(self):
-        (self.data / "ruim.json").write_text("{")
-        self.assertEqual(self.req("GET", "/api/maps/ruim"), (500, {"error": "corrupt map file"}))
-        status, body = self.req("PUT", "/api/maps/ruim", {"version": 0, "root": {"text": "a", "children": []}})
-        self.assertEqual((status, body), (500, {"error": "corrupt map file"}))
-        self.assertEqual((self.data / "ruim.json").read_text(), "{", "arquivo corrompido não é sobrescrito")
-
     def put_text(self, version, text):
         return self.req("PUT", "/api/maps/abc", {"version": version, "root": {"text": text, "children": []}})
 
@@ -205,12 +202,16 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(len(items), 50, "no máximo 50 versões")
         self.assertEqual(items[0]["version"], 59)
 
-    def test_deleting_map_removes_its_history(self):
+    def test_trash_keeps_history_until_permanent_delete(self):
         self.server.history_interval = 0
         self.put_text(0, "a")
         self.put_text(1, "b")
         self.req("DELETE", "/api/maps/abc")
-        self.assertFalse((self.data / "history" / "abc").exists())
+        self.req("POST", "/api/trash/abc/restore", raw=b"")
+        self.assertEqual(len(self.req("GET", "/api/maps/abc/history")[1]), 1, "histórico volta junto")
+        self.req("DELETE", "/api/maps/abc")
+        self.req("DELETE", "/api/trash/abc")
+        self.assertEqual(self.req("GET", "/api/maps/abc/history")[1], [], "apagar de vez leva o histórico")
 
     def test_delete_goes_to_trash_and_restores_everything(self):
         self.make_map()
@@ -226,16 +227,20 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.raw_get(f"/api/maps/abc/files/{info['id']}")[0], 200, "arquivos voltam junto")
         self.assertEqual(self.req("GET", "/api/trash")[1], [])
 
-    def test_restore_conflict_and_permanent_delete(self):
+    def test_saving_trashed_document_and_permanent_delete(self):
         self.make_map()
+        _, info = self.upload("abc", "foto.png", b"x")
         self.req("DELETE", "/api/maps/abc")
-        self.make_map()  # outro mapa com o mesmo id
-        self.assertEqual(self.req("POST", "/api/trash/abc/restore", raw=b"")[0], 409)
+        # aba antiga ainda salvando o documento apagado em outra aba: não recria por baixo da lixeira
+        self.assertEqual(self.req("PUT", "/api/maps/abc", {"version": 1, "root": {"text": "b", "children": []}})[0], 410)
+        self.assertEqual(self.req("POST", "/api/trash/zzz/restore", raw=b"")[0], 404)
         self.assertEqual(self.req("DELETE", "/api/trash/abc")[0], 204)
         self.assertEqual(self.req("GET", "/api/trash")[1], [])
-        self.assertFalse((self.data / "trash" / "abc").exists())
+        self.assertFalse((self.data / "attachments" / "abc").exists(), "anexos saem junto")
         self.assertEqual(self.req("DELETE", "/api/trash/abc")[0], 404)
         self.assertEqual(self.req("DELETE", "/api/trash/..%2Fx")[0], 400)
+        self.make_map()  # o id fica livre de novo
+        self.assertEqual(self.raw_get("/api/maps/abc")[0], 200)
 
     def test_duplicate_copies_map_and_files(self):
         self.make_map()
@@ -289,8 +294,7 @@ class ApiTest(unittest.TestCase):
         self.req("PUT", "/api/maps/abc", {"version": 0, "root": {"text": "a", "children": []}})
         _, info = self.upload("abc", "foto.png", b"x")
         self.assertEqual(self.req("DELETE", "/api/maps/abc")[0], 204)
-        self.assertEqual(self.req("GET", f"/api/maps/abc/files/{info['id']}")[0], 404)
-        self.assertFalse((self.data / "files" / "abc").exists())
+        self.assertEqual(self.req("GET", f"/api/maps/abc/files/{info['id']}")[0], 404, "documento na lixeira não serve arquivos")
 
     def test_body_too_large_is_413(self):
         status, _ = self.req("PUT", "/api/maps/abc", raw=b"x", headers={"Content-Length": "5000001"})
@@ -314,6 +318,67 @@ class ApiTest(unittest.TestCase):
         for b in bad:
             self.assertEqual(self.req("PUT", "/api/folders", b)[0], 400, b)
         self.assertEqual([m["id"] for m in self.req("GET", "/api/maps")[1]], [], "pastas não aparecem como documento")
+
+
+class MigrationTest(unittest.TestCase):
+    """Formato antigo (um .json por documento) importado para o banco na primeira partida."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.data = Path(self.tmp.name)
+        d = self.data
+        mp = lambda text, v: json.dumps({"version": v, "root": {"text": text, "children": []}})
+        (d / "a.json").write_text(mp("Ativo", 3))
+        (d / "bad.json").write_text("{")
+        (d / "history" / "a").mkdir(parents=True)
+        (d / "history" / "a" / "2.json").write_text(mp("Antes", 2))
+        (d / "files" / "a").mkdir(parents=True)
+        (d / "files" / "a" / ("f" * 32 + ".png")).write_bytes(b"img")
+        (d / "trash" / "t" / "files").mkdir(parents=True)
+        (d / "trash" / "t" / "map.json").write_text(json.dumps({"version": 1, "type": "board", "title": "Lixo", "elements": []}))
+        (d / "trash" / "t" / "files" / ("e" * 32 + ".png")).write_bytes(b"old")
+        (d / "folders").mkdir()
+        (d / "folders" / "tree.json").write_text(json.dumps({"version": 4, "folders": [{"id": "p", "name": "Pasta", "parent": None}], "place": {"a": "p"}}))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.server = make_server(d, 0)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.tmp.cleanup()
+
+    def get(self, path):
+        try:
+            with urllib.request.urlopen(self.base + path) as r:
+                body = r.read()
+                return r.status, (json.loads(body) if r.headers.get_content_type() == "application/json" else body)
+        except urllib.error.HTTPError as e:
+            return e.code, None
+
+    def test_everything_is_imported_and_old_files_are_kept(self):
+        self.assertEqual([(m["id"], m["title"]) for m in self.get("/api/maps")[1]], [("a", "Ativo")])
+        self.assertEqual(self.get("/api/maps/a")[1]["version"], 3)
+        self.assertEqual([h["version"] for h in self.get("/api/maps/a/history")[1]], [2])
+        self.assertEqual(self.get(f"/api/maps/a/files/{'f' * 32}.png"), (200, b"img"))
+        self.assertEqual([(t["id"], t["title"]) for t in self.get("/api/trash")[1]], [("t", "Lixo")])
+        self.assertEqual(self.get("/api/folders")[1]["place"], {"a": "p"})
+        self.assertTrue((self.data / "attachments" / "t" / ("e" * 32 + ".png")).exists(), "anexos da lixeira também")
+        backups = list(self.data.glob("legacy-*"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(sorted(p.name for p in backups[0].iterdir()), ["a.json", "bad.json", "files", "folders", "history", "trash"],
+                         "nada apagado: o formato antigo inteiro vai para o backup (inclusive o corrompido)")
+        self.assertFalse((self.data / "a.json").exists())
+
+    def test_second_start_does_not_import_again(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.server = make_server(self.data, 0)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        self.assertEqual(len(list(self.data.glob("legacy-*"))), 1)
+        self.assertEqual(len(self.get("/api/maps")[1]), 1)
 
 
 class WatchTest(unittest.TestCase):

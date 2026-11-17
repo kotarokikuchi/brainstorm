@@ -7,7 +7,7 @@ ENV GALHO_HOST=0.0.0.0 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
-COPY app.py ./
+COPY app.py store.py ./
 COPY static ./static
 
 # roda sem root; o docker-compose troca o usuário pelo seu (arquivos de ./data ficam seus)

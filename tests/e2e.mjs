@@ -297,10 +297,12 @@ await sleep(900);
 // clicar fora: fundo do mapa fecha menus e tira a seleção; cabeçalho só fecha menus; setas voltam a selecionar
 const emptyPoint = () => ev(`(() => { for (let y = 120; y < 700; y += 20) for (let x = 20; x < 1300; x += 20) if (document.elementFromPoint(x, y)?.id === 'canvas') return [x, y]; })()`);
 const visible = (sel) => ev(`!document.querySelector('${sel}').hidden`);
+// ponto vazio do cabeçalho (não cai em botão nem no nome, que mudam de largura)
+const headerPoint = () => ev(`(() => { for (let x = 400; x < 1300; x += 10) if (document.elementFromPoint(x, 25)?.classList.contains('topbar')) return [x, 25]; })()`);
 await clickNode('Q2');
 await ev(`document.querySelector('#more-btn').click()`);
 assert.equal(await visible('#node-menu'), true);
-await mouse('mousePressed', 300, 25); await mouse('mouseReleased', 300, 25);  // cabeçalho
+const [hx, hy] = await headerPoint(); await mouse('mousePressed', hx, hy); await mouse('mouseReleased', hx, hy);  // cabeçalho (espaço vazio)
 assert.equal(await visible('#node-menu'), false, 'clicar no cabeçalho fecha o menu');
 assert.equal(await visible('#toolbar'), true, 'cabeçalho mantém a seleção');
 await ev(`document.querySelector('#style-btn').click()`);

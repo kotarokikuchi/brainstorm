@@ -3,16 +3,16 @@ import json
 import mimetypes
 import os
 import re
-import shutil
 import sys
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
+
+from store import Store, migrate_legacy
 
 ROOT = Path(__file__).resolve().parent
 ID_RE = re.compile(r"^[a-z0-9-]{1,64}$")
@@ -20,7 +20,6 @@ MAX_BODY = 5_000_000
 START = f"{os.getpid()}-{time.time()}"  # muda a cada partida/reinício do servidor
 MAX_FILE = 20_000_000
 HISTORY_INTERVAL = 120  # s entre cópias no histórico (autosave grava a cada edição)
-HISTORY_MAX = 50        # versões guardadas por mapa
 FILE_RE = re.compile(r"^[a-f0-9]{32}(\.[a-z0-9]{1,10})?$")
 # só estes tipos abrem no navegador; o resto (inclusive SVG/HTML) sempre baixa como anexo
 INLINE = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
@@ -35,18 +34,8 @@ def valid_doc(body):
     return body.get("type", "map") == "map" and isinstance(body.get("root"), dict)
 
 
-def doc_title(data):
-    return data.get("title", "") if data.get("type") == "board" else data["root"].get("text", "")
-
-
-def doc_size(data, count):
-    # tópicos do mapa ou elementos do quadro (mostrado no histórico)
-    return len(data["elements"]) if data.get("type") == "board" else count(data["root"])
-
-
 # pastas: {version, folders: [{id, name, parent}], place: {id do documento: id da pasta}}
 # (fica fora dos documentos: mover não mexe na versão de um mapa aberto em outra aba)
-EMPTY_FOLDERS = {"version": 0, "folders": [], "place": {}}
 
 
 def valid_folders(body):
@@ -70,15 +59,6 @@ def valid_folders(body):
             seen.add(cur)
             cur = parents[cur]
     return all(isinstance(k, str) and ID_RE.match(k) and v in parents for k, v in body["place"].items())
-
-
-def read_map(file):
-    # JSON do mapa como dict; None se o arquivo estiver corrompido
-    try:
-        data = json.loads(file.read_text("utf-8"))
-    except (ValueError, UnicodeDecodeError):
-        return None
-    return data if isinstance(data, dict) else None
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -133,7 +113,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._folders(method)
             return True
         if path == "/api/maps" and method == "GET":
-            self._send(200, self._list())
+            self._send(200, self.server.store.list_docs())
             return True
         if not path.startswith("/api/maps/"):
             return False
@@ -150,24 +130,17 @@ class Handler(SimpleHTTPRequestHandler):
         if sub:
             self._files(method, map_id, sub)
             return True
-        file = self.server.data_dir / f"{map_id}.json"
+        store = self.server.store
         if method == "GET":
-            if not file.exists():
-                self._send(404, {"error": "not found"})
-            else:
-                data = read_map(file)
-                self._send(*((200, data) if data is not None else (500, {"error": "corrupt map file"})))
+            data = store.get(map_id)
+            self._send(*((200, data) if data is not None else (404, {"error": "not found"})))
         elif method == "DELETE":
-            if not file.exists():
-                self._send(404, {"error": "not found"})
-            else:
-                self._to_trash(map_id)
-                self._send(204, None)
+            self._send(*((204, None) if store.delete(map_id) else (404, {"error": "not found"})))
         elif method == "PUT":
-            self._put(map_id, file)
+            self._put(map_id)
         return True
 
-    def _put(self, map_id, file):
+    def _put(self, map_id):
         length = int(self.headers.get("Content-Length") or 0)
         if length > MAX_BODY:
             self.close_connection = True
@@ -180,142 +153,59 @@ class Handler(SimpleHTTPRequestHandler):
         if not valid_doc(body):
             self._send(400, {"error": "invalid map"})
             return
-        # ponytail: checagem de versão sem lock; dois PUTs simultâneos no mesmo
-        # mapa podem passar juntos. Aceitável para uso pessoal.
-        if file.exists():
-            data = read_map(file)
-            if data is None:  # não sobrescreve um arquivo que não conseguimos ler
-                self._send(500, {"error": "corrupt map file"})
-                return
-            stored = data.get("version", 0)
-            if body["version"] != stored:
-                self._send(409, {"version": stored})
-                return
-            body["version"] = stored + 1
-            self._snapshot(map_id, file, stored)
+        result, version = self.server.store.put(map_id, body, self.server.history_interval)
+        if result == "trashed":  # apagado em outra aba: não recria por baixo da lixeira
+            self._send(410, {"error": "document is in the trash"})
+        elif result == "conflict":
+            self._send(409, {"version": version})
         else:
-            body["version"] = 1
-        body["id"] = map_id
-        tmp = file.with_suffix(".tmp")
-        tmp.write_text(json.dumps(body, ensure_ascii=False), "utf-8")
-        os.replace(tmp, file)
-        self._send(200, {"version": body["version"]})
+            self._send(200, {"version": version})
 
-    # ---- Lixeira: data/trash/<id>/ guarda map.json, files/ e history/ do mapa apagado ----
-    def _parts(self, map_id):
-        d = self.server.data_dir
-        return [(d / f"{map_id}.json", "map.json"), (d / "files" / map_id, "files"), (d / "history" / map_id, "history")]
-
-    def _to_trash(self, map_id):
-        box = self.server.data_dir / "trash" / map_id
-        shutil.rmtree(box, ignore_errors=True)  # apagar de novo o mesmo id substitui o anterior
-        box.mkdir(parents=True)
-        for src, name in self._parts(map_id):
-            if src.exists():
-                shutil.move(src, box / name)
-
+    # ---- Lixeira: o documento continua no banco com a data de exclusão ----
     def _trash(self, method, rest):
-        root = self.server.data_dir / "trash"
+        store = self.server.store
         if not rest:
-            if method != "GET":
-                self._send(404, {"error": "not found"})
-                return
-            items = []
-            for box in root.glob("*") if root.exists() else []:
-                data = read_map(box / "map.json") if (box / "map.json").exists() else None
-                if data is None:
-                    continue
-                mtime = box.stat().st_mtime
-                items.append((mtime, {"id": box.name, "title": doc_title(data),
-                                      "deleted": datetime.fromtimestamp(mtime, timezone.utc).isoformat()}))
-            self._send(200, [i for _, i in sorted(items, key=lambda x: x[0], reverse=True)])
+            self._send(*((200, store.trash()) if method == "GET" else (404, {"error": "not found"})))
             return
         map_id, _, action = rest.partition("/")
         if not ID_RE.match(map_id):
             self._send(400, {"error": "invalid id"})
             return
-        box = root / map_id
-        if not box.is_dir():
-            self._send(404, {"error": "not found"})
-            return
         if method == "DELETE" and not action:
-            shutil.rmtree(box)
-            self._send(204, None)
+            self._send(*((204, None) if store.purge(map_id) else (404, {"error": "not found"})))
         elif method == "POST" and action == "restore":
-            if (self.server.data_dir / f"{map_id}.json").exists():
-                self._send(409, {"error": "a map with this id already exists"})
-                return
-            for dst, name in self._parts(map_id):
-                if (box / name).exists():
-                    dst.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.move(box / name, dst)
-            shutil.rmtree(box)
-            self._send(200, {"id": map_id})
+            self._send(*((200, {"id": map_id}) if store.restore(map_id) else (404, {"error": "not found"})))
         else:
             self._send(404, {"error": "not found"})
 
     def _duplicate(self, map_id):
-        d = self.server.data_dir
-        data = read_map(d / f"{map_id}.json") if (d / f"{map_id}.json").exists() else None
-        if data is None:
-            self._send(404, {"error": "not found"})
-            return
-        new_id = f"{map_id[:48]}-copia-{uuid.uuid4().hex[:6]}"
-        data.update(id=new_id, version=1)
-        if data.get("type") == "board":
-            data["title"] = f"{data.get('title', '')} (cópia)"
-        else:
-            data["root"]["text"] = f"{data['root'].get('text', '')} (cópia)"
-        (d / f"{new_id}.json").write_text(json.dumps(data, ensure_ascii=False), "utf-8")
-        if (d / "files" / map_id).exists():
-            shutil.copytree(d / "files" / map_id, d / "files" / new_id)  # imagens/anexos apontam para o mapa
-        self._send(201, {"id": new_id})
-
-    def _snapshot(self, map_id, file, version):
-        # guarda a versão que vai ser sobrescrita, no máximo uma a cada HISTORY_INTERVAL s
-        folder = self.server.data_dir / "history" / map_id
-        folder.mkdir(parents=True, exist_ok=True)
-        snaps = sorted(folder.glob("*.json"), key=lambda p: int(p.stem))
-        if snaps and time.time() - snaps[-1].stat().st_mtime < self.server.history_interval:
-            return
-        shutil.copy2(file, folder / f"{version}.json")  # mantém a data em que aquela versão foi gravada
-        for old in sorted(folder.glob("*.json"), key=lambda p: int(p.stem))[:-HISTORY_MAX]:
-            old.unlink()
+        new_id = self.server.store.duplicate(map_id)
+        self._send(*((201, {"id": new_id}) if new_id else (404, {"error": "not found"})))
 
     def _history(self, method, map_id, sub):
         # GET /api/maps/<id>/history (lista) e /api/maps/<id>/history/<versão> (conteúdo)
-        folder = self.server.data_dir / "history" / map_id
         if method != "GET":
             self._send(404, {"error": "not found"})
             return
         _, _, version = sub.partition("/")
         if not version:
-            items = []
-            for f in sorted(folder.glob("*.json"), key=lambda p: int(p.stem), reverse=True):
-                data = read_map(f)
-                if data is None:
-                    continue
-                count = lambda n: 1 + sum(count(c) for c in n.get("children", []))
-                saved = datetime.fromtimestamp(f.stat().st_mtime, timezone.utc).isoformat()
-                items.append({"version": int(f.stem), "saved": saved,
-                              "title": doc_title(data), "nodes": doc_size(data, count)})
-            self._send(200, items)
+            self._send(200, self.server.store.history(map_id))
             return
         if not version.isdigit():
             self._send(400, {"error": "invalid version"})
             return
-        data = read_map(folder / f"{version}.json") if (folder / f"{version}.json").exists() else None
+        data = self.server.store.history_version(map_id, int(version))
         self._send(*((200, data) if data is not None else (404, {"error": "not found"})))
 
     def _files(self, method, map_id, sub):
-        # /api/maps/<id>/files (POST) e /api/maps/<id>/files/<arquivo> (GET)
-        folder = self.server.data_dir / "files" / map_id
+        # /api/maps/<id>/files (POST) e /api/maps/<id>/files/<arquivo> (GET); só de documento ativo
+        folder = self.server.store.files(map_id)
         if method == "POST" and sub == "files":
             # cabeçalho próprio obrigatório: o navegador faz preflight (que não autorizamos) para outros sites
             if "X-Filename" not in self.headers:
                 self._send(400, {"error": "missing X-Filename"})
                 return
-            if not (self.server.data_dir / f"{map_id}.json").exists():
+            if not self.server.store.exists(map_id):
                 self._send(404, {"error": "map not found"})
                 return
             length = int(self.headers.get("Content-Length") or 0)
@@ -341,7 +231,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send(400, {"error": "invalid file id"})
             return
         path = folder / file_id
-        if not path.is_file():
+        if not path.is_file() or not self.server.store.exists(map_id):
             self._send(404, {"error": "not found"})
             return
         data = path.read_bytes()
@@ -384,10 +274,8 @@ class Handler(SimpleHTTPRequestHandler):
             pass
 
     def _folders(self, method):
-        file = self.server.data_dir / "folders" / "tree.json"
-        stored = (read_map(file) if file.exists() else None) or EMPTY_FOLDERS
         if method == "GET":
-            self._send(200, stored)
+            self._send(200, self.server.store.folders())
             return
         length = int(self.headers.get("Content-Length") or 0)
         if length > MAX_BODY:
@@ -401,29 +289,8 @@ class Handler(SimpleHTTPRequestHandler):
         if not valid_folders(body):
             self._send(400, {"error": "invalid folders"})
             return
-        # ponytail: mesma checagem de versão sem lock dos documentos
-        if body["version"] != stored.get("version", 0):
-            self._send(409, stored)
-            return
-        body["version"] += 1
-        file.parent.mkdir(parents=True, exist_ok=True)
-        tmp = file.with_suffix(".tmp")
-        tmp.write_text(json.dumps(body, ensure_ascii=False), "utf-8")
-        os.replace(tmp, file)
-        self._send(200, body)
-
-    def _list(self):
-        items = []
-        for f in self.server.data_dir.glob("*.json"):
-            try:
-                m = json.loads(f.read_text("utf-8"))
-                title = doc_title(m)
-            except (ValueError, KeyError, TypeError, AttributeError):
-                continue  # arquivo corrompido não derruba a listagem
-            mtime = f.stat().st_mtime
-            items.append((mtime, {"id": f.stem, "title": title, "type": m.get("type", "map"),
-                                  "updated": datetime.fromtimestamp(mtime, timezone.utc).isoformat()}))
-        return [item for _, item in sorted(items, key=lambda x: x[0], reverse=True)]
+        ok, saved = self.server.store.put_folders(body)
+        self._send(200 if ok else 409, saved)
 
     def _send(self, status, payload):
         data = b"" if payload is None else json.dumps(payload, ensure_ascii=False).encode()
@@ -435,9 +302,14 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(data)
 
 
-def make_server(data_dir: Path, port: int, host: str = "127.0.0.1") -> ThreadingHTTPServer:
+def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: Path | None = None) -> ThreadingHTTPServer:
+    # banco em <dados>/brainstorm.db; anexos em <dados>/attachments (ou files_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
+    store = Store(data_dir / "brainstorm.db", files_dir or data_dir / "attachments")
+    if migrated := migrate_legacy(store, data_dir):
+        print(f"{migrated} documentos do formato antigo importados para o banco (backup em {data_dir}/legacy-*)", flush=True)
     server = ThreadingHTTPServer((host, port), partial(Handler, directory=str(ROOT / "static")))
+    server.store = store
     server.data_dir = data_dir
     server.static_dir = ROOT / "static"
     server.history_interval = HISTORY_INTERVAL
@@ -468,8 +340,10 @@ def restart():
 def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
     # GALHO_HOST/GALHO_DATA: no Docker, escuta em 0.0.0.0 dentro do container e guarda em /data
+    # GALHO_FILES: pasta dos anexos (ex.: um disco externo); padrão <dados>/attachments
     host = os.environ.get("GALHO_HOST", "127.0.0.1")
-    server = make_server(Path(os.environ.get("GALHO_DATA") or ROOT / "data"), port, host)
+    files = os.environ.get("GALHO_FILES")
+    server = make_server(Path(os.environ.get("GALHO_DATA") or ROOT / "data"), port, host, Path(files) if files else None)
     # recarrega sozinho ao editar o servidor (HTML/CSS/JS já vêm frescos a cada F5)
     watch([Path(__file__).resolve()], restart)
     print(f"Abra http://127.0.0.1:{port}")
