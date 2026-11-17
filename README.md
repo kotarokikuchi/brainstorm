@@ -8,19 +8,19 @@ Mapas mentais, quadros de desenho e skills (textos Markdown para LLMs, com previ
 docker compose up -d --build
 ```
 
-Abra http://127.0.0.1:8000. Os dados ficam em `./data` (mapas, quadros, anexos, histórico,
+Abra http://127.0.0.1:8080. Os dados ficam em `./data` (mapas, quadros, anexos, histórico,
 lixeira e pastas). Para parar: `docker compose down`. Depois de mudar o código, rode o
 `docker compose up -d --build` de novo.
 
-Se `docker ps` mostrar a coluna PORTS vazia, a porta 8000 estava ocupada quando o container
-subiu (por exemplo, pelo `python app.py`). Pare o outro servidor e rode
-`docker compose up -d --force-recreate`.
+O container usa a porta 8080 da sua máquina, então ele e o `python app.py` (porta 8000) podem
+rodar ao mesmo tempo. Se `docker ps` mostrar a coluna PORTS vazia, a porta 8080 estava ocupada
+quando o container subiu. Libere a porta e rode `docker compose up -d --force-recreate`.
 
-Outra porta: troque `127.0.0.1:8000:8000` por, por exemplo, `127.0.0.1:8080:8000` no
-`docker-compose.yml`.
+Outra porta: troque o primeiro número de `127.0.0.1:8080:8000` no `docker-compose.yml` (o segundo,
+8000, é a porta dentro do container e não muda).
 
 **Atenção:** o app fala HTTP puro (senha e dados passam sem criptografia). Para acessar de outra
-máquina, use um túnel SSH (`ssh -L 8000:127.0.0.1:8000 usuario@servidor`) ou um proxy reverso com
+máquina, use um túnel SSH (`ssh -L 8080:127.0.0.1:8080 usuario@servidor`) ou um proxy reverso com
 TLS; nunca troque o mapeamento da porta para `0.0.0.0`.
 
 ## Login
