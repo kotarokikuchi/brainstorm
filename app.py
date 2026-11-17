@@ -33,7 +33,7 @@ SESSION_RE = re.compile(rf"(?:^|;)\s*{SESSION_COOKIE}=([A-Za-z0-9_-]+)\s*(?:;|$)
 SESSION_TTL = 30 * 86400
 PUBLIC = {"/login.html", "/login.js", "/style.css", "/i18n.js"}  # plus /fonts/ and /locales/ (look and texts of the login page)
 PUBLIC_DIRS = ("/fonts/", "/locales/")
-EXAMPLE_PASSWORD = "troque-esta-senha"  # the one from .env.example: the app refuses to start with it
+EXAMPLE_PASSWORD = "change-this-password"  # the one from .env.example: the app refuses to start with it
 LOGIN_MAX_FAILS, LOGIN_WINDOW = 10, 600
 # scripts only from the app itself; inline style is used in SVGs; data:/blob: to export PNG and download files
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "

@@ -909,10 +909,10 @@ class MainTest(unittest.TestCase):
         self.assertIsNone(self.main(BRAINSTORM_HOST="0.0.0.0", BRAINSTORM_USER="ana", BRAINSTORM_PASSWORD="s3gredo ç")[0])
 
     def test_example_password_is_refused(self):
-        refused, _, _ = self.main(BRAINSTORM_USER="ana", BRAINSTORM_PASSWORD="troque-esta-senha")
+        refused, _, _ = self.main(BRAINSTORM_USER="ana", BRAINSTORM_PASSWORD="change-this-password")
         self.assertIn(".env.example", refused or "")
         example = (Path(app.__file__).with_name(".env.example")).read_text()
-        self.assertIn("BRAINSTORM_PASSWORD=troque-esta-senha", example, "the refusal follows the example")
+        self.assertIn("BRAINSTORM_PASSWORD=change-this-password", example, "the refusal follows the example")
 
 
 class MigrationTest(unittest.TestCase):
