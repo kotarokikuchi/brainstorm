@@ -5,6 +5,7 @@ Mapas mentais, quadros de desenho e skills (textos Markdown para LLMs, com previ
 ## Rodar com Docker
 
 ```bash
+mkdir -p data                  # antes da primeira vez: senão o Docker cria a pasta como root
 docker compose up -d --build
 ```
 
@@ -12,16 +13,17 @@ Abra http://127.0.0.1:8080. Os dados ficam em `./data` (mapas, quadros, anexos, 
 lixeira e pastas). Para parar: `docker compose down`. Depois de mudar o código, rode o
 `docker compose up -d --build` de novo.
 
-O container usa a porta 8080 da sua máquina, então ele e o `python app.py` (porta 8000) podem
+O container usa a porta 8080 da sua máquina, então ele e o `python3 app.py` (porta 8000) podem
 rodar ao mesmo tempo. Se `docker ps` mostrar a coluna PORTS vazia, a porta 8080 estava ocupada
 quando o container subiu. Libere a porta e rode `docker compose up -d --force-recreate`.
 
 Outra porta: troque o primeiro número de `127.0.0.1:8080:8000` no `docker-compose.yml` (o segundo,
 8000, é a porta dentro do container e não muda).
 
-**Atenção:** o app fala HTTP puro (senha e dados passam sem criptografia). Para acessar de outra
-máquina, use um túnel SSH (`ssh -L 8080:127.0.0.1:8080 usuario@servidor`) ou um proxy reverso com
-TLS; nunca troque o mapeamento da porta para `0.0.0.0`.
+**Atenção:** o app fala HTTP puro (senha e dados passam sem criptografia) e só atende pelos
+endereços `127.0.0.1` e `localhost`. Para acessar de outra máquina, use um túnel SSH
+(`ssh -L 8080:127.0.0.1:8080 usuario@servidor`); nunca troque o mapeamento da porta para `0.0.0.0`.
+Atrás de um proxy reverso com outro domínio ele não funciona: recusa o endereço.
 
 ## Login
 
@@ -32,7 +34,8 @@ cp .env.example .env    # e troque usuário e senha
 ```
 
 Com `BRAINSTORM_USER` e `BRAINSTORM_PASSWORD` definidos (no `.env` ou como variáveis de ambiente,
-que têm prioridade), o app pede login; sem eles, abre sem login. A sessão dura 30 dias; o botão
+que têm prioridade), o app pede login; sem eles, abre sem login para qualquer usuário ou programa
+desta máquina. O app não inicia com a senha de exemplo do `.env.example`. A sessão dura 30 dias; o botão
 "Sair" fica no canto do topo. Depois de 10 senhas erradas em 10 minutos (no total, venham de onde
 vierem), o login fica bloqueado por um tempo.
 
@@ -93,10 +96,10 @@ são importados sozinhos; os arquivos antigos ficam guardados em `data/legacy-<d
 
 ## Rodar sem Docker
 
-Só precisa do Python 3:
+Só precisa do Python 3.10 ou mais novo:
 
 ```bash
-python app.py        # http://127.0.0.1:8000  (ou: python app.py 8080)
+python3 app.py        # http://127.0.0.1:8000  (ou: python3 app.py 8080)
 ```
 
 Nesse modo o servidor reinicia sozinho quando `app.py` muda, e a página recarrega quando
@@ -104,13 +107,17 @@ Nesse modo o servidor reinicia sozinho quando `app.py` muda, e a página recarre
 
 Variáveis opcionais: `BRAINSTORM_HOST` (padrão `127.0.0.1`), `BRAINSTORM_DATA` (padrão `./data`),
 `BRAINSTORM_FILES` (padrão `<BRAINSTORM_DATA>/attachments`) e `BRAINSTORM_USER` / `BRAINSTORM_PASSWORD`
-(login; veja acima).
+(login; veja acima). Sem login, o app só inicia em endereço local; para escutar em outro endereço
+sem login (como dentro do container, que só publica a porta em `127.0.0.1`), defina
+`BRAINSTORM_ALLOW_NO_LOGIN=1`.
 
 ## Testes
 
 ```bash
-python -m unittest test_app        # servidor
-python -m unittest test_backup     # cliente S3 (SigV4), backup e restauração contra um S3 falso
-node --test tests/*.test.mjs       # lógica dos mapas, quadros, skills e pastas
-node tests/e2e.mjs                 # ponta a ponta no Chrome headless (~2 min)
+python3 -m unittest test_app        # servidor
+python3 -m unittest test_backup     # cliente S3 (SigV4), backup e restauração contra um S3 falso
+node --test tests/*.test.mjs        # lógica dos mapas, quadros, skills e pastas
+node tests/e2e.mjs                  # ponta a ponta no Chrome headless (~4 min)
 ```
+
+Os testes em Node pedem o Node 22 ou mais novo; o `e2e` também precisa do `google-chrome` no PATH.
