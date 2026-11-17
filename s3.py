@@ -2,7 +2,7 @@
 import hashlib
 import hmac
 import http.client
-import shutil
+import time
 import urllib.error
 import urllib.request
 # respostas XML do próprio endpoint configurado; o expat da stdlib não busca entidades externas e,
@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from urllib.parse import quote, urlsplit
 
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
+TRANSFER_DEADLINE = 1800  # s por envio/download: o timeout do socket é por operação, um servidor lento seguraria o lock para sempre
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -58,6 +59,18 @@ def file_sha256(path):
     return h.hexdigest()
 
 
+class _Deadline:
+    """Leitura de arquivo (envio) que desiste quando o prazo total estoura."""
+
+    def __init__(self, f):
+        self.f, self.end = f, time.monotonic() + TRANSFER_DEADLINE
+
+    def read(self, n=-1):
+        if time.monotonic() > self.end:
+            raise S3Error("timeout")
+        return self.f.read(n)
+
+
 class S3:
     def __init__(self, endpoint, region, bucket, access_key, secret_key, timeout=60):
         self.endpoint, self.region, self.bucket = endpoint.rstrip("/"), region, bucket
@@ -91,13 +104,17 @@ class S3:
     def put_file(self, key, path):
         size = path.stat().st_size
         with open(path, "rb") as f:  # sha256 calculado antes (o corpo vai em streaming, assinado)
-            self._request("PUT", key, data=f, payload_hash=file_sha256(path),
+            self._request("PUT", key, data=_Deadline(f), payload_hash=file_sha256(path),
                           headers={"Content-Length": str(size), "Content-Type": "application/gzip"}).close()
 
     def get_file(self, key, path):
         with self._request("GET", key) as resp, open(path, "wb") as f:
+            end = time.monotonic() + TRANSFER_DEADLINE
             try:
-                shutil.copyfileobj(resp, f, 1 << 20)
+                while chunk := resp.read(1 << 20):
+                    if time.monotonic() > end:
+                        raise S3Error("timeout")
+                    f.write(chunk)
             except (OSError, http.client.HTTPException) as e:  # conexão caiu no meio do download
                 raise S3Error(f"network error: {e or type(e).__name__}") from None
 
@@ -110,10 +127,16 @@ class S3:
         while True:
             query = {"list-type": "2", "prefix": prefix, **({"continuation-token": token} if token else {})}
             with self._request("GET", query=query) as resp:
-                root = ET.fromstring(resp.read())
-            for c in root.iterfind("{*}Contents"):
-                out.append({"key": c.findtext("{*}Key"), "size": int(c.findtext("{*}Size") or 0),
-                            "modified": c.findtext("{*}LastModified") or ""})
+                body = resp.read()
+            try:  # 200 com XML que não é de S3 (endereço errado, proxy)
+                root = ET.fromstring(body)
+                if not root.tag.endswith("ListBucketResult"):
+                    raise ValueError
+                for c in root.iterfind("{*}Contents"):
+                    out.append({"key": c.findtext("{*}Key"), "size": int(c.findtext("{*}Size") or 0),
+                                "modified": c.findtext("{*}LastModified") or ""})
+            except (ET.ParseError, ValueError):
+                raise S3Error("invalid response") from None
             token = root.findtext("{*}NextContinuationToken")
             if root.findtext("{*}IsTruncated") != "true" or not token:
                 return out

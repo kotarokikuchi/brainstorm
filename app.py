@@ -479,6 +479,9 @@ class Handler(SimpleHTTPRequestHandler):
             self._send(400, {"error": "backup storage is not configured"})
         except (BackupError, S3Error) as e:
             self._send(502, {"error": str(e)})
+        except Exception as e:  # só o tipo: a mensagem poderia ter segredos
+            print(f"backup call failed: {type(e).__name__}", flush=True)
+            self._send(500, {"error": "unexpected error"})
         else:
             self._send(200, self.server.backup.view() if view else result)
 

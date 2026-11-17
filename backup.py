@@ -15,6 +15,7 @@ import threading
 import time
 from contextlib import closing, suppress
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from s3 import S3, S3Error
@@ -26,6 +27,7 @@ DEFAULTS = {"endpoint": "", "region": "", "bucket": "", "prefix": "brainstorm/",
             "interval": 24, "keep": 14, "enabled": False}
 TICK = 60            # s entre as conferências da agenda
 ERROR_RETRY = 3600   # s de espera depois de um backup automático que falhou
+MARGIN = 100 << 20   # bytes de folga no disco ao extrair um restore
 
 
 class Busy(Exception):
@@ -109,8 +111,11 @@ def fingerprint(store):
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
 
-def check_members(tar):
-    # só o banco e attachments/<documento>/<arquivo> (arquivos comuns): nada de links, nada fora do lugar
+def check_members(tar, free):
+    # só o banco e attachments/<documento>/<arquivo> (arquivos comuns): nada de links, nada fora do lugar;
+    # e nada que, descompactado, não caiba no disco (bomba de gzip)
+    if sum(m.size for m in tar.getmembers()) > free - MARGIN:
+        raise BackupError("archive too large for the free disk space")
     for m in tar.getmembers():
         parts = m.name.split("/")
         ok = (m.name == "brainstorm.db" and m.isfile()) or (parts[0] == "attachments" and (
@@ -131,6 +136,30 @@ class Backup:
         self.lock = threading.Lock()  # um backup/restore por vez (agenda e botões)
         self.restoring = False        # True: rotas que gravam respondem 503
         self.restores = 0             # sobe a cada restauração: o /api/events manda as abas recarregarem
+        self._recover()
+
+    @property
+    def _scrub(self):
+        return self.store.db_path.with_name(".backup-scrub.db")  # junto do banco: o segredo não vai para o disco dos anexos
+
+    def _recover(self):
+        """Sobras de execução interrompida: cópia com segredos e anexos que ficaram em .restore-old."""
+        for suffix in ("", "-journal", "-wal", "-shm"):
+            with suppress(OSError):
+                Path(f"{self._scrub}{suffix}").unlink()
+        files_dir, old = self.store.files_dir, self.store.files_dir / ".restore-old"
+        if not old.is_dir():
+            return
+        back = 0
+        for d in sorted(old.iterdir()):
+            if not (files_dir / d.name).exists():
+                with suppress(OSError):
+                    os.rename(d, files_dir / d.name)
+                    back += 1
+        with suppress(OSError):
+            old.rmdir()
+        if back:
+            print(f"restore interrompido: {back} pasta(s) de anexos devolvida(s)", flush=True)
 
     # ---- configuração e status (ficam na tabela settings: fora do backup, não voltam num restore) ----
     def config(self):
@@ -195,7 +224,20 @@ class Backup:
 
     def _archive(self, tmp):
         # cópia consistente do banco (backup() do SQLite), sem configurações, sessões e impressão do login
-        db_copy, archive = tmp / "brainstorm.db", tmp / "backup.tar.gz"
+        db_copy, archive = self._scrub, tmp / "backup.tar.gz"
+        db_copy.unlink(missing_ok=True)
+        try:
+            self._scrubbed_copy(db_copy)
+            with tarfile.open(archive, "w:gz") as tar:
+                tar.add(db_copy, "brainstorm.db")
+                for d, files in attachments(self.store.files_dir):
+                    for f in files:
+                        tar.add(f, f"attachments/{d.name}/{f.name}", recursive=False)
+        finally:
+            db_copy.unlink(missing_ok=True)
+        return archive
+
+    def _scrubbed_copy(self, db_copy):
         with closing(sqlite3.connect(self.store.db_path)) as src, closing(sqlite3.connect(db_copy)) as dst:
             src.backup(dst)
             dst.execute("PRAGMA journal_mode=DELETE")  # arquivo único, sem -wal ao lado
@@ -204,12 +246,6 @@ class Backup:
             dst.execute("DELETE FROM meta WHERE key = 'auth_fingerprint'")
             dst.commit()
             dst.execute("VACUUM")  # reescreve o arquivo: nada do que foi apagado sobra em página livre
-        with tarfile.open(archive, "w:gz") as tar:
-            tar.add(db_copy, "brainstorm.db")
-            for d, files in attachments(self.store.files_dir):
-                for f in files:
-                    tar.add(f, f"attachments/{d.name}/{f.name}", recursive=False)
-        return archive
 
     def _backups(self, client, cfg):
         # só os nossos arquivos, direto no prefixo; o nome tem a data, então ordem alfabética = cronológica
@@ -221,8 +257,8 @@ class Backup:
         try:
             for o in self._backups(client, cfg)[:-cfg["keep"]]:
                 client.delete(o["key"])
-        except S3Error as e:
-            return f"retention: {e}"  # o backup em si deu certo
+        except Exception as e:  # o backup em si deu certo
+            return f"retention: {e if isinstance(e, S3Error) else type(e).__name__}"
         return None
 
     def list(self):
@@ -242,8 +278,8 @@ class Backup:
             cfg = self.config()
             client = self.client(cfg)
             self._run(cfg, prune=False)  # 1. guarda o estado atual (se falhar, não restaura)
-            tmp = self._tmp(".restore-tmp")
             try:
+                tmp = self._tmp(".restore-tmp")
                 archive = tmp / "restore.tar.gz"
                 client.get_file(cfg["prefix"] + name, archive)
                 self._extract(archive, tmp / "data")
@@ -251,7 +287,7 @@ class Backup:
             except (S3Error, OSError, sqlite3.Error) as e:
                 raise BackupError(str(e) or type(e).__name__) from None
             finally:
-                shutil.rmtree(tmp, ignore_errors=True)
+                shutil.rmtree(self.store.files_dir / ".restore-tmp", ignore_errors=True)
             self.restores += 1
             self._prune(client, cfg)  # erro aqui não desfaz nada; o próximo backup tenta de novo
         finally:
@@ -259,10 +295,9 @@ class Backup:
             self.lock.release()
 
     def _extract(self, archive, dest):
-        # ponytail: sem limite de tamanho descompactado; o arquivo vem do bucket do próprio usuário
         try:
             with tarfile.open(archive, "r:gz") as tar:
-                check_members(tar)
+                check_members(tar, shutil.disk_usage(archive.parent).free)
                 tar.extractall(dest, filter="data")
         except (tarfile.TarError, EOFError, OSError):
             raise BackupError("invalid archive") from None

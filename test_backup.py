@@ -275,6 +275,100 @@ class BackupTest(unittest.TestCase):
         self.assertEqual((e.exception.code, json.loads(e.exception.read())), (502, {"error": "403 AccessDenied"}))
         e.exception.close()
 
+    # ---- revisão de segurança ----
+    def test_non_s3_xml_is_an_s3_error(self):
+        orig = FakeS3.do_GET
+        for junk in (b"<html><body>not s3</body></html>", b"<a",
+                     b'<ListBucketResult xmlns="x"><Contents><Key>k</Key><Size>abc</Size></Contents></ListBucketResult>'):
+            FakeS3.do_GET = lambda h, junk=junk: h._reply(200, junk) if "list-type" in h.path else orig(h)
+            self.addCleanup(setattr, FakeS3, "do_GET", orig)
+            with self.assertRaises(S3Error) as e:
+                self.backup.list()
+            self.assertEqual(str(e.exception), "invalid response")
+        self.backup.run()  # o backup vale; a falha da retenção vai para o status
+        self.assertEqual(self.backup.view()["status"]["lastError"], "retention: invalid response")
+
+    def test_api_unexpected_error_is_500_without_the_message(self):
+        server = app.make_server(self.tmp, 0)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        with mock.patch.object(server.backup, "list", side_effect=ValueError(SECRET)), \
+                self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(f"http://127.0.0.1:{server.server_address[1]}/api/backup/list")
+        body = e.exception.read()
+        e.exception.close()
+        self.assertEqual(e.exception.code, 500)
+        self.assertNotIn(SECRET.encode(), body)
+
+    def test_restore_succeeds_even_if_pruning_blows_up(self):
+        name = self.backup.run()
+        self.change_everything()
+        with mock.patch.object(Backup, "_backups", side_effect=ValueError(SECRET)):
+            self.backup.restore(name)  # não levanta: o restore já foi confirmado
+        self.assertEqual(self.store.get("m1")["root"]["text"], "primeiro")
+        self.assertEqual(self.backup.restores, 1)
+
+    def test_restore_tmp_oserror_becomes_backup_error(self):
+        name = self.backup.run()
+        real = Backup._tmp
+        def tmp(b, n):
+            if n == ".restore-tmp":
+                raise OSError("disk full")
+            return real(b, n)
+        with mock.patch.object(Backup, "_tmp", tmp), self.assertRaises(BackupError):
+            self.backup.restore(name)
+        self.assertFalse(self.backup.restoring)
+
+    def test_startup_puts_back_attachments_left_in_restore_old(self):
+        old = self.store.files_dir / ".restore-old"
+        (old / "m9").mkdir(parents=True)
+        (old / "m9" / "z.txt").write_bytes(b"z")
+        (old / "m1").mkdir()  # esse nome existe de novo: não sobrescreve
+        Backup(self.store)
+        self.assertEqual((self.store.files("m9") / "z.txt").read_bytes(), b"z")
+        self.assertEqual((self.store.files("m1") / "a.png").read_bytes(), b"imagem-1")
+        (old / "m1").rmdir()
+        Backup(self.store)
+        self.assertFalse(old.exists())
+
+    def test_secrets_never_touch_the_attachments_disk_and_stale_scrub_is_removed(self):
+        seen = []
+        orig = tarfile.TarFile.add
+        def spy(tar, name, *a, **k):
+            seen.extend(f.name for f in self.store.files_dir.rglob("*") if f.is_file())
+            return orig(tar, name, *a, **k)
+        with mock.patch.object(tarfile.TarFile, "add", spy):
+            self.backup.run()
+        self.assertNotIn("brainstorm.db", seen)  # a cópia com segredos fica junto do banco
+        scrub = self.tmp / ".backup-scrub.db"
+        scrub.write_bytes(SECRET.encode())
+        Backup(self.store)
+        self.assertFalse(scrub.exists())
+        self.backup.run()
+        self.assertFalse(scrub.exists())
+
+    def test_restore_refuses_archive_bigger_than_free_disk(self):
+        name = self.backup.run()
+        free = mock.Mock(free=1 << 20)  # menos que a margem
+        with mock.patch("backup.shutil.disk_usage", return_value=free):
+            with self.assertRaises(BackupError) as e:
+                self.backup.restore(name)
+        self.assertIn("too large", str(e.exception))
+        self.assertEqual(self.store.get("m1")["root"]["text"], "primeiro")
+
+    def test_transfer_deadline(self):
+        self.backup.run()
+        client = self.backup.client(self.backup.config())
+        key = client.list("bs/")[0]["key"]
+        with mock.patch("s3.TRANSFER_DEADLINE", -1):
+            with self.assertRaises(S3Error) as e:
+                client.get_file(key, self.tmp / "dl")
+            self.assertEqual(str(e.exception), "timeout")
+            with self.assertRaises(S3Error) as e:
+                client.put_file("bs/x", self.tmp / "brainstorm.db")
+            self.assertEqual(str(e.exception), "timeout")
+
     # ---- restauração ----
     def snapshot(self):
         files = {str(f.relative_to(self.store.files_dir)): f.read_bytes() for f in self.store.files_dir.rglob("*") if f.is_file()}
