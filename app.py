@@ -1,5 +1,6 @@
 """Servidor local do editor de mapas mentais: arquivos estáticos + API JSON."""
 import hmac
+import ipaddress
 import json
 import mimetypes
 import os
@@ -32,6 +33,7 @@ SESSION_RE = re.compile(rf"(?:^|;)\s*{SESSION_COOKIE}=([A-Za-z0-9_-]+)\s*(?:;|$)
 SESSION_TTL = 30 * 86400
 PUBLIC = {"/login.html", "/login.js", "/style.css", "/i18n.js"}  # e /fonts/ e /locales/ (visual e textos da página de login)
 PUBLIC_DIRS = ("/fonts/", "/locales/")
+EXAMPLE_PASSWORD = "troque-esta-senha"  # a do .env.example: o app não abre com ela
 LOGIN_MAX_FAILS, LOGIN_WINDOW, LOGIN_MAX_DELAY = 10, 600, 60  # LOGIN_MAX_DELAY: s, espera máxima no bloqueio
 # scripts só do próprio app; estilo inline é usado nos SVG; data:/blob: para exportar PNG e baixar arquivos
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
@@ -610,6 +612,13 @@ def load_env(path):
         os.environ.setdefault(key, value)
 
 
+def loopback(host):
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return host == "localhost"  # "" (todas as interfaces) e outros nomes: rede
+
+
 def main():
     load_env(ROOT / ".env")
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
@@ -620,6 +629,12 @@ def main():
     user, password = os.environ.get("BRAINSTORM_USER", ""), os.environ.get("BRAINSTORM_PASSWORD", "")
     if bool(user) != bool(password):
         sys.exit("Defina BRAINSTORM_USER e BRAINSTORM_PASSWORD juntos (no .env ou no ambiente), ou nenhum dos dois.")
+    if password == EXAMPLE_PASSWORD:
+        sys.exit("BRAINSTORM_PASSWORD ainda é a senha de exemplo do .env.example: troque por uma sua.")
+    if not user and not loopback(host) and os.environ.get("BRAINSTORM_ALLOW_NO_LOGIN") != "1":
+        sys.exit(f"Sem BRAINSTORM_USER/BRAINSTORM_PASSWORD o app abre sem login, e BRAINSTORM_HOST={host!r} aceita conexões "
+                 "de outras máquinas. Defina o login ou, se só esta máquina alcança a porta (ex.: Docker publicado em "
+                 "127.0.0.1), BRAINSTORM_ALLOW_NO_LOGIN=1.")
     if not user:
         print("Aviso: sem BRAINSTORM_USER/BRAINSTORM_PASSWORD, o app abre sem login.", flush=True)
     server = make_server(Path(os.environ.get("BRAINSTORM_DATA") or ROOT / "data"), port, host,

@@ -17,6 +17,8 @@ services:
     environment:
       BRAINSTORM_USER: ${BRAINSTORM_USER:-}
       BRAINSTORM_PASSWORD: ${BRAINSTORM_PASSWORD:-}
+      # sem login o app recusa escutar em 0.0.0.0; aqui pode, porque a porta só é publicada em 127.0.0.1
+      BRAINSTORM_ALLOW_NO_LOGIN: "1"
       # BRAINSTORM_FILES: /anexos
     # roda com o seu usuário para os arquivos em ./data não ficarem como root
     user: "${UID:-1000}:${GID:-1000}"

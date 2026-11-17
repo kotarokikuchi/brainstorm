@@ -15,6 +15,7 @@ import urllib.request
 from pathlib import Path
 from unittest import mock
 
+import app
 from app import Handler, load_env, make_server, watch
 from store import Store, migrate_legacy
 
@@ -909,6 +910,50 @@ class EnvFileTest(unittest.TestCase):
             finally:
                 for k in ("BRAINSTORM_T1", "BRAINSTORM_T2", "BRAINSTORM_T3"):
                     os.environ.pop(k, None)
+
+
+class MainTest(unittest.TestCase):
+    """Recusas na partida (main), sem abrir porta: make_server é trocado por um servidor de mentira."""
+
+    class Out(io.StringIO):
+        flushed = ""
+
+        def flush(self):
+            self.flushed = self.getvalue()
+
+    def main(self, **env):
+        # devolve (mensagem de recusa ou None, umask depois do main, saída já descarregada)
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("BRAINSTORM_")}
+        server = mock.Mock(**{"serve_forever.side_effect": KeyboardInterrupt})
+        out, old = self.Out(), os.umask(0o022)
+        try:
+            with mock.patch.dict(os.environ, {**clean, **env}, clear=True), mock.patch("sys.argv", ["app.py", "0"]), \
+                    mock.patch("app.load_env"), mock.patch("app.watch"), mock.patch("app.make_server", return_value=server), \
+                    contextlib.redirect_stdout(out):
+                app.main()
+            refused = None
+        except SystemExit as e:
+            refused = str(e.code)
+        finally:
+            umask = os.umask(old)
+        return refused, umask, out.flushed
+
+    def test_no_login_on_a_network_address_is_refused(self):
+        for host in ("0.0.0.0", "192.168.0.10", "::", ""):
+            refused, _, _ = self.main(BRAINSTORM_HOST=host)
+            self.assertIn("BRAINSTORM_ALLOW_NO_LOGIN", refused or "", host)
+        for host in ("127.0.0.1", "127.0.0.2", "localhost", "::1"):
+            self.assertIsNone(self.main(BRAINSTORM_HOST=host)[0], host)
+        self.assertIsNone(self.main()[0], "padrão: 127.0.0.1")
+        self.assertIsNone(self.main(BRAINSTORM_HOST="0.0.0.0", BRAINSTORM_ALLOW_NO_LOGIN="1")[0])
+        self.assertIsNotNone(self.main(BRAINSTORM_HOST="0.0.0.0", BRAINSTORM_ALLOW_NO_LOGIN="sim")[0], "só 1 libera")
+        self.assertIsNone(self.main(BRAINSTORM_HOST="0.0.0.0", BRAINSTORM_USER="ana", BRAINSTORM_PASSWORD="s3gredo ç")[0])
+
+    def test_example_password_is_refused(self):
+        refused, _, _ = self.main(BRAINSTORM_USER="ana", BRAINSTORM_PASSWORD="troque-esta-senha")
+        self.assertIn(".env.example", refused or "")
+        example = (Path(app.__file__).with_name(".env.example")).read_text()
+        self.assertIn("BRAINSTORM_PASSWORD=troque-esta-senha", example, "a recusa acompanha o exemplo")
 
 
 class MigrationTest(unittest.TestCase):
