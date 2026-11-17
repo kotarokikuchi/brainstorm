@@ -1,10 +1,10 @@
-// Configurações: chaves de LLM e backup no Wasabi/S3. O servidor nunca devolve um segredo, só o final mascarado.
+// Settings: LLM keys and backup to Wasabi/S3. The server never returns a secret, only the masked tail.
 import { t, fmtDateTime } from './i18n.js';
 import { fmtSize } from './model.js';
 
 const $ = (s) => document.querySelector(s);
 const PROVIDERS = { anthropic: 'Anthropic', openai: 'OpenAI', gemini: 'Google Gemini', deepseek: 'DeepSeek', openrouter: 'OpenRouter' };
-// regiões do Wasabi (docs.wasabi.com, "service URLs"): escolher uma preenche o endpoint
+// Wasabi regions (docs.wasabi.com, "service URLs"): picking one fills in the endpoint
 const WASABI = {
   'us-east-1': 'N. Virginia', 'us-east-2': 'N. Virginia', 'us-central-1': 'Texas', 'us-west-1': 'Oregon', 'us-west-2': 'San Jose',
   'ca-central-1': 'Toronto', 'eu-central-1': 'Amsterdam', 'eu-central-2': 'Frankfurt', 'eu-west-1': 'London', 'eu-west-2': 'Paris',
@@ -18,7 +18,7 @@ async function call(method, path, body) {
     const data = r.status === 204 ? null : await r.json().catch(() => null);
     return { ok: r.ok, status: r.status, data };
   } catch {
-    return { ok: false, status: 0, data: null };  // rede fora do ar: nunca rejeita
+    return { ok: false, status: 0, data: null };  // network down: never rejects
   }
 }
 const errorText = (r) => (r.status === 409 ? t('settings.busy') : t('settings.error', { detail: r.data?.error ?? (r.status ? `HTTP ${r.status}` : 'network error') }));
@@ -51,7 +51,7 @@ function llmRow(p) {
   const save = el('button', { className: 'primary', textContent: t('common.save') });
   const remove = el('button', { className: 'danger-link', textContent: t('settings.remove'), hidden: !p.configured });
   const badge = el('span', { className: 'settings-badge' + (p.configured ? ' on' : ''), textContent: p.configured ? t('settings.llm.configured') : t('settings.llm.notConfigured') });
-  // LLM padrão: um só, e só entre os que têm chave
+  // default LLM: only one, and only among those that have a key
   const radio = el('input', { type: 'radio', name: 'llm-default', checked: !!p.default, disabled: !p.configured });
   const pick = el('label', { className: 'llm-default', title: p.configured ? '' : t('settings.llm.defaultNeedsKey') }, radio, el('span', { textContent: t('settings.llm.default') }));
   const li = el('li', { className: 'settings-card settings-grid' + (p.default ? ' is-default' : '') },
@@ -64,7 +64,7 @@ function llmRow(p) {
   radio.onchange = async () => {
     const r = await call('PUT', `/api/settings/llm/${p.id}`, { default: true });
     if (!r.ok) { say(msg, errorText(r), true); radio.checked = false; return; }
-    await loadLlm();  // os outros cartões perdem a marca
+    await loadLlm();  // the other cards lose the mark
     say($(`#llm-list [data-id="${p.id}"] .settings-msg`), t('settings.llm.defaultSaved', { name }));
   };
   save.onclick = async () => {
@@ -92,7 +92,7 @@ regions.replaceChildren(...Object.entries(WASABI).map(([code, city]) => el('opti
 $('#backup-region').addEventListener('input', (e) => {
   if (WASABI[e.target.value]) $('#backup-endpoint').value = `https://s3.${e.target.value}.wasabisys.com`;
 });
-// nome do arquivo → data (UTC): brainstorm-2026-11-17-093000.tar.gz
+// file name → date (UTC): brainstorm-2026-11-17-093000.tar.gz
 const whenOf = (name) => {
   const m = name.match(/(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(\d{2})/);
   return m ? fmtDateTime(new Date(Date.UTC(m[1], m[2] - 1, m[3], m[4], m[5], m[6]))) : name;
@@ -127,7 +127,7 @@ function showStatus() {
   if (!v.configured) lines.push(t('settings.backup.notConfigured'));
   else lines.push(s.lastSuccess ? t('settings.backup.lastSuccess', { when: fmtDateTime(new Date(s.lastSuccess)) }) : t('settings.backup.never'));
   if (s.lastError) lines.push(t('settings.backup.lastError', { when: fmtDateTime(new Date(s.lastAttempt)), error: s.lastError }));
-  $('#backup-status').classList.remove('error');  // o erro de uma ação anterior não pinta o status novo
+  $('#backup-status').classList.remove('error');  // an error from an earlier action does not tint the new status
   $('#backup-status').replaceChildren(...lines.map((l, i) => el('span', { className: i ? 'error' : '', textContent: l })));
   $('#backup-run').disabled = !v.configured;
 }
@@ -162,7 +162,7 @@ $('#backup-form').addEventListener('submit', async (e) => {
   loadList();
 });
 
-// botões que esperam o servidor ficam desligados até a resposta (backup e restore são síncronos)
+// buttons that wait for the server stay disabled until it answers (backup and restore are synchronous)
 async function busy(text, work) {
   const buttons = document.querySelectorAll('#settings-backup button');
   for (const b of buttons) b.disabled = true;
@@ -170,14 +170,14 @@ async function busy(text, work) {
   try { return await work(); } finally {
     for (const b of buttons) b.disabled = false;
     $('#backup-run').disabled = !backupView?.configured;
-    // nenhuma resposta substituiu o texto de andamento: volta ao status guardado
+    // no response replaced the progress text: go back to the stored status
     if ($('#backup-status').textContent === text) backupView ? showStatus() : say($('#backup-status'), '');
   }
 }
 
 $('#backup-run').onclick = () => busy(t('settings.backup.running'), async () => {
   const r = await call('POST', '/api/backup/run');
-  await loadBackup();  // status novo (sucesso ou erro, que fica guardado) e a lista
+  await loadBackup();  // new status (success or error, which is kept) and the list
   if (!r.ok && r.status !== 502) say($('#backup-status'), errorText(r), true);
 });
 
@@ -185,7 +185,7 @@ function restoreBackup(name) {
   if (!confirm(t('settings.backup.restoreConfirm', { when: whenOf(name) }))) return;
   return busy(t('settings.backup.restoring'), async () => {
     const r = await call('POST', '/api/backup/restore', { name });
-    if (r.ok) { location.reload(); return; }  // tudo mudou: as outras abas também recarregam (/api/events)
+    if (r.ok) { location.reload(); return; }  // everything changed: the other tabs reload too (/api/events)
     say($('#backup-status'), errorText(r), true);
   });
 }

@@ -1,22 +1,22 @@
-// Pastas (lógica pura): tree = {version, folders: [{id, name, parent}], place: {id do documento: id da pasta}}
+// Folders (pure logic): tree = {version, folders: [{id, name, parent}], place: {document id: folder id}}
 
-const str = (x) => String(x ?? '');  // título/nome vindo do arquivo pode não ser texto
+const str = (x) => String(x ?? '');  // a title/name read from the file may not be text
 const byId = (tree, id) => tree.folders.find(f => f.id === id) ?? null;
 
-// pasta de um documento; pasta que sumiu conta como Início (null)
+// a document's folder; a folder that no longer exists counts as Home (null)
 export const folderOf = (tree, docId) => byId(tree, tree.place[docId])?.id ?? null;
 
 export const childFolders = (tree, parent, locale = 'pt-BR') =>
   tree.folders.filter(f => (f.parent ?? null) === parent).sort((a, b) => str(a.name).localeCompare(str(b.name), locale));
 
-// caminho do Início até a pasta (sem o Início); [] para o Início ou pasta desconhecida
+// path from Home to the folder (excluding Home); [] for Home or an unknown folder
 export function folderPath(tree, id) {
   const path = [];
   for (let f = byId(tree, id); f && path.length <= tree.folders.length; f = byId(tree, f.parent)) path.unshift(f);
   return path;
 }
 
-// apaga a pasta: subpastas e documentos sobem para a pasta de cima
+// deletes the folder: subfolders and documents move up to the parent folder
 export function removeFolder(tree, id) {
   const gone = byId(tree, id);
   if (!gone) return tree;
@@ -33,14 +33,14 @@ export function removeFolder(tree, id) {
   };
 }
 
-// põe o documento na pasta (null = Início)
+// puts the document in the folder (null = Home)
 export function placeDoc(tree, docId, folderId) {
   const place = { ...tree.place };
   if (folderId) place[docId] = folderId; else delete place[docId];
   return { ...tree, place };
 }
 
-// a pasta e tudo abaixo dela (destinos proibidos ao mover a pasta)
+// the folder and everything below it (forbidden destinations when moving the folder)
 export function subtree(tree, id) {
   const out = new Set([id]);
   for (let grew = true; grew;) {
@@ -50,33 +50,33 @@ export function subtree(tree, id) {
   return out;
 }
 
-// muda a pasta de lugar; null se o destino for ela mesma ou uma subpasta dela
+// moves the folder; null if the destination is the folder itself or one of its subfolders
 export function moveFolder(tree, id, parent) {
   if (parent && subtree(tree, id).has(parent)) return null;
   return { ...tree, folders: tree.folders.map(f => (f.id === id ? { ...f, parent: parent ?? null } : f)) };
 }
 
-// todas as pastas em árvore (para o menu "Mover para"), com a profundidade de cada uma
+// all folders as a tree (for the "Move to" menu), with each one's depth
 export function folderOptions(tree, parent = null, depth = 0, locale = 'pt-BR') {
   return childFolders(tree, parent, locale).flatMap(f => [{ id: f.id, name: f.name, depth }, ...folderOptions(tree, f.id, depth + 1, locale)]);
 }
 
-// ---- Ordenar e buscar na lista ----
-const fold = (s) => str(s).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();  // sem acento, sem maiúscula
+// ---- Sorting and searching the list ----
+const fold = (s) => str(s).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();  // accent-insensitive, case-insensitive
 const byName = (a, b, locale) => str(a).localeCompare(str(b), locale, { sensitivity: 'base', numeric: true });
 
-// pastas sempre por nome (Z–A inverte); documentos por data de modificação ou por nome
+// folders always by name (Z–A reverses); documents by modification date or by name
 export function sortItems({ folders, docs }, mode, locale = 'pt-BR') {
   const fs = [...folders].sort((a, b) => byName(a.name, b.name, locale));
   const ds = [...docs];
   if (mode === 'az' || mode === 'za') ds.sort((a, b) => byName(a.title, b.title, locale));
-  else ds.sort((a, b) => (a.updated < b.updated ? 1 : a.updated > b.updated ? -1 : 0));  // mais recentes primeiro
+  else ds.sort((a, b) => (a.updated < b.updated ? 1 : a.updated > b.updated ? -1 : 0));  // most recent first
   if (mode === 'za') { fs.reverse(); ds.reverse(); }
   if (mode === 'oldest') ds.reverse();
   return { folders: fs, docs: ds };
 }
 
-// busca em todas as pastas, pelo nome (ou tag, nos documentos); cada palavra precisa aparecer (sem diferença de acento/maiúscula)
+// search across all folders by name (or tag, for documents); every word must appear (accent- and case-insensitive)
 export function searchItems(tree, docs, query) {
   const words = fold(query).split(/\s+/).filter(Boolean);
   const hit = (...texts) => words.every(w => texts.some(s => fold(s).includes(w)));

@@ -1,4 +1,4 @@
-// Skill: documento Markdown usado como skill de um LLM (editor com preview, tags e versões)
+// Skill: a Markdown document used as an LLM skill (editor with preview, tags and versions)
 import { t, fmtDateTime } from './i18n.js';
 import { renderMarkdown, diffLines } from './markdown.js';
 
@@ -21,12 +21,12 @@ function setMode(m) {
   mode = m;
   $('#skill-view').dataset.mode = m;
   for (const b of document.querySelectorAll('.skill-modes button')) b.classList.toggle('active', b.dataset.mode === m);
-  try { localStorage.setItem(MODE, m); } catch { /* armazenamento bloqueado */ }
+  try { localStorage.setItem(MODE, m); } catch { /* storage blocked */ }
   if (m !== 'edit') renderPreview();
 }
 
 function renderPreview() {
-  if (skill) $('#skill-preview').innerHTML = renderMarkdown(skill.content);  // saída já escapada pelo renderMarkdown
+  if (skill) $('#skill-preview').innerHTML = renderMarkdown(skill.content);  // output already escaped by renderMarkdown
 }
 
 function renderTags() {
@@ -105,7 +105,7 @@ function bind() {
   text.addEventListener('keydown', (e) => {
     if (!skill || e.key !== 'Tab' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
     e.preventDefault();
-    document.execCommand('insertText', false, '  ');  // mantém o desfazer nativo do campo
+    document.execCommand('insertText', false, '  ');  // keeps the field's native undo
   });
   document.addEventListener('keydown', (e) => {
     if (document.body.dataset.view === 'skill' && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
@@ -115,7 +115,7 @@ function bind() {
   });
   const input = $('#skill-tag-input');
   input.addEventListener('keydown', (e) => {
-    if (!skill || e.isComposing || e.keyCode === 229) return;  // Enter que confirma a conversão do IME
+    if (!skill || e.isComposing || e.keyCode === 229) return;  // Enter that confirms an IME composition
     if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(input.value); input.value = ''; }
     else if (e.key === 'Backspace' && !input.value && skill.tags.length) { skill.tags.pop(); renderTags(); deps.scheduleSave(skill); }
   });
@@ -127,7 +127,7 @@ function bind() {
     const doc = skill;
     await deps.flushSave();
     if (skill !== doc) return;
-    // com conflito ou erro de gravação o rótulo iria para o texto de outra aba
+    // on a conflict or write error the label would end up over another tab's text
     if (deps.isDirty() || [...label].length > 100) { deps.setStatus(t('skill.versionError'), true); return; }
     const r = await deps.api('POST', `/${skill.id}/history`, label ? { label } : {});
     if (skill !== doc) return;
@@ -151,7 +151,7 @@ function bind() {
     const old = await versionBody(v.dataset.compare ?? v.dataset.restore);
     if (!old || skill !== doc) return;
     if (v.dataset.restore) {
-      // guarda o texto atual no histórico (sem respeitar o intervalo) antes de sobrescrever
+      // stores the current text in the history (ignoring the interval) before overwriting it
       await deps.flushSave();
       if (skill !== doc) return;
       const h = await deps.api('POST', `/${doc.id}/history`, {});
@@ -185,7 +185,7 @@ function bind() {
 
 export async function openSkill(id) {
   const r = await deps.api('GET', `/${id}`);
-  if (location.hash !== `#/skill/${id}`) return;  // o usuário já saiu enquanto carregava
+  if (location.hash !== `#/skill/${id}`) return;  // the user already left while it was loading
   if (!r.ok) {
     if (r.status === 500) alert(t('map.openError'));
     location.hash = '#/';
@@ -193,7 +193,7 @@ export async function openSkill(id) {
   }
   const doc = await r.json();
   if (location.hash !== `#/skill/${id}`) return;
-  doc.id = id;  // o endereço manda: um corpo com outro id não desvia as chamadas à API
+  doc.id = id;  // the URL wins: a body with a different id does not redirect the API calls
   if (doc.type !== 'skill') { location.hash = `#/${doc.type ?? 'map'}/${id}`; return; }
   if (!bound) bind();
   skill = doc;
@@ -204,7 +204,7 @@ export async function openSkill(id) {
   $('#title').textContent = skill.title;
   const place = deps.loadPlace(id);
   let saved = null;
-  try { saved = localStorage.getItem(MODE); } catch { /* idem */ }
+  try { saved = localStorage.getItem(MODE); } catch { /* same */ }
   const text = $('#skill-text');
   text.value = skill.content ?? '';
   closeCompare();

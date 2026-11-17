@@ -1,4 +1,4 @@
-// Lógica pura do editor: árvore, layouts, navegação e histórico (sem DOM).
+// Pure editor logic: tree, layouts, navigation and history (no DOM).
 
 export const PALETTE = [
   '#2f5bea', '#f2b705', '#8b3fd9', '#f97316', '#e43fa4', '#e5383b',
@@ -8,10 +8,10 @@ export const PALETTE = [
 export const uid = () =>
   Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 
-// ---- Estilo ----
+// ---- Style ----
 
-// forma desenhada: a escolhida; senão o padrão do nível (raiz sem caixa, 1º nível pílula,
-// demais sublinhado) — mas qualquer cor/borda/"sem preenchimento" num nó sem forma vira caixa
+// drawn shape: the chosen one; otherwise the level default (root without a box, 1st level pill,
+// the rest underlined) — but any colour/border/"no fill" on a shapeless node turns it into a box
 export function effectiveShape(n, depth) {
   if (n.shape) return n.shape;
   if (depth === 1) return 'pill';
@@ -20,7 +20,7 @@ export function effectiveShape(n, depth) {
 }
 
 export const MARKERS = ['none', 'arrow', 'open', 'triangle', 'triangle-open', 'diamond', 'diamond-open', 'dot', 'dot-open'];
-// formas no espaço 10×10 do marcador, ponta em (10, 5); C = cor
+// shapes in the marker's 10×10 space, tip at (10, 5); C = colour
 const MARKER_SHAPES = {
   arrow: '<path d="M0,0 L10,5 L0,10 L3,5 z" fill="C"/>',
   open: '<path d="M1,1 L9,5 L1,9" fill="none" stroke="C" stroke-width="1.6"/>',
@@ -32,13 +32,13 @@ const MARKER_SHAPES = {
   'dot-open': '<circle cx="5" cy="5" r="3.5" fill="#fff" stroke="C" stroke-width="1.4"/>',
 };
 
-// cor vinda do documento só chega a CSS/SVG se for hexadecimal (nunca url(...), nem outro tipo)
+// a colour from the document only reaches CSS/SVG if it is hexadecimal (never url(...) or any other type)
 export const isHex = (c) => typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(c);
 export const hexColor = (c) => (isHex(c) ? c : null);
 export const safeColor = (c) => (c === 'currentColor' || isHex(c) ? c : '#22a559');
-export const FILE_ID = /^[a-f0-9]{32}(\.[a-z0-9]{1,10})?$/;  // id de arquivo no formato que o servidor gera
+export const FILE_ID = /^[a-f0-9]{32}(\.[a-z0-9]{1,10})?$/;  // file id in the format the server generates
 
-// marcação SVG da ponta; null para "nenhuma" ou tipo desconhecido
+// SVG markup for the tip; null for "none" or an unknown type
 export function markerShape(type, color) {
   if (!Object.hasOwn(MARKER_SHAPES, type)) return null;
   return MARKER_SHAPES[type].replaceAll('C', safeColor(color));
@@ -61,7 +61,7 @@ export function findNode(root, id, parent = null, depth = 0) {
   return null;
 }
 
-// lado da raiz com menos filhos (empate → direita)
+// side of the root with fewer children (tie → right)
 function balancedSide(root) {
   const right = root.children.filter(c => c.side === 'right').length;
   return root.children.length - right < right ? 'left' : 'right';
@@ -95,7 +95,7 @@ export function removeNode(map, nodeId) {
   if (!hit || !hit.parent) return null;
   const kids = hit.parent.children;
   kids.splice(kids.indexOf(hit.node), 1);
-  // ligações que tocam qualquer nó do ramo apagado somem junto
+  // links that touch any node of the deleted branch disappear with it
   if (map.links?.length) {
     const gone = new Set();
     const walk = (n) => { gone.add(n.id); n.children.forEach(walk); };
@@ -105,7 +105,7 @@ export function removeNode(map, nodeId) {
   return hit.parent.id;
 }
 
-// ---- Ligações (setas livres entre dois nós) ----
+// ---- Links (free arrows between two nodes) ----
 export function addLink(map, from, to) {
   if (from === to || !findNode(map.root, from) || !findNode(map.root, to)) return null;
   map.links ??= [];
@@ -121,7 +121,7 @@ export function removeLink(map, linkId) {
   return map.links.length < before;
 }
 
-// curva automática entre os lados mais próximos das duas caixas: [p1, c1, c2, p2]
+// automatic curve between the closest sides of the two boxes: [p1, c1, c2, p2]
 function autoCurve(a, b) {
   const ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by = b.y + b.h / 2;
   let p1, p2, c1, c2;
@@ -133,7 +133,7 @@ function autoCurve(a, b) {
     c1 = [p1[0] + d, p1[1]];
     c2 = [p2[0] - d, p2[1]];
   } else {
-    // nós empilhados: sai e chega pelo lado de fora (longe da raiz) num arco
+    // stacked nodes: leaves and arrives on the outer side (away from the root) in an arc
     const s = Math.sign(ax + bx) || 1;
     p1 = [s > 0 ? a.x + a.w : a.x, ay];
     p2 = [s > 0 ? b.x + b.w : b.x, by];
@@ -151,7 +151,7 @@ const sidePoint = (b, side) => ({
   bottom: [b.x + b.w / 2, b.y + b.h], left: [b.x, b.y + b.h / 2],
 }[side]);
 
-// lado da caixa cujo meio fica mais perto do ponto
+// side of the box whose middle is closest to the point
 export function sideToward(b, [px, py]) {
   return Object.keys(NORMAL).reduce((best, side) => {
     const [x, y] = sidePoint(b, side), [bx, by] = sidePoint(b, best);
@@ -159,7 +159,7 @@ export function sideToward(b, [px, py]) {
   });
 }
 
-// curva saindo/chegando pelos lados escolhidos (lado ausente: o que aponta para o outro nó)
+// curve leaving/arriving by the chosen sides (missing side: the one facing the other node)
 function sidedCurve(a, b, fromSide, toSide) {
   const s1 = fromSide || sideToward(a, center(b)), s2 = toSide || sideToward(b, center(a));
   const p1 = sidePoint(a, s1), p2 = sidePoint(b, s2);
@@ -168,14 +168,14 @@ function sidedCurve(a, b, fromSide, toSide) {
 }
 const curveOf = (a, b, fromSide, toSide) => (fromSide || toSide ? sidedCurve(a, b, fromSide, toSide) : autoCurve(a, b));
 
-// ponto de controle arrastável: meio da curva automática, ou meio dos centros + bend [dx, dy]
+// draggable control point: middle of the automatic curve, or middle of the centres + bend [dx, dy]
 export function linkHandle(a, b, bend, fromSide, toSide) {
   if (bend) return [(a.x + a.w / 2 + b.x + b.w / 2) / 2 + bend[0], (a.y + a.h / 2 + b.y + b.h / 2) / 2 + bend[1]];
   const [p1, c1, c2, p2] = curveOf(a, b, fromSide, toSide);
   return [0, 1].map(i => (p1[i] + 3 * c1[i] + 3 * c2[i] + p2[i]) / 8);
 }
 
-// atributo d da seta; com bend vira quadrática que passa pelo ponto de controle
+// the arrow's d attribute; with bend it becomes a quadratic through the control point
 export function linkPath(a, b, bend, fromSide, toSide) {
   if (!bend) {
     const [p1, c1, c2, p2] = curveOf(a, b, fromSide, toSide);
@@ -187,7 +187,7 @@ export function linkPath(a, b, bend, fromSide, toSide) {
   return `M${p1} Q${c} ${p2}`;
 }
 
-// move o ramo para parentId na posição index; recusa raiz, o próprio nó e descendentes
+// moves the branch to parentId at position index; refuses the root, the node itself and descendants
 export function moveNode(map, nodeId, parentId, index, side = null) {
   const hit = findNode(map.root, nodeId);
   if (!hit || !hit.parent || findNode(hit.node, parentId)) return false;
@@ -201,7 +201,7 @@ export function moveNode(map, nodeId, parentId, index, side = null) {
     n.side = side || n.side || balancedSide(target);
     if (!n.color) n.color = PALETTE[target.children.length % PALETTE.length];
   } else {
-    if (hit.parent === map.root) n.color = null;  // cor era do ramo de 1º nível: passa a herdar
+    if (hit.parent === map.root) n.color = null;  // the colour belonged to the 1st-level branch: it now inherits
     n.side = null;
   }
   target.collapsed = false;
@@ -209,7 +209,7 @@ export function moveNode(map, nodeId, parentId, index, side = null) {
   return true;
 }
 
-// cola uma cópia profunda (ids novos) do ramo como último filho de parentId
+// pastes a deep copy (new ids) of the branch as the last child of parentId
 export function pasteBranch(map, parentId, branch) {
   const clone = (n) => ({ ...n, id: uid(), children: n.children.map(clone) });
   const n = clone(branch);
@@ -218,7 +218,7 @@ export function pasteBranch(map, parentId, branch) {
     n.side = balancedSide(parent);
     n.color ||= PALETTE[parent.children.length % PALETTE.length];
   } else {
-    if (branch.side) n.color = null;  // era 1º nível: passa a herdar a cor do novo ramo
+    if (branch.side) n.color = null;  // it was 1st level: it now inherits the new branch's colour
     n.side = null;
   }
   parent.collapsed = false;
@@ -226,8 +226,8 @@ export function pasteBranch(map, parentId, branch) {
   return n;
 }
 
-// ramo colado pode ter vindo de outro site: campos de estilo com tipo errado saem, para o desenho
-// nunca quebrar (cores só hexadecimais; link e opções só texto; largura só número)
+// a pasted branch may have come from another site: style fields of the wrong type are dropped, so drawing
+// never breaks (colours hexadecimal only; link and options text only; width number only)
 const BRANCH_COLORS = ['color', 'borderColor', 'lineColor', 'textColor'];
 const BRANCH_STRINGS = ['url', 'shape', 'side', 'borderWidth', 'borderStyle', 'lineWidth', 'lineStyle', 'textSize', 'branchLayout'];
 const isObj = (x) => !!x && typeof x === 'object';
@@ -245,7 +245,7 @@ export function sanitizeBranch(b) {
   return n;
 }
 
-// onde um ramo arrastado cairia com o ponteiro em (px, py): {parentId, index, side} ou null
+// where a dragged branch would land with the pointer at (px, py): {parentId, index, side} or null
 export function dropTarget(map, boxes, dragId, px, py) {
   const drag = findNode(map.root, dragId)?.node;
   if (!drag) return null;
@@ -261,7 +261,7 @@ export function dropTarget(map, boxes, dragId, px, py) {
   }
   if (!best || bestD > 120) return null;
   const root = map.root;
-  // ponytail: soltar perto da raiz sempre anexa no fim; ordenar por posição se fizer falta
+  // Simplification: dropping near the root always appends at the end; order by position if it is ever needed
   if (best.id === root.id) {
     const side = map.layout === 'map' ? (px < best.x + best.w / 2 ? 'left' : 'right') : null;
     return { parentId: root.id, index: root.children.length, side };
@@ -333,16 +333,16 @@ export class History {
 }
 
 // ---- Layouts ----
-// Cada layout devolve caixas (canto superior esquerdo + tamanho) e arestas pai→filho.
-// measure(node, depth) -> {w, h} é injetado: no navegador mede via canvas (texto, fonte, largura fixa,
-// imagem e ícones do nó); nos testes é fixo.
+// Each layout returns boxes (top-left corner + size) and parent→child edges.
+// measure(node, depth) -> {w, h} is injected: in the browser it measures via canvas (text, font, fixed width,
+// image and node icons); in tests it is fixed.
 
 const visible = (n) => (n.collapsed ? [] : n.children);
 
-// focusId: desenha só aquele ramo, como centro do mapa (modo foco), mantendo a cor do ramo
+// focusId: draws only that branch, as the map's centre (focus mode), keeping the branch colour
 export function layout(map, measure, focusId = null) {
   const nodes = [], edges = [];
-  // fábrica de caixas: sink recebe as caixas; offset/kind/fixedSide servem aos sub-layouts de ramo
+  // box factory: sink receives the boxes; offset/kind/fixedSide serve the branch sub-layouts
   const makeBox = (sink, offset = 0, kind, fixedSide) => (n, depth, color, side) => {
     const d = depth + offset, { w, h } = measure(n, d);
     const b = { id: n.id, x: 0, y: 0, w, h, depth: d, color, shape: effectiveShape(n, d), side: fixedSide ?? side, kind };
@@ -362,7 +362,7 @@ export function layout(map, measure, focusId = null) {
 function layoutMap(root, measure, box, colorOf, edges, rootColor, { makeBox, nodes }) {
   const GAP_Y = 12;
   const heights = new Map();
-  // "mostrar este ramo como": ramo (não raiz) com filhos visíveis desenhado como organograma/lista
+  // "show this branch as": a (non-root) branch with visible children drawn as an org chart/list
   const hasSub = (n, depth) => depth > 0 && (n.branchLayout === 'org' || n.branchLayout === 'list') && visible(n).length > 0;
   const subLayout = (n, depth, color, side) => {
     const local = [], localEdges = [];
@@ -386,7 +386,7 @@ function layoutMap(root, measure, box, colorOf, edges, rootColor, { makeBox, nod
     heights.set(n.id, h);
     return h;
   };
-  // empilha filhos centrados em centerY, a partir da borda xEdge, para o lado indicado
+  // stacks children centred on centerY, starting from the xEdge border, towards the given side
   const stack = (parentBox, kids, depth, side, xEdge, centerY, color) => {
     const total = kids.reduce((s, c) => s + heights.get(c.id), 0) + GAP_Y * Math.max(0, kids.length - 1);
     let y = centerY - total / 2;
@@ -399,7 +399,7 @@ function layoutMap(root, measure, box, colorOf, edges, rootColor, { makeBox, nod
   const place = (parentBox, n, depth, side, xEdge, centerY, parentColor) => {
     const color = colorOf(n, parentColor, depth);
     if (hasSub(n, depth)) {
-      // calcula o sub-layout à parte e encaixa o bloco: encostado na borda e centrado verticalmente
+      // computes the sub-layout separately and fits the block: flush with the edge and vertically centred
       const s = subLayout(n, depth, color, side);
       const dx = side === 'right' ? xEdge - s.minX : xEdge - (s.minX + s.w), dy = centerY - (s.minY + s.h / 2);
       for (const bx of s.local) { bx.x += dx; bx.y += dy; }
@@ -478,7 +478,7 @@ export function edgePath(layoutName, a, b) {
   if (layoutName === 'list') {
     return `M${a.x + 12},${a.y + a.h} V${b.y + b.h / 2} H${b.x}`;
   }
-  // nós sublinhados (profundidade ≥ 2, sem forma) ligam pela linha de baixo
+  // underlined nodes (depth ≥ 2, no shape) connect from the bottom line
   const anchorY = (n) => (n.shape === 'underline' ? n.y + n.h : n.y + n.h / 2);
   const right = b.x >= a.x + a.w / 2;
   const x1 = right ? a.x + a.w : a.x, y1 = anchorY(a);
@@ -486,7 +486,7 @@ export function edgePath(layoutName, a, b) {
   return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
 }
 
-// nó mais próximo na direção (peso 2× no eixo perpendicular); sem candidato fica parado
+// nearest node in the direction (2× weight on the perpendicular axis); with no candidate it stays put
 export function navigate(boxes, fromId, dir) {
   const c = (b) => [b.x + b.w / 2, b.y + b.h / 2];
   const from = boxes.find(b => b.id === fromId);
@@ -506,9 +506,9 @@ export function navigate(boxes, fromId, dir) {
   return best;
 }
 
-// ---- Estilo: nuvem e contorno do ramo ----
+// ---- Style: cloud and branch outline ----
 
-// contorno de nuvem: arcos para fora ao longo do perímetro (sentido horário)
+// cloud outline: outward arcs along the perimeter (clockwise)
 export function cloudPath({ x, y, w, h }) {
   const pts = [];
   const edge = (x1, y1, x2, y2) => {
@@ -524,7 +524,7 @@ export function cloudPath({ x, y, w, h }) {
   return `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)} ${arcs.join(' ')} Z`;
 }
 
-// retângulo que envolve o nó e seus descendentes visíveis, com folga pad
+// rectangle enclosing the node and its visible descendants, with padding pad
 export function branchBounds(map, boxes, nodeId, pad = 12) {
   const ids = new Set();
   const walk = (n) => { ids.add(n.id); if (!n.collapsed) n.children.forEach(walk); };
@@ -534,7 +534,7 @@ export function branchBounds(map, boxes, nodeId, pad = 12) {
   return { x, y, w: Math.max(...bs.map(b => b.x + b.w)) + pad - x, h: Math.max(...bs.map(b => b.y + b.h)) + pad - y };
 }
 
-// quebra gulosa por palavras para caber em maxW; palavra maior que a largura fica inteira
+// greedy word wrap to fit maxW; a word wider than the width stays whole
 export function wrapLines(text, maxW, widthOf) {
   const lines = [];
   let cur = '';
@@ -546,11 +546,11 @@ export function wrapLines(text, maxW, widthOf) {
   return lines;
 }
 
-// tamanho de arquivo legível (anexos, backups)
+// human-readable file size (attachments, backups)
 export const fmtSize = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
-// ---- Link (URL) no nó ----
-// só http(s); sem esquema vira https://; qualquer outro esquema (javascript:, data:...) é recusado
+// ---- Link (URL) on a node ----
+// http(s) only; no scheme becomes https://; any other scheme (javascript:, data:...) is refused
 export function safeUrl(input) {
   if (typeof input !== 'string') return null;
   const s = input.trim();
@@ -564,7 +564,7 @@ export function safeUrl(input) {
   }
 }
 
-// ---- Outline: recuar (vira último filho do irmão anterior) / desrecuar (sobe para depois do pai) ----
+// ---- Outline: indent (becomes the last child of the previous sibling) / outdent (moves up to after the parent) ----
 export function indentNode(map, nodeId) {
   const hit = findNode(map.root, nodeId);
   const i = hit?.parent ? hit.parent.children.indexOf(hit.node) : -1;
@@ -580,12 +580,12 @@ export function outdentNode(map, nodeId) {
   return moveNode(map, nodeId, grand.id, grand.children.indexOf(hit.parent) + 1, hit.parent.side);
 }
 
-// ---- Exportar: Markdown (raiz = título, ramos = lista com recuo; tudo, mesmo recolhido) ----
-// ---- Área de transferência: ramo como texto com recuo (2 espaços por nível) e o caminho de volta ----
+// ---- Export: Markdown (root = title, branches = indented list; everything, even collapsed) ----
+// ---- Clipboard: branch as indented text (2 spaces per level) and the way back ----
 export const branchToText = (n, depth = 0) =>
   [`${'  '.repeat(depth)}${n.text}`, ...n.children.flatMap(c => branchToText(c, depth + 1))].join('\n');
 
-// cada linha vira um tópico; recuo maior que o da linha de cima = filho; marcadores (- * • 1.) saem
+// each line becomes a topic; deeper indent than the line above = child; bullets (- * • 1.) are stripped
 export function textToBranches(text) {
   const roots = [], stack = [];
   for (const raw of text.replace(/\t/g, '  ').split(/\r?\n/)) {
@@ -600,7 +600,7 @@ export function textToBranches(text) {
 }
 
 export function toMarkdown(map) {
-  // uma linha por tópico; HTML e marcação do texto saem escapados
+  // one line per topic; HTML and text markup come out escaped
   const esc = (t) => String(t ?? '').replace(/\s*\n\s*/g, ' ').replace(/([\\[\]*_`#<>&!])/g, '\\$1');
   const item = (n) => {
     const url = safeUrl(n.url);
@@ -617,5 +617,5 @@ export function toMarkdown(map) {
   return lines.join('\n') + '\n';
 }
 
-// ---- Apresentação: visão geral (null) e um slide por ramo principal ----
+// ---- Presentation: overview (null) and one slide per main branch ----
 export const slides = (map) => [null, ...map.root.children.map(c => c.id)];

@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body data-view="list">
-  <!-- Ícones: Tabler Icons (MIT, https://tabler.io/icons) — licença em LICENSE-tabler-icons.txt -->
+  <!-- Icons: Tabler Icons (MIT, https://tabler.io/icons) — licence in LICENSE-tabler-icons.txt -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <symbol id="i-arrow-back-up" viewBox="0 0 24 24"><path d="M9 14l-4 -4l4 -4" /> <path d="M5 10h11a4 4 0 1 1 0 8h-1" /></symbol>
     <symbol id="i-arrow-forward-up" viewBox="0 0 24 24"><path d="M15 14l4 -4l-4 -4" /> <path d="M19 10h-11a4 4 0 1 0 0 8h1" /></symbol>
@@ -193,7 +193,7 @@
     </svg>
     <input id="editor" hidden autocomplete="off" spellcheck="false">
 
-    <!-- barra flutuante sobre o nó selecionado -->
+    <!-- floating bar over the selected node -->
     <div id="toolbar" class="card" hidden>
       <button id="style-btn" class="icon" data-i18n-title="map.toolbar.style" title="Cor e forma"><svg viewBox="0 0 24 24"><use href="#i-bucket-droplet"/></svg></button>
       <button id="text-btn" class="icon" data-i18n-title="map.toolbar.text" title="Estilo do texto"><svg viewBox="0 0 24 24"><use href="#i-text-color"/></svg></button>
@@ -266,7 +266,7 @@
       <hr>
       <button data-action="delete" class="danger"><span data-i18n="common.delete">Apagar</span> <kbd>Del</kbd></button>
     </div>
-    <!-- barra da ligação selecionada -->
+    <!-- bar of the selected link -->
     <div id="link-toolbar" class="card" hidden>
       <button id="link-color-btn" class="icon" data-i18n-title="map.link.color" title="Cor"><span class="dot"></span></button>
       <span class="sep"></span>
@@ -326,10 +326,10 @@
     </div>
     </div>
 
-    <!-- botões "+" ao lado do nó selecionado -->
+    <!-- "+" buttons beside the selected node -->
     <button id="add-child" class="adder" data-i18n-title="map.addChild" title="Novo filho (Tab)">+</button>
     <button id="add-sibling" class="adder" data-i18n-title="map.addSibling" title="Novo irmão (Enter)">+</button>
-    <!-- modo "Ligar": contorno verde e um "+" em cada lado do nó de origem -->
+    <!-- "Link" mode: green outline and a "+" on each side of the origin node -->
     <div id="link-ring" hidden></div>
     <button class="link-anchor" data-side="top" hidden data-i18n-title="map.link.exitTop" title="Sair por cima">+</button>
     <button class="link-anchor" data-side="right" hidden data-i18n-title="map.link.exitRight" title="Sair pela direita">+</button>

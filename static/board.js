@@ -1,5 +1,5 @@
-// Quadro de desenho (lousa estilo Excalidraw): documento {type: "board", title, elements}.
-// O app.js cuida de rotas e do salvamento automático; este módulo cuida da lousa.
+// Drawing board (Excalidraw-style whiteboard): document {type: "board", title, elements}.
+// app.js handles routes and autosave; this module handles the board.
 
 import {
   createElement, resizeTo, elementPaths, fillPath, elementBounds, DEFAULTS, elementAt, elementsInBox,
@@ -12,15 +12,15 @@ const $ = (s) => document.querySelector(s);
 const SVG = 'http://www.w3.org/2000/svg';
 const svg = $('#board-canvas'), root = $('#board-root');
 let deps = null;   // {api, scheduleSave, setStatus, resetSave}
-let board = null;  // quadro aberto
+let board = null;  // open board
 let tool = 'select', history = new History();
 let drawing = null, panning = null, spaceDown = false;
-let selection = [], gesture = null, clipboard = null;  // gesture: mover / redimensionar / seleção por área
-const TEXT_DEFAULTS = { textAlign: 'left', fontFamily: 'hand' };  // textos antigos não têm esses campos
-const style = { ...DEFAULTS, fontSize: 20, ...TEXT_DEFAULTS };  // estilo para os próximos elementos (o painel muda)
+let selection = [], gesture = null, clipboard = null;  // gesture: move / resize / area selection
+const TEXT_DEFAULTS = { textAlign: 'left', fontFamily: 'hand' };  // older texts do not have these fields
+const style = { ...DEFAULTS, fontSize: 20, ...TEXT_DEFAULTS };  // style for the next elements (the panel changes it)
 let editingText = null, erasing = null;
 const FONTS = {
-  hand: 'Kalam, "Segoe Print", "Comic Sans MS", cursive',  // Kalam vem junto (static/fonts)
+  hand: 'Kalam, "Segoe Print", "Comic Sans MS", cursive',  // Kalam ships with it (static/fonts)
   normal: 'system-ui, -apple-system, "Segoe UI", sans-serif',
   code: 'ui-monospace, "Cascadia Code", Consolas, "DejaVu Sans Mono", monospace',
 };
@@ -31,7 +31,7 @@ const view = { x: 0, y: 0, k: 1 };
 const SHAPES = new Set(['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw']);
 const STYLED = new Set([...SHAPES, 'text', 'note', 'bucket']);
 const HAS_TEXT = new Set(['text', 'note']);
-const NOTE_PAD = 12, NOTE_SIZE = 200, NOTE_COLOR = '#ffec99';  // ferramentas que mostram o painel de estilo
+const NOTE_PAD = 12, NOTE_SIZE = 200, NOTE_COLOR = '#ffec99';  // tools that show the style panel
 
 export function initBoard(d) { deps = d; }
 export const currentBoard = () => board;
@@ -42,7 +42,7 @@ export const newBoard = (id, title = 'Quadro sem título') => ({ id, version: 0,
 
 export async function openBoard(id) {
   const r = await deps.api('GET', `/${id}`);
-  if (location.hash !== `#/board/${id}`) return;  // o usuário já saiu enquanto carregava
+  if (location.hash !== `#/board/${id}`) return;  // the user already left while it was loading
   if (!r.ok) {
     if (r.status === 500) alert(t('board.openError'));
     location.hash = '#/';
@@ -50,12 +50,12 @@ export async function openBoard(id) {
   }
   const doc = await r.json();
   if (location.hash !== `#/board/${id}`) return;
-  doc.id = id;  // o endereço manda: um corpo com outro id não desvia as chamadas à API
+  doc.id = id;  // the URL wins: a body with a different id does not redirect the API calls
   if (doc.type !== 'board') { location.hash = `#/map/${id}`; return; }
-  await document.fonts.load('20px Kalam').catch(() => {});  // medir texto só com a fonte carregada
+  await document.fonts.load('20px Kalam').catch(() => {});  // measure text only once the font is loaded
   board = doc;
   history = new History();
-  const place = deps.loadPlace(id);  // volta onde parou (posição, zoom, seleção)
+  const place = deps.loadPlace(id);  // back to where it left off (position, zoom, selection)
   Object.assign(view, place?.view ?? { x: 0, y: 0, k: 1 });
   setTool('select');
   selection = (Array.isArray(place?.selection) ? place.selection : []).filter(s => board.elements.some(x => x.id === s));
@@ -72,13 +72,13 @@ const el = (tag, attrs, parent) => {
   parent?.append(e);
   return e;
 };
-const ALIGN = { left: ['start', 0], center: ['middle', 0.5], right: ['end', 1] };  // âncora e ponto na caixa
+const ALIGN = { left: ['start', 0], center: ['middle', 0.5], right: ['end', 1] };  // anchor and point in the box
 const DASH = { solid: null, dashed: '8 8', dotted: '1.5 6' };
 const fileUrl = (id) => `/api/maps/${board.id}/files/${id}`;
-// cor vinda do arquivo só entra em id/atributo/estilo se for hexadecimal
+// a colour from the file only goes into an id/attribute/style if it is hexadecimal
 const strokeOf = (e) => (isHex(e.strokeColor) ? e.strokeColor : DEFAULTS.strokeColor);
 
-// hachurado: um <pattern> diagonal por cor
+// hatched: one diagonal <pattern> per colour
 function hatch(color) {
   const id = `hatch-${color.slice(1)}`;
   if (!document.getElementById(id)) {
@@ -89,8 +89,8 @@ function hatch(color) {
   return `url(#${id})`;
 }
 
-// linha de base igual à da caixa de edição (regra do CSS): meia sobra da altura de linha acima,
-// depois a ascendente da fonte. Com "text-before-edge" cada fonte ficava alguns px acima/abaixo.
+// baseline equal to the edit box's (CSS rule): half the line-height leftover above,
+// then the font ascent. With "text-before-edge" each font sat a few px above/below.
 function baseline(e) {
   mctx.font = `${e.fontSize}px ${fontOf(e)}`;
   const m = mctx.measureText('Hg'), a = m.fontBoundingBoxAscent, d = m.fontBoundingBoxDescent;
@@ -102,18 +102,18 @@ function drawLines(g, e, lines, x, y, w) {
   lines.forEach((line, i) => { el('tspan', { x: ax, y: y + b + i * lineH(e.fontSize) }, t).textContent = line; });
 }
 
-// nota adesiva: o texto quebra por palavras na largura da nota; a nota cresce para baixo se faltar espaço
+// sticky note: the text wraps by words at the note's width; the note grows downward if space runs out
 function noteLines(e, text = e.text) {
   mctx.font = `${e.fontSize}px ${fontOf(e)}`;
   return text.split('\n').flatMap(p => wrapLines(p, e.w - 2 * NOTE_PAD, s => mctx.measureText(s).width));
 }
 const fitNote = (e, text = e.text) => { e.h = Math.max(e.h, 2 * NOTE_PAD + noteLines(e, text).length * lineH(e.fontSize)); };
 
-const warned = new Set();  // elementos inválidos já avisados no console
-// um elemento inválido no arquivo não derruba o quadro: fica vazio (dá para selecionar tudo e apagar)
+const warned = new Set();  // invalid elements already reported in the console
+// an invalid element in the file does not bring the board down: it stays empty (you can select all and delete)
 function drawElement(e) {
   try { return drawOne(e); } catch (err) {
-    if (!warned.has(e?.id)) { warned.add(e?.id); console.warn('Elemento inválido ignorado no desenho:', e?.id, err); }
+    if (!warned.has(e?.id)) { warned.add(e?.id); console.warn('Invalid element skipped while drawing:', e?.id, err); }
     return el('g', { class: 'el' });
   }
 }
@@ -144,7 +144,7 @@ function drawOne(e) {
   return g;
 }
 
-// ícone de link no canto do elemento (tamanho fixo na tela); clicar abre o endereço
+// link icon in the element's corner (fixed on-screen size); clicking opens the address
 function drawLinkBadge(e) {
   const b = elementBounds(e), k = view.k;
   const g = el('g', { class: 'link-badge', 'data-id': e.id, transform: `translate(${b.x + b.w + 4 / k} ${b.y - 26 / k}) scale(${1 / k})` }, root);
@@ -164,18 +164,18 @@ function render() {
   renderProps();
 }
 
-// ---------- Ferramentas, desenho, mover a tela ----------
+// ---------- Tools, drawing, panning ----------
 function setTool(t) {
   tool = t;
   if (t !== 'select') selection = [];
   svg.dataset.tool = t;
   for (const b of document.querySelectorAll('#board-tools [data-tool]')) b.classList.toggle('active', b.dataset.tool === t);
-  // ferramenta do menu "mais": o botão ⋯ fica ativo e mostra o ícone dela
+  // tool from the "more" menu: the ⋯ button becomes active and shows its icon
   const extra = more.querySelector(`[data-tool="${t}"] use`)?.getAttribute('href');
   moreBtn.classList.toggle('active', !!extra);
   moreBtn.querySelector('use').setAttribute('href', extra ?? '#i-dots');
   more.hidden = true;
-  render();  // painel de estilo aparece/some conforme a ferramenta
+  render();  // the style panel shows/hides depending on the tool
 }
 const more = $('#board-more'), moreBtn = $('#board-more-btn');
 moreBtn.onclick = () => { more.hidden = !more.hidden; };
@@ -189,7 +189,7 @@ document.querySelector('#board-tools').addEventListener('click', (e) => {
 const snapshot = () => JSON.stringify(board.elements);
 function changed(before) {
   try { render(); } catch (err) {
-    // a mudança quebrou o desenho: volta ao estado anterior (nada é salvo) e deixa o erro aparecer
+    // the change broke the drawing: roll back to the previous state (nothing is saved) and let the error surface
     board.elements = JSON.parse(before);
     selection = selection.filter(id => board.elements.some(x => x.id === id));
     render();
@@ -214,8 +214,8 @@ const toWorld = (e) => {
 
 svg.addEventListener('pointerdown', (e) => {
   if (!board) return;
-  // editando texto/nota: o clique só conclui a edição (com a ferramenta Texto ou Nota ainda ativa,
-  // ele criaria outro elemento e a edição atual se perderia sem salvar)
+  // editing text/note: the click only finishes the edit (with the Text or Note tool still active,
+  // it would create another element and the current edit would be lost unsaved)
   if (editingText) { e.preventDefault(); commitText(); return; }
   const badge = e.target.closest?.('.link-badge');
   if (badge && e.button === 0) {
@@ -224,7 +224,7 @@ svg.addEventListener('pointerdown', (e) => {
     return;
   }
   if (isDoubleClick(e) && tool === 'select' && e.button === 0 && onDoubleClick(e)) {
-    e.preventDefault();  // sem os eventos de mouse depois, o foco fica no campo de texto
+    e.preventDefault();  // without the mouse events afterwards, focus stays on the text field
     gesture = null;
     return;
   }
@@ -289,15 +289,15 @@ svg.addEventListener('pointerup', (e) => {
   drawing = null;
   resizeTo(created, toWorld(e));
   const b = elementBounds(created);
-  if (b.w < 3 && b.h < 3) board.elements.pop();  // clique sem arrastar não cria nada
+  if (b.w < 3 && b.h < 3) board.elements.pop();  // a click without dragging creates nothing
   else changed(before);
-  setTool('select');  // como no Excalidraw: depois de desenhar, volta para seleção
+  setTool('select');  // as in Excalidraw: after drawing, go back to selection
   if (board.elements.includes(created)) selection = [created.id];
   render();
 });
 
-// ponteiro laser: rastro vermelho que some em 1 s; fica fora de board.elements (nunca salvo)
-let laser = [], laserDown = false, laserRaf = 0;  // pontos [x, y, instante, começa traço novo?]
+// laser pointer: red trail that fades in 1 s; kept out of board.elements (never saved)
+let laser = [], laserDown = false, laserRaf = 0;  // points [x, y, time, starts a new stroke?]
 function drawLaser() {
   const now = performance.now();
   laser = laser.filter(p => now - p[2] < 1000);
@@ -315,7 +315,7 @@ function zoomAt(factor, cx, cy) {
   render();
 }
 const zoomCenter = (factor) => zoomAt(factor, svg.clientWidth / 2, svg.clientHeight / 2);
-// rodinha move a tela; Ctrl+rodinha (ou pinça) dá zoom no ponteiro
+// wheel pans; Ctrl+wheel (or pinch) zooms at the pointer
 svg.addEventListener('wheel', (e) => {
   e.preventDefault();
   if (e.ctrlKey || e.metaKey) {
@@ -334,7 +334,7 @@ $('#board-undo').onclick = undo;
 $('#board-redo').onclick = redo;
 for (const b of document.querySelectorAll('#board-view button')) b.addEventListener('mousedown', (e) => e.preventDefault());
 
-// ---------- Teclado ----------
+// ---------- Keyboard ----------
 const TOOL_KEYS = {
   h: 'hand', v: 'select', 1: 'select', r: 'rectangle', 2: 'rectangle', d: 'diamond', 3: 'diamond',
   o: 'ellipse', 4: 'ellipse', a: 'arrow', 5: 'arrow', l: 'line', 6: 'line', p: 'freedraw', 7: 'freedraw',
@@ -351,9 +351,9 @@ document.addEventListener('keydown', (e) => {
   else if (ctrl && k === 'd') { e.preventDefault(); act('duplicate'); }
   else if (ctrl && k === 'k') { e.preventDefault(); act('link'); }
   else if (ctrl && k === 'c') { if (selection.length) clipboard = clipJson(selected()); }
-  // Ctrl+X: o evento "cut" (sistema) vem depois desta tecla; se ele não vier, recorta só na cópia interna
+  // Ctrl+X: the (system) "cut" event comes after this key; if it never comes, cut only in the internal copy
   else if (ctrl && k === 'x') { if (selection.length) pendingCut = setTimeout(() => { clipboard = clipJson(selected()); act('delete'); }, 0); }
-  // Ctrl+V: sem preventDefault, para o evento "paste" (que traz imagens) acontecer antes; se não houver imagem, cola os elementos
+  // Ctrl+V: no preventDefault, so the "paste" event (which carries images) fires first; if there is no image, paste the elements
   else if (ctrl && k === 'v') { pendingPaste = setTimeout(paste, 0); }
   else if (ctrl && e.shiftKey && (e.key === ']' || e.key === '}')) { e.preventDefault(); act('front'); }
   else if (ctrl && e.shiftKey && (e.key === '[' || e.key === '{')) { e.preventDefault(); act('back'); }
@@ -377,16 +377,16 @@ document.addEventListener('keyup', (e) => {
   if (e.key === ' ') { spaceDown = false; if (!panning) svg.classList.remove('panning'); }
 });
 
-// ---------- Imagens: seletor (9 / menu ⋯), colar e arrastar arquivo ----------
+// ---------- Images: picker (9 / ⋯ menu), paste and file drop ----------
 const imageInput = $('#board-image-input');
 let pendingPaste = 0;
 imageInput.addEventListener('change', () => { const f = imageInput.files[0]; imageInput.value = ''; insertImage(f); });
-// área de transferência do sistema: vale entre abas e depois de recarregar (a variável clipboard é só o plano B)
+// system clipboard: works across tabs and after a reload (the clipboard variable is only the fallback)
 const CLIP = 'application/x-brainstorm-board', MAX_CLIP = 1e6;
 const boardKeys = (e) => board && document.body.dataset.view === 'board' && !e.target.closest?.('input, textarea, select');
 let pendingCut = 0;
 const selected = () => board.elements.filter(x => selection.includes(x.id));
-// imagens levam o quadro de origem: colando em outro quadro, o arquivo é copiado para ele
+// images carry their source board: pasting into another board copies the file into it
 const clipJson = (items) => JSON.stringify(items.map(x => (x.type === 'image' ? { ...x, fileSrc: board.id } : x)));
 const DOC_ID = /^[a-z0-9-]{1,64}$/;
 async function bringFiles(items) {
@@ -400,7 +400,7 @@ async function bringFiles(items) {
       const up = await fetch(`/api/maps/${board.id}/files`, { method: 'POST', headers: { 'X-Filename': x.fileId }, body: await r.blob() });
       if (!up.ok) throw new Error(`HTTP ${up.status}`);
       out.push({ ...x, fileId: (await up.json()).id });
-    } catch { /* arquivo de origem sumiu (ex.: quadro apagado): essa imagem fica de fora */ }
+    } catch { /* source file is gone (e.g. board deleted): that image is left out */ }
   }
   return out;
 }
@@ -408,24 +408,24 @@ function copyTo(e) {
   const items = selected();
   clipboard = clipJson(items);
   e.clipboardData.setData(CLIP, clipboard);
-  e.clipboardData.setData('text/plain', items.map(x => x.text).filter(Boolean).join('\n'));  // texto para outros programas
+  e.clipboardData.setData('text/plain', items.map(x => x.text).filter(Boolean).join('\n'));  // text for other programs
   e.preventDefault();
 }
 document.addEventListener('copy', (e) => { if (boardKeys(e) && selection.length) copyTo(e); });
-document.addEventListener('cut', (e) => {  // recortar = copiar e apagar
+document.addEventListener('cut', (e) => {  // cut = copy and delete
   if (!boardKeys(e) || !selection.length) return;
   clearTimeout(pendingCut);
   copyTo(e);
   act('delete');
 });
-// colar: elementos do Brainstorm > imagem > texto (vira um texto no centro da tela)
+// paste: Brainstorm elements > image > text (becomes a text at the screen centre)
 document.addEventListener('paste', (e) => {
   if (!boardKeys(e) || !e.clipboardData) return;
   const json = e.clipboardData.getData(CLIP);
-  if (json.length > MAX_CLIP) { clearTimeout(pendingPaste); e.preventDefault(); return; }  // grande demais: recusa
+  if (json.length > MAX_CLIP) { clearTimeout(pendingPaste); e.preventDefault(); return; }  // too big: refuse
   const f = [...e.clipboardData.files].find(x => x.type.startsWith('image/'));
   const text = e.clipboardData.getData('text/plain').replace(/\s+$/, '');
-  if (!json && !f && !text) return;  // nada aproveitável: fica o plano B (cópia interna)
+  if (!json && !f && !text) return;  // nothing usable: fall back to the internal copy
   clearTimeout(pendingPaste);
   e.preventDefault();
   if (json) { clipboard = json; paste(); } else if (f) insertImage(f); else pasteText(text);
@@ -448,7 +448,7 @@ svg.addEventListener('drop', (e) => {
   insertImage(f, toWorld(e));
 });
 
-// envia ao servidor (mesma rota de anexos dos mapas) e põe no centro da tela, com no máx. 400 px
+// uploads to the server (same attachments route as the maps) and places it at the screen centre, at most 400 px
 async function insertImage(file, at = null) {
   if (!file || !board) return;
   if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) { alert(t('common.imageTypeError')); return; }
@@ -460,7 +460,7 @@ async function insertImage(file, at = null) {
     const im = new Image();
     im.src = `/api/maps/${id}/files/${fileId}`;
     await im.decode();
-    if (board?.id !== id) return;  // trocou de quadro durante o envio
+    if (board?.id !== id) return;  // switched boards during the upload
     const k = Math.min(1, 400 / Math.max(im.naturalWidth, im.naturalHeight)), w = im.naturalWidth * k, h = im.naturalHeight * k;
     const [cx, cy] = at ?? [(svg.clientWidth / 2 - view.x) / view.k, (svg.clientHeight / 2 - view.y) / view.k];
     const before = snapshot(), item = { ...createElement('image', [cx - w / 2, cy - h / 2]), w, h, fileId };
@@ -473,7 +473,7 @@ async function insertImage(file, at = null) {
   }
 }
 
-// título do quadro (o app.js cuida da edição no topo)
+// board title (app.js handles editing at the top)
 export function renameBoard(t) {
   if (!board || !t || t === board.title) return;
   board.title = t;
@@ -481,7 +481,7 @@ export function renameBoard(t) {
   deps.scheduleSave(board);
 }
 
-// ---------- Seleção: clicar, Shift+clicar, área, mover, alças ----------
+// ---------- Selection: click, Shift+click, area, move, handles ----------
 const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
 function drawSelection() {
@@ -556,13 +556,13 @@ function selectUp() {
   if (g.kind === 'marquee') selection = [...new Set([...g.keep, ...elementsInBox(board.elements, marqueeBox(g))])];
   if (g.kind === 'lasso') {
     selection = [...new Set([...g.keep, ...elementsInPolygon(board.elements, g.pts)])];
-    if (selection.length) setTool('select');  // depois do laço, a seleção já pode ser arrastada
+    if (selection.length) setTool('select');  // after the lasso, the selection can already be dragged
   }
   if ((g.kind === 'move' || g.kind === 'resize') && g.moved) changed(g.before);
   render();
 }
 
-// ---------- Ações na seleção ----------
+// ---------- Actions on the selection ----------
 function act(name) {
   if (!selection.length) return;
   const before = snapshot();
@@ -589,8 +589,8 @@ function act(name) {
   changed(before);
 }
 
-// elementos colados podem ter vindo de outro site: okElement recusa o que não dá para desenhar,
-// sanitizeElement limpa o resto (board-model.js)
+// pasted elements may have come from another site: okElement refuses what cannot be drawn,
+// sanitizeElement cleans the rest (board-model.js)
 async function paste() {
   if (!clipboard) return;
   let items;
@@ -598,16 +598,16 @@ async function paste() {
   if (!Array.isArray(items) || !items.every(okElement)) return;
   const id = board.id;
   items = await bringFiles(items.map(sanitizeElement));
-  if (board?.id !== id || !items.length) return;  // trocou de quadro durante a cópia dos arquivos
+  if (board?.id !== id || !items.length) return;  // switched boards during the file copy
   const before = snapshot();
   const copies = duplicateElements(items, items.map(x => x.id), 20).map(({ fileSrc, ...c }) => c);
   board.elements.push(...copies);
   selection = copies.map(c => c.id);
-  clipboard = clipJson(copies);  // colar de novo desloca mais
+  clipboard = clipJson(copies);  // pasting again offsets further
   changed(before);
 }
 
-// ---------- Painel de estilo ----------
+// ---------- Style panel ----------
 const props = $('#board-props');
 const STROKES = ['#1e1e1e', '#e03131', '#2f9e44', '#1971c2', '#f08c00', '#6741d9'];
 const FILLS = ['transparent', '#ffc9c9', '#b2f2bb', '#a5d8ff', '#ffec99', '#d0bfff'];
@@ -636,7 +636,7 @@ function renderProps() {
   $('#board-opacity').value = cur.opacity ?? 100;
 }
 
-// muda o estilo dos selecionados (com desfazer) e dos próximos elementos
+// changes the style of the selected elements (with undo) and of the next elements
 function setProp(prop, value) {
   style[prop] = value;
   const sel = board.elements.filter(x => selection.includes(x.id));
@@ -660,10 +660,10 @@ props.addEventListener('click', (e) => {
 });
 $('#board-opacity').addEventListener('change', (e) => { setProp('opacity', Number(e.target.value)); e.target.blur(); });
 
-// ---------- Texto ----------
+// ---------- Text ----------
 const textArea = $('#board-text');
 
-// largura/altura do texto (linhas × altura de linha), guardadas no elemento
+// text width/height (lines × line height), stored on the element
 function measureText(e, text = e.text) {
   mctx.font = `${e.fontSize}px ${fontOf(e)}`;
   const lines = text.split('\n');
@@ -677,20 +677,20 @@ function placeTextArea() {
   mctx.font = `${e.fontSize}px ${fontOf(e)}`;
   Object.assign(textArea.style, {
     left: `${view.x + (e.x + pad) * k}px`, top: `${view.y + (e.y + pad) * k}px`, color: strokeOf(e), textAlign: e.textAlign ?? 'left',
-    // propriedades separadas: o atalho "font" zeraria a altura de linha e cortaria as últimas linhas
+    // separate properties: the "font" shorthand would reset the line height and clip the last lines
     fontFamily: fontOf(e), fontSize: `${e.fontSize * k}px`, lineHeight: `${lineH(e.fontSize) * k}px`,
-    whiteSpace: note ? 'pre-wrap' : 'pre',  // na nota, a caixa quebra na largura dela
+    whiteSpace: note ? 'pre-wrap' : 'pre',  // in the note, the box wraps at its width
     width: note ? `${(e.w - 2 * pad) * k}px` : `${(Math.max(20, ...lines.map(l => mctx.measureText(l).width)) + 20) * k}px`,
-    // folga proporcional: as letras da Kalam passam da altura de linha; sem ela o navegador
-    // rola o texto para cima para mostrar o cursor (o texto "pula" ao clicar)
+    // proportional slack: Kalam's letters exceed the line height; without it the browser
+    // scrolls the text up to show the caret (the text "jumps" on click)
     height: `${(lines.length * lineH(e.fontSize) + e.fontSize * 0.5) * k}px`,
   });
-  textArea.scrollTop = 0;  // cresce antes de rolar: a primeira linha não some
+  textArea.scrollTop = 0;  // grows before scrolling: the first line does not disappear
 }
 
 function startText(e, isNew) {
   editingText = { el: e, isNew, before: snapshot(), old: e.text };
-  if (isNew && e.type === 'note') board.elements.push(e);  // a nota aparece já durante a digitação
+  if (isNew && e.type === 'note') board.elements.push(e);  // the note shows up already while typing
   textArea.value = e.text;
   textArea.hidden = false;
   placeTextArea();
@@ -703,11 +703,11 @@ function commitText() {
   if (!editingText) return;
   const { el: e, isNew, before, old } = editingText;
   editingText = null;
-  textArea.blur();  // tira o foco antes de esconder: senão as próximas teclas iriam para o campo
+  textArea.blur();  // blur before hiding: otherwise the next keys would go to the field
   textArea.hidden = true;
-  const text = textArea.value.replace(/\s+$/, ''), note = e.type === 'note';  // nota vazia continua (é uma forma)
+  const text = textArea.value.replace(/\s+$/, ''), note = e.type === 'note';  // an empty note stays (it is a shape)
   if (!text && !note) {
-    if (!isNew) { board.elements = board.elements.filter(x => x !== e); changed(before); }  // apagou o texto todo
+    if (!isNew) { board.elements = board.elements.filter(x => x !== e); changed(before); }  // all the text was deleted
   } else if (isNew || text !== old) {
     e.text = text;
     if (note) fitNote(e); else measureText(e);
@@ -719,7 +719,7 @@ function commitText() {
   render();
 }
 
-// a caixa, a nota e a moldura de seleção acompanham o texto (digitar e Enter, que insere a quebra por código)
+// the box, the note and the selection frame follow the text (typing and Enter, which inserts the break in code)
 function textChanged() {
   const e = editingText?.el;
   if (e?.type === 'note') { fitNote(e, textArea.value); render(); }
@@ -727,7 +727,7 @@ function textChanged() {
   placeTextArea();
 }
 textArea.addEventListener('input', textChanged);
-// Enter quebra a linha (a caixa cresce antes, então nada rola para fora); Esc, Ctrl+Enter ou clicar fora confirmam
+// Enter breaks the line (the box grows first, so nothing scrolls out); Esc, Ctrl+Enter or clicking outside confirm
 textArea.addEventListener('keydown', (e) => {
   e.stopPropagation();
   if (e.key === 'Escape' || (e.key === 'Enter' && (e.ctrlKey || e.metaKey))) { e.preventDefault(); commitText(); }
@@ -738,10 +738,10 @@ textArea.addEventListener('keydown', (e) => {
   }
 });
 textArea.addEventListener('blur', commitText);
-textArea.addEventListener('scroll', () => { textArea.scrollTop = 0; });  // a caixa já cabe tudo: rolar só desalinharia
+textArea.addEventListener('scroll', () => { textArea.scrollTop = 0; });  // the box already fits everything: scrolling would only misalign it
 
-// duplo clique: edita o texto sob o ponteiro, ou cria um texto novo no vazio.
-// Detectado no pointerdown: a lousa redesenha a cada toque, então o navegador não gera dblclick.
+// double click: edits the text under the pointer, or creates a new text on empty space.
+// Detected on pointerdown: the board redraws on every touch, so the browser does not generate dblclick.
 let lastDown = null;
 function isDoubleClick(e) {
   const now = performance.now();
@@ -754,16 +754,16 @@ function onDoubleClick(e) {
   const hit = id && board.elements.find(x => x.id === id);
   if (HAS_TEXT.has(hit?.type)) startText(hit, false);
   else if (!hit) startText(createElement('text', p, { ...style, text: '' }), true);
-  else return false;  // duplo clique numa forma: segue como clique normal (selecionar/arrastar)
+  else return false;  // double click on a shape: proceeds as a normal click (select/drag)
   return true;
 }
 
-// ---------- Ajuda ----------
+// ---------- Help ----------
 const help = $('#board-help');
 $('#board-help-btn').onclick = () => { help.hidden = !help.hidden; };
 
-// ---------- Exportar (o app.js chama): SVG solto do quadro, sem seleção, com fundo branco ----------
-// fonte embutida no arquivo exportado (a imagem solta não enxerga os arquivos do app)
+// ---------- Export (app.js calls it): standalone SVG of the board, no selection, white background ----------
+// font embedded in the exported file (a standalone image cannot see the app's files)
 const dataUrl = async (href) => {
   const blob = await (await fetch(href)).blob();
   return new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob); });
@@ -787,7 +787,7 @@ export async function boardSvg() {
   const bg = document.createElementNS(SVG, 'rect');
   Object.entries({ x: bb.x - pad, y: bb.y - pad, width: w, height: h, fill: '#ffffff' }).forEach(([k, v]) => bg.setAttribute(k, v));
   r.prepend(bg);
-  // imagens embutidas: o arquivo exportado não enxerga o servidor
+  // images embedded: the exported file cannot see the server
   await Promise.all([...r.querySelectorAll('image')].map(async (im) => im.setAttribute('href', await dataUrl(im.getAttribute('href')))));
   if (board.elements.some(x => HAS_TEXT.has(x.type) && fontOf(x) === FONTS.hand)) {
     const st = document.createElementNS(SVG, 'style');

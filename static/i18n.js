@@ -1,5 +1,5 @@
-// Idiomas da interface. Dicionários em locales/<código>.js (objeto plano chave → texto);
-// pt-BR é a base: cobre qualquer chave que falte no idioma escolhido.
+// UI languages. Dictionaries live in locales/<code>.js (flat key → text object);
+// pt-BR is the base: it fills in any key missing from the chosen language.
 import ptBR from './locales/pt-BR.js';
 
 export const LANGS = [
@@ -19,18 +19,18 @@ export function pick(stored, languages = []) {
   }
   return 'en';
 }
-function saved() { try { return localStorage.getItem(STORE); } catch { return null; /* sem armazenamento */ } }
+function saved() { try { return localStorage.getItem(STORE); } catch { return null; /* no storage available */ } }
 export const lang = pick(saved(), navigator.languages);
 let dict = ptBR;
 if (lang !== 'pt-BR') {
-  try { dict = (await import(`./locales/${lang}.js`)).default; } catch { /* dicionário ausente: fica em pt-BR */ }
+  try { dict = (await import(`./locales/${lang}.js`)).default; } catch { /* missing dictionary: stay on pt-BR */ }
 }
 
 export const t = (key, params = {}) => (dict[key] ?? ptBR[key] ?? key).replace(/\{(\w+)\}/g, (m, k) => params[k] ?? m);
-// só guarda; quem chama recarrega a página
-export function setLang(code) { try { localStorage.setItem(STORE, code); } catch { /* idem */ } }
+// only stores it; the caller reloads the page
+export function setLang(code) { try { localStorage.setItem(STORE, code); } catch { /* same */ } }
 
-// data-i18n → texto; data-i18n-title / -placeholder / -aria-label → o atributo
+// data-i18n → text; data-i18n-title / -placeholder / -aria-label → the attribute
 export function applyI18n(root = document) {
   for (const e of root.querySelectorAll('[data-i18n]')) e.textContent = t(e.dataset.i18n);
   for (const a of ['title', 'placeholder', 'aria-label']) {

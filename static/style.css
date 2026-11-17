@@ -1,4 +1,4 @@
-/* Fonte manuscrita da lousa: Kalam (SIL OFL 1.1, licença em fonts/LICENSE-kalam.txt) */
+/* Handwriting font for the board: Kalam (SIL OFL 1.1, licence in fonts/LICENSE-kalam.txt) */
 @font-face { font-family: "Kalam"; font-style: normal; font-weight: 400; font-display: swap;
   src: url(fonts/kalam-latin-400-normal.woff2) format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
@@ -31,17 +31,17 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 #status.error { color: var(--danger); font-weight: 600; }
 
 body:not([data-view="editor"]) #editor-view, body:not([data-view="list"]) #list-view, body:not([data-view="board"]) #board-view, body:not([data-view="skill"]) #skill-view, body:not([data-view="settings"]) #settings-view { display: none; }
-/* no quadro, os controles do mapa mental não se aplicam */
+/* on a board, the mind-map controls do not apply */
 body[data-view="board"] #present-btn, body[data-view="board"] #history-btn,
 body[data-view="board"] #export-menu [data-export="md"], body[data-view="board"] #export-menu [data-export="pdf"],
 body[data-view="board"] #undo, body[data-view="board"] #redo { display: none; }
-/* no skill, só o texto: sem apresentar, histórico, exportar nem desfazer do mapa */
+/* in a skill, text only: no present, history, export or map undo */
 body[data-view="skill"] #present-btn, body[data-view="skill"] #history-btn, body[data-view="skill"] #export-btn,
 body[data-view="skill"] #undo, body[data-view="skill"] #redo { display: none; }
 body[data-view="list"] #title, body[data-view="list"] #status, body[data-view="list"] .history-btns, body[data-view="list"] #map-menu-btn { display: none; }
 body[data-view="settings"] #title, body[data-view="settings"] #status, body[data-view="settings"] .history-btns, body[data-view="settings"] #map-menu-btn { display: none; }
 
-/* Lista de mapas */
+/* Map list */
 #list-view { max-width: 760px; margin: 32px auto; padding: 0 16px; }
 .list-head { display: flex; align-items: center; justify-content: space-between; }
 #maps { list-style: none; padding: 0; display: grid; gap: 8px; }
@@ -90,7 +90,7 @@ body[data-view="settings"] #title, body[data-view="settings"] #status, body[data
 .toggle text { font-size: 10px; font-weight: 700; }
 #editor { position: absolute; border: 2px solid var(--accent); border-radius: 6px; padding: 0 6px; outline: none; background: #fff; color: var(--ink); text-align: center; }
 
-/* Controles flutuantes */
+/* Floating controls */
 .card { position: absolute; background: #fff; border-radius: 12px; box-shadow: 0 4px 18px #1d1d2b1f; padding: 6px; display: flex; align-items: center; gap: 4px; }
 .card[hidden], .adder[hidden], #hints[hidden] { display: none; }
 button.icon { width: 34px; height: 34px; padding: 0; border: none; background: transparent; display: grid; place-items: center; font-size: 20px; color: var(--ink); }
@@ -131,18 +131,18 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 #dock select { font: inherit; border: none; background: #f0f0f6; border-radius: 8px; padding: 6px 8px; }
 #zoom-reset { border: none; min-width: 56px; }
 
-/* Arrastar ramos */
+/* Dragging branches */
 .node.dragging { opacity: 0.3; }
 .drag-ghost { pointer-events: none; opacity: 0.9; }
 .drop-placeholder { pointer-events: none; }
 
-/* Ligações */
+/* Links */
 #canvas.linking, #canvas.linking .node { cursor: crosshair; }
 .link-hit { cursor: pointer; }
 .resize-handle { cursor: ew-resize; fill: #fff; stroke: #22a559; stroke-width: 2; }
 .link-preview, .link-target { pointer-events: none; }
 
-/* Menu do nó */
+/* Node menu */
 .menu { flex-direction: column; align-items: stretch; min-width: 250px; gap: 0; }
 .menu button { border: none; background: transparent; text-align: left; display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-radius: 8px; }
 .menu button:hover:not(:disabled) { background: #f0f0f6; }
@@ -152,7 +152,7 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 .link-bend { cursor: move; }
 .link-end { cursor: move; }
 
-/* Pontos de conexão (modo "Ligar") */
+/* Connection points ("Link" mode) */
 .link-anchor { position: absolute; width: 26px; height: 26px; padding: 0; border: none; border-radius: 50%; background: #1fa24a; color: #fff; font-size: 18px; line-height: 26px; transform: translate(-50%, -50%); }
 .link-anchor:hover, .link-anchor.active { background: #15803a; }
 .link-anchor[hidden], #link-ring[hidden] { display: none; }
@@ -160,7 +160,7 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 .link-anchor.active { box-shadow: 0 0 0 3px #1fa24a55; }
 .anchor-dot { pointer-events: none; }
 
-/* Barra da ligação */
+/* Link bar */
 #link-toolbar { transform: translateX(-50%); }
 #link-toolbar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 4px 2px; }
 #link-color-btn .dot { width: 20px; height: 20px; border-radius: 50%; }
@@ -173,7 +173,7 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 #link-markers button:hover, #link-markers button.active { background: #ececf3; }
 .link-label { cursor: pointer; }
 
-/* Imagem no nó */
+/* Node image */
 #image-pop { flex-direction: column; align-items: stretch; width: 280px; padding: 12px; }
 .drop { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 22px 12px; border: 1.5px dashed #cfcbe0; border-radius: 12px; text-align: center; cursor: pointer; color: var(--ink); }
 .drop.over, .drop:hover { border-color: var(--accent); background: #f4f6ff; }
@@ -182,7 +182,7 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 .drop small { color: var(--muted); }
 .danger-link { border: none; background: none; color: var(--danger); margin-top: 8px; }
 
-/* Anexos */
+/* Attachments */
 #attach-pop { flex-direction: column; align-items: stretch; width: 300px; padding: 12px; gap: 8px; }
 .pop-title { margin: 0; font-weight: 700; }
 #attach-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 220px; overflow: auto; }
@@ -196,7 +196,7 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 .attach-badge { cursor: pointer; }
 .attach-badge text { font: 700 11px var(--font); }
 
-/* Comentários */
+/* Comments */
 #comment-pop { flex-direction: column; align-items: stretch; width: 320px; padding: 10px; gap: 8px; }
 #comment-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 260px; overflow: auto; }
 #comment-list:empty { display: none; }
@@ -209,13 +209,13 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 #comment-input { flex: 1; border: none; outline: none; font: inherit; font-size: 14px; background: none; }
 .comment-icon { cursor: pointer; }
 
-/* Estilo do texto */
+/* Text style */
 #text-pop { flex-direction: column; align-items: stretch; width: 280px; padding: 12px; gap: 2px; }
 #text-pop p { margin: 10px 0 6px; font-size: 12px; color: var(--muted); }
 .text-toggles button { font-size: 18px; font-family: Georgia, serif; }
 .text-toggles button.active { background: #e8eefe; color: var(--accent); }
 
-/* Link (URL) no nó */
+/* Link (URL) on a node */
 #url-pop { flex-direction: column; align-items: stretch; width: 340px; padding: 10px; gap: 6px; }
 #url-form { display: flex; gap: 6px; }
 #url-input { flex: 1; font: inherit; font-size: 14px; border: 1.5px solid var(--line); border-radius: 8px; padding: 6px 10px; outline: none; }
@@ -224,12 +224,12 @@ kbd { font: 600 12px var(--font); border: 1px solid #c9c6d8; border-radius: 4px;
 #url-error[hidden] { display: none; }
 .url-icon { cursor: pointer; }
 
-/* Modo foco */
+/* Focus mode */
 #focus-bar { top: 14px; left: 50%; transform: translateX(-50%); gap: 12px; padding: 6px 6px 6px 14px; font-size: 14px; }
 #focus-bar strong { max-width: 280px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 #focus-exit { border: none; background: #f0f0f6; border-radius: 8px; }
 
-/* Modo outline */
+/* Outline mode */
 body.outline-mode #canvas { display: none; }
 #outline-view { position: absolute; inset: 0; overflow: auto; padding: 32px 16px 96px; }
 #outline-view[hidden] { display: none; }
@@ -242,7 +242,7 @@ body.outline-mode #canvas { display: none; }
 .outline input:focus { background: #fff; box-shadow: 0 0 0 1.5px var(--accent); }
 .outline > li > .row input { font-size: 20px; font-weight: 700; }
 
-/* Exportar */
+/* Export */
 #export-menu { position: fixed; top: 56px; right: 16px; min-width: 220px; z-index: 10; }
 @media print {
   @page { size: landscape; margin: 10mm; }
@@ -251,7 +251,7 @@ body.outline-mode #canvas { display: none; }
   html, body, #editor-view { background: #fff; height: 100%; }
 }
 
-/* Histórico de versões */
+/* Version history */
 #history-panel { position: fixed; top: 60px; right: 16px; width: 330px; max-height: calc(100vh - 140px); flex-direction: column; align-items: stretch; padding: 12px; gap: 6px; z-index: 10; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; }
 .muted { margin: 0; font-size: 12px; color: var(--muted); }
@@ -261,7 +261,7 @@ body.outline-mode #canvas { display: none; }
 #history-list small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #history-list button { font-size: 13px; }
 
-/* Duplicar / lixeira */
+/* Duplicate / trash */
 #map-menu { position: fixed; top: 56px; left: 120px; min-width: 220px; z-index: 10; }
 #maps li button, #trash-list button { font-size: 13px; }
 #trash { margin-top: 28px; color: var(--muted); }
@@ -272,7 +272,7 @@ body.outline-mode #canvas { display: none; }
 #trash-list span { flex: 1; color: var(--ink); }
 #trash-list time { font-size: 13px; }
 
-/* Apresentação */
+/* Presentation */
 body.presenting .topbar, body.presenting #dock, body.presenting #focus-bar, body.presenting #toolbar,
 body.presenting .adder, body.presenting #hints, body.presenting .resize-handle { display: none !important; }
 body.presenting #editor-view { height: 100vh; }
@@ -280,14 +280,14 @@ body.presenting #canvas { cursor: default; }
 #present-bar { left: 50%; bottom: 18px; transform: translateX(-50%); }
 #present-count { min-width: 64px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
 
-/* Mostrar ramo como */
+/* Show branch as */
 .menu-seg { display: grid; gap: 6px; padding: 8px 10px; }
 .menu-seg[hidden] { display: none; }
 .menu-seg span { font-size: 13px; color: var(--muted); }
 .menu-seg .seg button { padding: 5px 6px; font-size: 12px; }
 .menu-seg .seg button.active { background: #e8eefe; border-color: var(--accent); color: var(--accent); }
 
-/* Quadros (lousa) */
+/* Boards (whiteboard) */
 .new-buttons { display: flex; gap: 8px; }
 #maps a svg { width: 18px; height: 18px; margin-right: 8px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: .55; }
 #board-view { position: relative; height: calc(100% - 52px); overflow: hidden; background: #fff; }
@@ -344,12 +344,12 @@ body.presenting #canvas { cursor: default; }
 #board-help dt { font-weight: 600; white-space: nowrap; }
 #board-help dd { margin: 0; color: var(--muted); }
 
-/* letra do atalho no canto do botão da ferramenta */
+/* shortcut letter in the corner of the tool button */
 #board-tools button[data-key] { position: relative; }
 #board-tools button[data-key]::after { content: attr(data-key); position: absolute; right: 3px; bottom: 1px; font: 600 9px var(--font); color: #9a98ab; pointer-events: none; }
 #board-tools button.active[data-key]::after { color: #4338ca; }
 
-/* página de login */
+/* login page */
 .login-page { min-height: 100vh; display: grid; place-items: center; margin: 0; }
 .login-card { width: min(360px, calc(100vw - 32px)); background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 28px; box-shadow: 0 4px 18px #1d1d2b14; }
 .login-card .brand { justify-content: center; margin-bottom: 20px; }
@@ -362,17 +362,17 @@ body.presenting #canvas { cursor: default; }
 #login-error { margin: 0; color: var(--danger); font-size: 13px; }
 #login-error[hidden] { display: none; }
 #logout-btn[hidden] { display: none; }
-/* seletor de idioma: no topo (à esquerda do Sair) e no cartão de login */
+/* language selector: in the top bar (left of Log out) and on the login card */
 #lang { font: inherit; font-size: 13px; color: var(--ink); border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 5px 6px; cursor: pointer; }
 #lang:hover { border-color: var(--accent); }
-/* botões de criar ficam no topo, só na lista; lá #status (que empurra para a direita) some */
+/* the create buttons sit in the top bar, only on the list; there #status (which pushes right) disappears */
 body:not([data-view="list"]) .topbar .new-buttons { display: none; }
 body[data-view="list"] .topbar .new-buttons { margin-left: auto; }
 .login-card #lang { display: block; margin: 18px auto 0; color: var(--muted); }
 
-/* menus Mapas / Quadros no topo */
+/* Maps / Boards menus in the top bar */
 .top-menus { display: flex; gap: 2px; }
-/* nome do documento aberto: separado dos menus por uma divisória e sem o negrito dos itens de menu */
+/* open document name: separated from the menus by a divider and without the menu items' bold */
 body:not([data-view="list"]) .top-menus { padding-right: 12px; border-right: 1px solid var(--line); }
 .top-menu { position: relative; }
 .top-menu-btn { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; padding: 6px 8px; font-weight: 600; color: var(--ink); }
@@ -382,7 +382,7 @@ body:not([data-view="list"]) .top-menus { padding-right: 12px; border-right: 1px
 .top-menu-pop { top: calc(100% + 6px); left: 0; min-width: 200px; z-index: 30; }
 .crumb-kind { color: inherit; }
 
-/* ---------- Skill (editor Markdown) ---------- */
+/* ---------- Skill (Markdown editor) ---------- */
 #skill-view { height: calc(100% - 52px); display: flex; flex-direction: column; background: #fff; }
 .skill-bar, .skill-tags { display: flex; align-items: center; gap: 8px; padding: 8px 16px; flex-wrap: wrap; }
 .skill-bar { border-bottom: 1px solid var(--line); }
@@ -442,7 +442,7 @@ body:not([data-view="list"]) .top-menus { padding-right: 12px; border-right: 1px
 .markdown a { color: var(--accent); }
 .markdown img { max-width: 100%; }
 
-/* configurações (LLM e backup) */
+/* settings (LLM and backup) */
 #settings-view { max-width: 760px; margin: 32px auto; padding: 0 16px; }
 #settings-view h1 { margin: 0 0 6px; }
 #settings-view h2 { font-size: 15px; margin: 0; }
