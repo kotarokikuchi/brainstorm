@@ -10,7 +10,7 @@ test('newMap has central root and version 0', () => {
   assert.equal(m.id, 'abc');
   assert.equal(m.version, 0);
   assert.equal(m.layout, 'map');
-  assert.equal(m.root.text, 'Mapa central');
+  assert.equal(m.root.text, 'Central topic');
   assert.deepEqual(m.root.children, []);
   assert.match(uid(), /^[a-z0-9-]{1,64}$/);
   assert.notEqual(uid(), uid());

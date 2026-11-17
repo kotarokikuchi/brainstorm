@@ -48,7 +48,7 @@ const node = (text = '') => ({
   id: uid(), text, color: null, shape: null, collapsed: false, side: null, children: [],
 });
 
-export function newMap(id, text = 'Mapa central') {
+export function newMap(id, text = 'Central topic') {
   return { id, version: 0, layout: 'map', root: node(text), links: [] };
 }
 

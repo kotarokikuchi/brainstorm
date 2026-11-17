@@ -104,7 +104,7 @@ async function pasteBranches(branches) {
 }
 async function copyFile(src, fileId, name) {
   // an id outside the server's format (e.g. "..") would make the URL point at something other than a file
-  if (!/^[a-z0-9-]{1,64}$/.test(src) || typeof fileId !== 'string' || !FILE_ID.test(fileId)) throw new Error('origem inválida');
+  if (!/^[a-z0-9-]{1,64}$/.test(src) || typeof fileId !== 'string' || !FILE_ID.test(fileId)) throw new Error('invalid source');
   const r = await fetch(`/api/maps/${src}/files/${encodeURIComponent(fileId)}`);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return (await uploadFile(new File([await r.blob()], name || fileId))).id;

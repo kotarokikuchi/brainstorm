@@ -38,7 +38,7 @@ export const currentBoard = () => board;
 export const boardPlace = () => ({ view: { ...view }, selection: [...selection] });
 export function closeBoard() { board = null; }
 
-export const newBoard = (id, title = 'Quadro sem título') => ({ id, version: 0, type: 'board', title, elements: [] });
+export const newBoard = (id, title = 'Untitled board') => ({ id, version: 0, type: 'board', title, elements: [] });
 
 export async function openBoard(id) {
   const r = await deps.api('GET', `/${id}`);
@@ -394,7 +394,7 @@ async function bringFiles(items) {
   for (const x of items) {
     if (x.type !== 'image' || !x.fileSrc || x.fileSrc === board.id) { out.push(x); continue; }
     try {
-      if (!DOC_ID.test(x.fileSrc) || !FILE_ID.test(x.fileId ?? '')) throw new Error('arquivo inválido');
+      if (!DOC_ID.test(x.fileSrc) || !FILE_ID.test(x.fileId ?? '')) throw new Error('invalid file');
       const r = await fetch(`/api/maps/${x.fileSrc}/files/${x.fileId}`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const up = await fetch(`/api/maps/${board.id}/files`, { method: 'POST', headers: { 'X-Filename': x.fileId }, body: await r.blob() });
