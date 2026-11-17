@@ -65,6 +65,15 @@ test('renders 100 KB fast', () => {
   assert.ok(performance.now() - t < 200);
 });
 
+test('pathological inputs stay fast and never throw', () => {
+  for (const src of ['._a'.repeat(33000), '.*a'.repeat(33000), '[a'.repeat(50000)]) {
+    const t = performance.now();
+    r(src);
+    assert.ok(performance.now() - t < 200);
+  }
+  assert.equal(typeof r('>'.repeat(100000) + ' x'), 'string');
+});
+
 test('diffLines', () => {
   assert.deepEqual(diffLines('a\nb\nc', 'a\nx\nc'),
     [{ op: 'same', text: 'a' }, { op: 'del', text: 'b' }, { op: 'add', text: 'x' }, { op: 'same', text: 'c' }]);

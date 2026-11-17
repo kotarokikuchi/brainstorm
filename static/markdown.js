@@ -12,14 +12,14 @@ const openA = u => `<a href="${u}" target="_blank" rel="noopener noreferrer">`;
 function fmt(t, stash) {
   const keep = h => `\0${stash.push(h) - 1}\0`;
   t = t.replace(/`([^`]+)`/g, (_, c) => keep(`<code>${c}</code>`));
-  t = t.replace(/!?\[([^\]]*)\]\(([^)]*)\)/g, (_, label, url) => {
+  t = t.replace(/!?\[([^\][]*)\]\(([^)]*)\)/g, (_, label, url) => {
     const u = safeUrl(url);
     return (u === null ? '' : keep(openA(u))) + fmt(label, stash) + (u === null ? '' : keep('</a>'));
   });
   t = t.replace(/https?:\/\/(?:[^\s&\0]|&amp;)*[^\s&\0.,;:!?)]/g, u => keep(openA(u) + u + '</a>'));
   t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   t = t.replace(/\*(?!\s)(.+?)\*/g, '<em>$1</em>');
-  return t.replace(/(^|\W)_(?!\s)(.+?)_(?!\w)/g, '$1<em>$2</em>');
+  return t.replace(/(^|\W)_(?!\s)([^_]+?)_(?!\w)/g, '$1<em>$2</em>');
 }
 
 function inline(raw) {
@@ -51,7 +51,7 @@ function list(items) {
   return h + `</${tag}>`;
 }
 
-function blocks(lines) {
+function blocks(lines, depth = 0) {
   let html = '';
   let i = 0;
   if (lines[0] === '---') {
@@ -76,10 +76,10 @@ function blocks(lines) {
     } else if (HR.test(l)) {
       html += '<hr>';
       i++;
-    } else if (l.startsWith('>')) {
+    } else if (l.startsWith('>') && depth < 20) { // limite evita estouro de pilha
       const q = [];
       for (; i < lines.length && lines[i].startsWith('>'); i++) q.push(lines[i].replace(/^>\s?/, ''));
-      html += `<blockquote>${blocks(q)}</blockquote>`;
+      html += `<blockquote>${blocks(q, depth + 1)}</blockquote>`;
     } else if (ITEM.test(l)) {
       const items = [];
       for (; i < lines.length && (m = ITEM.exec(lines[i])); i++) items.push({ indent: m[1].length, mark: m[2], text: m[3] });
