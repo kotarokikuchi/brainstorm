@@ -1266,20 +1266,27 @@ const toWorld = (e) => {
   return [(e.clientX - r.left - view.x) / view.k, (e.clientY - r.top - view.y) / view.k];
 };
 
+function drawLink(k) {
+  const a = boxes.find(b => b.id === k.from), b = boxes.find(b => b.id === k.to);
+  if (!a || !b) return;  // ponta escondida num ramo recolhido
+  if (retarget?.link === k) { drawRetarget(k, a, b); return; }
+  const d = linkPath(a, b, k.bend, k.fromSide, k.toSide), sel = k.id === selectedLink, color = hexColor(k.color) || LINK_GREEN;
+  el('path', {
+    d, class: 'link', fill: 'none', stroke: color, 'stroke-width': sel ? 3 : 2, 'stroke-dasharray': '5 5',
+    'marker-start': markerUrl(k.startMarker, color), 'marker-end': markerUrl(k.endMarker ?? 'arrow', color),
+  }, viewport);
+  if (k.label) drawLinkLabel(k, a, b, color);
+  const hit = el('path', { d, class: 'link-hit', fill: 'none', stroke: 'transparent', 'stroke-width': 14 }, viewport);
+  hit.addEventListener('click', (e) => { e.stopPropagation(); if (selectedLink !== k.id) closeLinkPops(); selectedLink = k.id; render(); });
+  if (sel) drawBendHandle(k, a, b, d);
+}
+
 function drawLinks() {
   for (const k of map.links ?? []) {
-    const a = boxes.find(b => b.id === k.from), b = boxes.find(b => b.id === k.to);
-    if (!a || !b) continue;  // ponta escondida num ramo recolhido
-    if (retarget?.link === k) { drawRetarget(k, a, b); continue; }
-    const d = linkPath(a, b, k.bend, k.fromSide, k.toSide), sel = k.id === selectedLink, color = hexColor(k.color) || LINK_GREEN;
-    el('path', {
-      d, class: 'link', fill: 'none', stroke: color, 'stroke-width': sel ? 3 : 2, 'stroke-dasharray': '5 5',
-      'marker-start': markerUrl(k.startMarker, color), 'marker-end': markerUrl(k.endMarker ?? 'arrow', color),
-    }, viewport);
-    if (k.label) drawLinkLabel(k, a, b, color);
-    const hit = el('path', { d, class: 'link-hit', fill: 'none', stroke: 'transparent', 'stroke-width': 14 }, viewport);
-    hit.addEventListener('click', (e) => { e.stopPropagation(); if (selectedLink !== k.id) closeLinkPops(); selectedLink = k.id; render(); });
-    if (sel) drawBendHandle(k, a, b, d);
+    try { drawLink(k); } catch (err) {
+      // uma ligação inválida no arquivo não derruba o mapa
+      if (!warned.has(k.id)) { warned.add(k.id); console.warn('Ligação inválida ignorada no desenho:', k.id, err); }
+    }
   }
   const from = boxes.find(b => b.id === (linking ? linking.from : selected));
   if (linking) {
