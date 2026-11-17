@@ -626,3 +626,8 @@ test('toMarkdown escapes HTML and keeps each topic on one line', () => {
   const md = toMarkdown({ root: { text: 'T', children: [{ text: 'x\n\n<script>alert(2)</script>', children: [] }, { text: '![i](u) & 1', children: [] }] } });
   assert.equal(md, '# T\n\n- x \\<script\\>alert(2)\\</script\\>\n- \\!\\[i\\](u) \\& 1\n');
 });
+
+test('toMarkdown percent-encodes parentheses in a URL so it cannot leave the link target', () => {
+  const md = toMarkdown({ root: { text: 'R', children: [{ text: 'T', url: 'https://x/)[click](javascript:alert(1))', children: [] }] } });
+  assert.ok(md.includes('[T](https://x/%29[click]%28javascript:alert%281%29%29)'), md);
+});
