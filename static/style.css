@@ -360,5 +360,7 @@ body.presenting #canvas { cursor: default; }
 /* seletor de idioma: no topo (à esquerda do Sair) e no cartão de login */
 #lang { font: inherit; font-size: 13px; color: var(--ink); border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 5px 6px; cursor: pointer; }
 #lang:hover { border-color: var(--accent); }
-body[data-view="list"] #lang { margin-left: auto; }  /* na lista, #status (que empurra para a direita) some */
+/* botões de criar ficam no topo, só na lista; lá #status (que empurra para a direita) some */
+body:not([data-view="list"]) .topbar .new-buttons { display: none; }
+body[data-view="list"] .topbar .new-buttons { margin-left: auto; }
 .login-card #lang { display: block; margin: 18px auto 0; color: var(--muted); }
