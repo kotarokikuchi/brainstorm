@@ -68,6 +68,11 @@
       <button id="history-btn" class="icon topbar-toggle" data-i18n-title="history.title" title="Histórico de versões"><svg viewBox="0 0 24 24"><use href="#i-history"/></svg></button>
       <button id="export-btn" class="icon topbar-toggle" data-i18n-title="export.title" title="Exportar"><svg viewBox="0 0 24 24"><use href="#i-download"/></svg></button>
     </span>
+    <span class="new-buttons">
+      <button id="new-folder"><svg viewBox="0 0 24 24"><use href="#i-folder-plus"/></svg><span data-i18n="list.newFolder">Nova pasta</span></button>
+      <button id="new-board"><svg viewBox="0 0 24 24"><use href="#i-brush"/></svg><span data-i18n="list.newBoard">Novo quadro</span></button>
+      <button id="new-map" class="primary"><svg viewBox="0 0 24 24"><use href="#i-sitemap"/></svg><span data-i18n="list.newMap">Novo mapa</span></button>
+    </span>
     <select id="lang" data-i18n-title="lang.select" title="Idioma" data-i18n-aria-label="lang.select" aria-label="Idioma"></select>
     <button id="logout-btn" class="icon" data-i18n-title="topbar.logout" title="Sair" hidden><svg viewBox="0 0 24 24"><use href="#i-logout"/></svg></button>
   </header>
@@ -91,11 +96,6 @@
   <main id="list-view">
     <div class="list-head">
       <h1 id="list-title" data-i18n="list.root">Meus mapas</h1>
-      <span class="new-buttons">
-        <button id="new-folder"><svg viewBox="0 0 24 24"><use href="#i-folder-plus"/></svg><span data-i18n="list.newFolder">Nova pasta</span></button>
-        <button id="new-board"><svg viewBox="0 0 24 24"><use href="#i-brush"/></svg><span data-i18n="list.newBoard">Novo quadro</span></button>
-        <button id="new-map" class="primary"><svg viewBox="0 0 24 24"><use href="#i-sitemap"/></svg><span data-i18n="list.newMap">Novo mapa</span></button>
-      </span>
     </div>
     <div class="list-tools">
       <label class="search"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg><input id="search" type="search" data-i18n-placeholder="list.searchPlaceholder" placeholder="Buscar mapas, quadros e pastas" autocomplete="off"></label>
