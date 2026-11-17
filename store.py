@@ -5,6 +5,7 @@ ficam em <pasta de anexos>/<id do documento>/<arquivo>.
 """
 import hashlib
 import json
+import re
 import secrets
 import shutil
 from contextlib import contextmanager
@@ -15,6 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 HISTORY_MAX = 50  # versões guardadas por documento
+ID_RE = re.compile(r"[a-z0-9-]{1,64}")  # id de documento e de pasta (sempre com fullmatch)
+MAX_FOLDERS = 2000
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS docs (
@@ -59,6 +62,45 @@ def doc_size(body):
     # tópicos do mapa ou elementos do quadro (mostrado no histórico)
     count = lambda n: 1 + sum(count(c) for c in n.get("children", []))
     return len(body["elements"]) if body.get("type") == "board" else count(body["root"])
+
+
+# documentos: mapa mental ({root}) ou quadro de desenho ({type: "board", title, elements})
+def valid_doc(body):
+    if not (isinstance(body, dict) and isinstance(body.get("version"), int)):
+        return False
+    if body.get("type", "map") == "board":
+        return isinstance(body.get("elements"), list) and isinstance(body.get("title", ""), str)
+    return (body.get("type", "map") == "map" and isinstance(body.get("root"), dict)
+            and isinstance(body["root"].get("text", ""), str))
+
+
+# pastas: {version, folders: [{id, name, parent}], place: {id do documento: id da pasta}}
+# (fica fora dos documentos: mover não mexe na versão de um mapa aberto em outra aba)
+def valid_folders(body):
+    if not (isinstance(body, dict) and isinstance(body.get("version"), int)
+            and isinstance(body.get("folders"), list) and len(body["folders"]) <= MAX_FOLDERS
+            and isinstance(body.get("place"), dict)):
+        return False
+    parents = {}
+    for f in body["folders"]:
+        if not (isinstance(f, dict) and isinstance(f.get("id"), str) and ID_RE.fullmatch(f["id"])
+                and isinstance(f.get("name"), str) and 0 < len(f["name"].strip()) <= 200
+                and (f.get("parent") is None or isinstance(f.get("parent"), str))):
+            return False
+        if f["id"] in parents:
+            return False
+        parents[f["id"]] = f.get("parent")
+    checked = set()  # pastas com o caminho até a raiz já conferido: cada uma é percorrida uma vez só
+    for fid in parents:  # pai precisa existir e não pode haver ciclo (pasta dentro dela mesma)
+        seen, cur = set(), fid
+        while cur is not None and cur not in checked:
+            if cur in seen or cur not in parents:
+                return False
+            seen.add(cur)
+            cur = parents[cur]
+        checked |= seen
+    return all(isinstance(k, str) and ID_RE.fullmatch(k) and isinstance(v, str) and v in parents
+               for k, v in body["place"].items())
 
 
 class Store:
@@ -171,8 +213,12 @@ class Store:
             rows = db.execute("SELECT version, saved, body FROM history WHERE doc_id = ? ORDER BY version DESC", (doc_id,)).fetchall()
         out = []
         for r in rows:
-            body = json.loads(r["body"])
-            out.append({"version": r["version"], "saved": iso(r["saved"]), "title": doc_title(body), "nodes": doc_size(body)})
+            try:
+                body = json.loads(r["body"])
+                title, nodes = doc_title(body), doc_size(body)
+            except (ValueError, KeyError, TypeError, AttributeError, RecursionError):
+                title, nodes = "", 0  # versão malformada não derruba a lista inteira
+            out.append({"version": r["version"], "saved": iso(r["saved"]), "title": title, "nodes": nodes})
         return out
 
     def history_version(self, doc_id, version):
@@ -235,6 +281,8 @@ class Store:
 
 # ---- Migração do formato antigo (um .json por documento) ----
 def _read_json(file):
+    if file.is_symlink():
+        return None
     try:
         data = json.loads(file.read_text("utf-8"))
     except (OSError, ValueError, UnicodeDecodeError):
@@ -242,17 +290,15 @@ def _read_json(file):
     return data if isinstance(data, dict) else None
 
 
-def _valid(body):
-    try:
-        doc_title(body)
-        return isinstance(body.get("version"), int)
-    except (KeyError, TypeError, AttributeError):
-        return False
+def _real_dir(path):
+    # pasta de verdade: link simbólico não é seguido (poderia apontar para fora dos dados)
+    return path.is_dir() and not path.is_symlink()
 
 
 def migrate_legacy(store: Store, data_dir: Path):
     """Importa data/*.json, history/, trash/, files/ e folders/ para o banco e a pasta de anexos.
 
+    Só entra o que passa na mesma validação da API (id, documento, pastas) e não é link simbólico.
     Nada é apagado: o formato antigo vai inteiro para data/legacy-<data>/. Pode rodar de novo
     depois de uma interrupção (INSERT OR IGNORE; anexo já copiado não é copiado de novo).
     Devolve quantos documentos foram importados (0 se não havia nada antigo).
@@ -266,8 +312,8 @@ def migrate_legacy(store: Store, data_dir: Path):
     with store._db() as db:
         def add_doc(doc_id, file, deleted):
             body = _read_json(file)
-            if body is None or not _valid(body):
-                return False  # corrompido: fica só no backup
+            if not (ID_RE.fullmatch(doc_id) and valid_doc(body)):
+                return False  # id inválido ou corrompido: fica só no backup
             body["id"] = doc_id
             cur = db.execute("INSERT OR IGNORE INTO docs VALUES (?, ?, ?, ?, ?, ?, ?)",
                              (doc_id, doc_type(body), doc_title(body), body["version"], file.stat().st_mtime, deleted,
@@ -275,9 +321,9 @@ def migrate_legacy(store: Store, data_dir: Path):
             return cur.rowcount > 0
 
         def add_history(doc_id, folder):
-            for f in folder.glob("*.json") if folder.exists() else []:
+            for f in folder.glob("*.json") if _real_dir(folder) else []:
                 body = _read_json(f)
-                if body is not None and f.stem.isdigit():
+                if body is not None and re.fullmatch(r"[0-9]{1,9}", f.stem):
                     db.execute("INSERT OR IGNORE INTO history VALUES (?, ?, ?, ?)",
                                (doc_id, int(f.stem), f.stat().st_mtime, json.dumps(body, ensure_ascii=False)))
 
@@ -286,21 +332,22 @@ def migrate_legacy(store: Store, data_dir: Path):
                 imported += 1
                 add_history(f.stem, data_dir / "history" / f.stem)
         trash = data_dir / "trash"
-        for box in sorted(trash.iterdir()) if trash.exists() else []:
+        for box in sorted(trash.iterdir()) if _real_dir(trash) else []:
             # na lixeira com o mesmo id de um documento ativo: fica só no backup
-            if (box / "map.json").exists() and add_doc(box.name, box / "map.json", box.stat().st_mtime):
+            if _real_dir(box) and (box / "map.json").exists() and add_doc(box.name, box / "map.json", box.stat().st_mtime):
                 imported += 1
                 add_history(box.name, box / "history")
-        tree = _read_json(data_dir / "folders" / "tree.json") if (data_dir / "folders" / "tree.json").exists() else None
-        if tree is not None:
+        tree = _read_json(data_dir / "folders" / "tree.json") if _real_dir(data_dir / "folders") else None
+        if valid_folders(tree):
             db.execute("INSERT OR IGNORE INTO meta VALUES ('folders', ?)", (json.dumps(tree, ensure_ascii=False),))
 
     # anexos: copiados (o original fica no backup); com o banco já gravado, uma interrupção não perde nada
-    sources = [(d.name, d) for d in (data_dir / "files").iterdir()] if (data_dir / "files").exists() else []
-    sources += [(b.name, b / "files") for b in (data_dir / "trash").iterdir()] if (data_dir / "trash").exists() else []
+    sources = [(d.name, d) for d in (data_dir / "files").iterdir()] if _real_dir(data_dir / "files") else []
+    sources += [(b.name, b / "files") for b in trash.iterdir() if _real_dir(b)] if _real_dir(trash) else []
+    skip_links = lambda folder, names: [n for n in names if (Path(folder) / n).is_symlink()]
     for doc_id, src in sources:
-        if src.is_dir() and not store.files(doc_id).exists():
-            shutil.copytree(src, store.files(doc_id))
+        if ID_RE.fullmatch(doc_id) and _real_dir(src) and not store.files(doc_id).exists():
+            shutil.copytree(src, store.files(doc_id), ignore=skip_links)
 
     backup = data_dir / f"legacy-{time.strftime('%Y%m%d-%H%M%S')}"
     backup.mkdir()

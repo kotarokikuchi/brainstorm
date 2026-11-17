@@ -3,82 +3,67 @@ import hmac
 import json
 import mimetypes
 import os
+import posixpath
 import re
 import sys
 import threading
 import time
 import uuid
 from functools import partial
-from http.cookies import CookieError, SimpleCookie
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from store import Store, migrate_legacy
+from store import ID_RE, Store, migrate_legacy, valid_doc, valid_folders
 
 ROOT = Path(__file__).resolve().parent
-ID_RE = re.compile(r"^[a-z0-9-]{1,64}$")
 MAX_BODY = 5_000_000
+MAX_LOGIN_BODY = 10_000
 START = f"{os.getpid()}-{time.time()}"  # muda a cada partida/reinício do servidor
 MAX_FILE = 20_000_000
 HISTORY_INTERVAL = 120  # s entre cópias no histórico (autosave grava a cada edição)
-FILE_RE = re.compile(r"^[a-f0-9]{32}(\.[a-z0-9]{1,10})?$")
+FILE_RE = re.compile(r"[a-f0-9]{32}(\.[a-z0-9]{1,10})?")
 # só estes tipos abrem no navegador; o resto (inclusive SVG/HTML) sempre baixa como anexo
-# login: cookie de sessão, páginas abertas sem login e limite de tentativas erradas por endereço
+# login: cookie de sessão, páginas abertas sem login e limite de tentativas erradas (um só, global)
 SESSION_COOKIE = "brainstorm_session"
+SESSION_RE = re.compile(rf"(?:^|;)\s*{SESSION_COOKIE}=([A-Za-z0-9_-]+)\s*(?:;|$)")
 SESSION_TTL = 30 * 86400
-PUBLIC = {"/login.html", "/style.css"}  # e /fonts/ (o visual da página de login)
+PUBLIC = {"/login.html", "/login.js", "/style.css"}  # e /fonts/ (o visual da página de login)
 LOGIN_MAX_FAILS, LOGIN_WINDOW = 10, 600
+# scripts só do próprio app; estilo inline é usado nos SVG; data:/blob: para exportar PNG e baixar arquivos
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+       "font-src 'self' data:; connect-src 'self' blob: data:; object-src 'none'; base-uri 'none'; "
+       "form-action 'self'; frame-ancestors 'none'")
 INLINE = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 
 
-# documentos: mapa mental ({root}) ou quadro de desenho ({type: "board", title, elements})
-def valid_doc(body):
-    if not (isinstance(body, dict) and isinstance(body.get("version"), int)):
-        return False
-    if body.get("type", "map") == "board":
-        return isinstance(body.get("elements"), list) and isinstance(body.get("title", ""), str)
-    return body.get("type", "map") == "map" and isinstance(body.get("root"), dict)
-
-
-# pastas: {version, folders: [{id, name, parent}], place: {id do documento: id da pasta}}
-# (fica fora dos documentos: mover não mexe na versão de um mapa aberto em outra aba)
-
-
-def valid_folders(body):
-    if not (isinstance(body, dict) and isinstance(body.get("version"), int)
-            and isinstance(body.get("folders"), list) and isinstance(body.get("place"), dict)):
-        return False
-    parents = {}
-    for f in body["folders"]:
-        if not (isinstance(f, dict) and isinstance(f.get("id"), str) and ID_RE.match(f["id"])
-                and isinstance(f.get("name"), str) and 0 < len(f["name"].strip()) <= 200
-                and (f.get("parent") is None or isinstance(f.get("parent"), str))):
-            return False
-        if f["id"] in parents:
-            return False
-        parents[f["id"]] = f.get("parent")
-    for fid in parents:  # pai precisa existir e não pode haver ciclo (pasta dentro dela mesma)
-        seen, cur = set(), fid
-        while cur is not None:
-            if cur in seen or cur not in parents:
-                return False
-            seen.add(cur)
-            cur = parents[cur]
-    return all(isinstance(k, str) and ID_RE.match(k) and v in parents for k, v in body["place"].items())
-
-
 class Handler(SimpleHTTPRequestHandler):
+    timeout = 30  # s sem tráfego: conexão parada não segura uma thread para sempre
+    server_version, sys_version = "Brainstorm", ""  # sem a versão do Python no cabeçalho Server
+
     def end_headers(self):
-        # arquivos do app: o navegador sempre confere se mudaram (304 barato) em vez de usar JS antigo do cache
-        if not urlsplit(self.path).path.startswith("/api/"):
-            self.send_header("Cache-Control", "no-cache")
+        # arquivos do app: o navegador sempre confere se mudaram (304 barato) em vez de usar JS antigo do cache;
+        # respostas da API (dados do usuário) não ficam em cache nenhum
+        api = urlsplit(getattr(self, "path", "")).path.startswith("/api/")
+        self.send_header("Cache-Control", "no-store" if api else "no-cache")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Content-Security-Policy", CSP)
         super().end_headers()
 
     def do_GET(self):
         if self._foreign_host() or self._gate("GET") or self._api("GET"):
             return
         super().do_GET()
+
+    def do_HEAD(self):
+        if self._foreign_host() or self._gate("HEAD"):
+            return
+        super().do_HEAD()
+
+    def list_directory(self, path):
+        self.send_error(404)  # sem listagem de pastas
 
     def do_PUT(self):
         self._foreign_host() or self._foreign_origin() or self._gate("PUT") or self._api("PUT") or self._send(404, {"error": "not found"})
@@ -99,7 +84,11 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/logout" and method == "POST":
             self._logout()
             return True
-        if not self.server.auth or path in PUBLIC or path.startswith("/fonts/") or self._logged_in():
+        # público só se o arquivo que será servido (translate_path desfaz "%2e", ".." e "//") é o mesmo
+        # conferido aqui: /fonts/../app.js não passa
+        public = (path in PUBLIC or path.startswith("/fonts/")) and path == posixpath.normpath(unquote(path)) \
+            and self.translate_path(self.path) == os.path.join(self.directory, path[1:])
+        if not self.server.auth or public or self._logged_in():
             return False
         if path.startswith("/api/"):
             self._send(401, {"error": "login required"})
@@ -111,12 +100,10 @@ class Handler(SimpleHTTPRequestHandler):
         return True
 
     def _token(self):
-        cookie = SimpleCookie()
-        try:
-            cookie.load(self.headers.get("Cookie") or "")
-        except CookieError:
-            return None
-        return cookie[SESSION_COOKIE].value if SESSION_COOKIE in cookie else None
+        # só o nosso cookie: outro cookie malformado no mesmo cabeçalho (localhost divide cookies entre portas)
+        # não derruba a sessão
+        m = SESSION_RE.search(self.headers.get("Cookie") or "")
+        return m and m[1]
 
     def _logged_in(self):
         token = self._token()
@@ -126,20 +113,23 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.server.auth:
             self._send(404, {"error": "login disabled"})
             return
-        ip, now = self.client_address[0], time.time()
+        length = self._length(MAX_LOGIN_BODY)
+        if length is None:
+            return
+        now = time.time()
         # a tentativa é reservada (contada como erro) antes de conferir a senha, na mesma trava da
-        # checagem: tentativas simultâneas não passam do limite; acertar zera a contagem
+        # checagem: tentativas simultâneas não passam do limite; acertar zera a contagem. Contagem única
+        # (o app tem um usuário só): por endereço, um processo local trocaria de 127.x.y.z a cada tentativa
         with self.server.login_lock:
-            fails = [t for t in self.server.login_fails.get(ip, []) if now - t < LOGIN_WINDOW]
+            fails = [t for t in self.server.login_fails if now - t < LOGIN_WINDOW]
             locked = len(fails) >= LOGIN_MAX_FAILS
-            self.server.login_fails[ip] = fails if locked else fails + [now]
+            self.server.login_fails = fails if locked else fails + [now]
         if locked:
             self._send(429, {"error": "too many attempts"}, {"Retry-After": str(int(LOGIN_WINDOW - (now - fails[0])) + 1)})
             return
-        length = int(self.headers.get("Content-Length") or 0)
         try:
-            body = json.loads(self.rfile.read(min(length, 10_000)) or b"{}")
-        except ValueError:
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, RecursionError):
             body = {}
         user, password = (body.get(k) if isinstance(body, dict) else None for k in ("user", "password"))
         want_user, want_password = self.server.auth
@@ -152,7 +142,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send(401, {"error": "invalid credentials"})
             return
         with self.server.login_lock:
-            self.server.login_fails.pop(ip, None)
+            self.server.login_fails = []
         token = self.server.store.create_session(SESSION_TTL)
         # HttpOnly: o JavaScript não lê; SameSite=Strict: outros sites não mandam o cookie
         self._send(200, {"ok": True}, {"Set-Cookie": f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_TTL}"})
@@ -162,6 +152,18 @@ class Handler(SimpleHTTPRequestHandler):
         if token:
             self.server.store.end_session(token)
         self._send(204, None, {"Set-Cookie": f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"})
+
+    def _length(self, limit):
+        # tamanho do corpo, ou None (já respondeu). Só dígitos: int() aceitaria "-1", e read(-1) lê sem limite
+        raw = self.headers.get("Content-Length") or "0"
+        if not re.fullmatch(r"[0-9]+", raw):
+            self.close_connection = True
+            self._send(400, {"error": "invalid Content-Length"})
+        elif len(raw) > 18 or int(raw) > limit:
+            self.close_connection = True
+            self._send(413, {"error": "too large"})
+        else:
+            return int(raw)
 
     def _foreign_origin(self):
         # escrita vinda de outra origem (página de outro site aberta no navegador) é recusada:
@@ -202,7 +204,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not path.startswith("/api/maps/"):
             return False
         map_id, _, sub = path[len("/api/maps/"):].partition("/")
-        if not ID_RE.match(map_id):
+        if not ID_RE.fullmatch(map_id):
             self._send(400, {"error": "invalid id"})
             return True
         if sub == "duplicate" and method == "POST":
@@ -225,14 +227,12 @@ class Handler(SimpleHTTPRequestHandler):
         return True
 
     def _put(self, map_id):
-        length = int(self.headers.get("Content-Length") or 0)
-        if length > MAX_BODY:
-            self.close_connection = True
-            self._send(413, {"error": "too large"})
+        length = self._length(MAX_BODY)
+        if length is None:
             return
         try:
             body = json.loads(self.rfile.read(length))
-        except ValueError:
+        except (ValueError, RecursionError):
             body = None
         if not valid_doc(body):
             self._send(400, {"error": "invalid map"})
@@ -252,7 +252,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send(*((200, store.trash()) if method == "GET" else (404, {"error": "not found"})))
             return
         map_id, _, action = rest.partition("/")
-        if not ID_RE.match(map_id):
+        if not ID_RE.fullmatch(map_id):
             self._send(400, {"error": "invalid id"})
             return
         if method == "DELETE" and not action:
@@ -275,7 +275,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not version:
             self._send(200, self.server.store.history(map_id))
             return
-        if not version.isdigit():
+        if not re.fullmatch(r"[0-9]{1,9}", version):
             self._send(400, {"error": "invalid version"})
             return
         data = self.server.store.history_version(map_id, int(version))
@@ -292,10 +292,8 @@ class Handler(SimpleHTTPRequestHandler):
             if not self.server.store.exists(map_id):
                 self._send(404, {"error": "map not found"})
                 return
-            length = int(self.headers.get("Content-Length") or 0)
-            if length > MAX_FILE:
-                self.close_connection = True
-                self._send(413, {"error": "too large"})
+            length = self._length(MAX_FILE)
+            if length is None:
                 return
             name = unquote(self.headers.get("X-Filename") or "arquivo")
             ext = Path(name).suffix.lower()
@@ -311,7 +309,7 @@ class Handler(SimpleHTTPRequestHandler):
         if method != "GET" or prefix != "files" or not file_id:
             self._send(404, {"error": "not found"})
             return
-        if not FILE_RE.match(file_id):
+        if not FILE_RE.fullmatch(file_id):
             self._send(400, {"error": "invalid file id"})
             return
         path = folder / file_id
@@ -322,7 +320,6 @@ class Handler(SimpleHTTPRequestHandler):
         inline = INLINE.get(path.suffix)
         self.send_response(200)
         self.send_header("Content-Type", inline or "application/octet-stream")
-        self.send_header("X-Content-Type-Options", "nosniff")
         if not inline:
             self.send_header("Content-Disposition", "attachment")
         self.send_header("Content-Length", str(len(data)))
@@ -341,7 +338,6 @@ class Handler(SimpleHTTPRequestHandler):
         # Server-Sent Events: a página recarrega quando o carimbo muda (static/ editado ou servidor reiniciado)
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
-        self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         last, beat = None, time.monotonic()
         try:
@@ -361,14 +357,12 @@ class Handler(SimpleHTTPRequestHandler):
         if method == "GET":
             self._send(200, self.server.store.folders())
             return
-        length = int(self.headers.get("Content-Length") or 0)
-        if length > MAX_BODY:
-            self.close_connection = True
-            self._send(413, {"error": "too large"})
+        length = self._length(MAX_BODY)
+        if length is None:
             return
         try:
             body = json.loads(self.rfile.read(length))
-        except ValueError:
+        except (ValueError, RecursionError):
             body = None
         if not valid_folders(body):
             self._send(400, {"error": "invalid folders"})
@@ -385,7 +379,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
-        self.wfile.write(data)
+        if self.command != "HEAD":
+            self.wfile.write(data)
 
 
 def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: Path | None = None,
@@ -400,7 +395,7 @@ def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: P
     server.auth = auth  # (usuário, senha) ou None = sem login
     if auth:
         store.reset_sessions_if_auth_changed(*auth)  # trocou usuário/senha: todo mundo entra de novo
-    server.login_delay, server.login_fails, server.login_lock = 1.0, {}, threading.Lock()
+    server.login_delay, server.login_fails, server.login_lock = 1.0, [], threading.Lock()
     server.data_dir = data_dir
     server.static_dir = ROOT / "static"
     server.history_interval = HISTORY_INTERVAL

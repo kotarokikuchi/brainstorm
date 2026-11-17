@@ -1,18 +1,40 @@
 import contextlib
 from concurrent.futures import ThreadPoolExecutor
+import http.client
 import io
 import json
 import os
+import socket
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from unittest import mock
 
 from app import Handler, load_env, make_server, watch
+from store import Store, migrate_legacy
 
 Handler.log_message = lambda *a: None  # silencia o log de requisições nos testes
+
+
+def raw_request(port, head, body=b""):
+    """Requisição escrita à mão (cabeçalhos que o urllib não deixa mandar). Devolve (status, resposta inteira)."""
+    with socket.create_connection(("127.0.0.1", port), timeout=0.5) as s:
+        s.sendall(f"{head}\nHost: 127.0.0.1\n\n".replace("\n", "\r\n").encode())
+        data = b""
+        try:
+            # quem recusa pelo cabeçalho responde sem esperar o corpo (e sem corpo não lido não há RST)
+            data = s.recv(65536)
+        except TimeoutError:
+            s.sendall(body)
+        s.settimeout(5)
+        s.shutdown(socket.SHUT_WR)
+        while chunk := s.recv(65536):
+            data += chunk
+    return int(data.split()[1]), data
 
 
 class ApiTest(unittest.TestCase):
@@ -164,11 +186,14 @@ class ApiTest(unittest.TestCase):
         static.mkdir()
         (static / "app.js").write_text("1")
         self.server.static_dir = static
-        with urllib.request.urlopen(self.base + "/api/events", timeout=5) as resp:
+        # timeout de conexão parada bem curto: o stream só escreve e não pode ser cortado por ele
+        with mock.patch.object(Handler, "timeout", 1), urllib.request.urlopen(self.base + "/api/events", timeout=5) as resp:
             self.assertEqual(resp.headers["Content-Type"], "text/event-stream")
+            self.assertEqual(resp.headers.get_all("Cache-Control"), ["no-store"], "um valor só")
             first = resp.readline()
             self.assertTrue(first.startswith(b"data: "), first)
             resp.readline()  # linha em branco que fecha o evento
+            time.sleep(1.5)
             st = (static / "app.js").stat()
             os.utime(static / "app.js", (st.st_atime, st.st_mtime + 5))
             second = resp.readline()
@@ -321,6 +346,77 @@ class ApiTest(unittest.TestCase):
         self.assertEqual([m["id"] for m in self.req("GET", "/api/maps")[1]], [], "pastas não aparecem como documento")
 
 
+    def test_content_length_must_be_a_plain_number(self):
+        self.make_map()
+        port = self.server.server_address[1]
+        doc = json.dumps({"version": 1, "root": {"text": "b", "children": []}}).encode()
+        tree = json.dumps({"version": 0, "folders": [], "place": {}}).encode()
+        for bad in ("-1", "abc", "+5", "1_0", "²"):  # int() aceitaria "-1", "+5" e "1_0"
+            for head, body in ((f"PUT /api/maps/abc HTTP/1.1\nContent-Length: {bad}", doc),
+                               (f"PUT /api/folders HTTP/1.1\nContent-Length: {bad}", tree),
+                               (f"POST /api/maps/abc/files HTTP/1.1\nX-Filename: a.bin\nContent-Length: {bad}", b"x" * 10)):
+                self.assertEqual(raw_request(port, head, body)[0], 400, head)
+        self.assertEqual(raw_request(port, "PUT /api/maps/abc HTTP/1.1\nContent-Length: " + "9" * 5000, doc)[0], 413)
+        self.assertEqual(self.req("GET", "/api/maps/abc")[1]["version"], 1, "nada foi gravado")
+        self.assertEqual(list((self.data / "attachments").iterdir()), [])
+
+    def test_idle_connection_is_closed(self):
+        self.assertTrue(Handler.timeout and Handler.timeout <= 60, "conexão parada não segura uma thread para sempre")
+        with mock.patch.object(Handler, "timeout", 0.2), socket.create_connection(self.server.server_address, timeout=5) as s:
+            self.assertEqual(s.recv(1), b"", "o servidor fecha a conexão que não manda nada")
+
+    def test_security_headers(self):
+        _, headers, body = self.raw_get("/login.html")
+        self.assertEqual((headers["X-Content-Type-Options"], headers["X-Frame-Options"], headers["Referrer-Policy"]),
+                         ("nosniff", "DENY", "no-referrer"))
+        csp = headers["Content-Security-Policy"]
+        for part in ("default-src 'self'", "script-src 'self';", "object-src 'none'", "frame-ancestors 'none'"):
+            self.assertIn(part, csp)
+        self.assertNotIn(b"<script>", body, "script-src 'self': nada de script dentro da página")
+        self.assertEqual(self.raw_get("/login.js")[0], 200)
+        self.assertEqual(headers["Server"].strip(), "Brainstorm", "sem a versão do Python")
+        _, headers, _ = self.raw_get("/api/maps")
+        self.assertEqual(headers["Cache-Control"], "no-store")
+        self.assertEqual((headers["X-Content-Type-Options"], headers["X-Frame-Options"]), ("nosniff", "DENY"))
+
+    def test_no_directory_listing(self):
+        self.assertEqual(self.req("GET", "/fonts/")[0], 404)
+
+    def test_input_validation(self):
+        self.assertEqual(self.req("PUT", "/api/maps/abc", {"version": 0, "root": {"text": ["x"]}})[0], 400, "título é texto")
+        deep = b"[" * 200_000  # RecursionError no json.loads
+        self.assertEqual(self.req("PUT", "/api/maps/abc", raw=deep)[0], 400)
+        self.assertEqual(self.req("PUT", "/api/folders", raw=deep)[0], 400)
+        self.make_map()
+        for version in ("9" * 30, "%C2%B2", "1%0A"):  # estoura o inteiro do SQLite; "²".isdigit() é True
+            self.assertEqual(self.req("GET", f"/api/maps/abc/history/{version}")[0], 400, version)
+
+    def test_folder_validation_limits(self):
+        folder = lambda i, parent: {"id": f"f{i}", "name": "p", "parent": parent}
+        tree = lambda folders, place=None: {"version": 0, "folders": folders, "place": place or {}}
+        bad = [
+            tree([folder(i, None) for i in range(2001)]),
+            tree([folder(1, None)], {"abc": []}),  # valor que nem serve de chave: antes dava TypeError
+            tree([{"id": "f1\n", "name": "p", "parent": None}]),
+            tree([folder(i, f"f{i + 1}") for i in range(1999)] + [folder(1999, "f0")]),  # ciclo comprido
+        ]
+        for b in bad:
+            self.assertEqual(self.req("PUT", "/api/folders", b)[0], 400, str(b)[:80])
+        chain = tree([folder(i, f"f{i + 1}") for i in range(1999)] + [folder(1999, None)], {"abc": "f0"})
+        started = time.monotonic()
+        self.assertEqual(self.req("PUT", "/api/folders", chain)[0], 200, "2000 pastas uma dentro da outra")
+        self.assertLess(time.monotonic() - started, 1, "checagem de ciclo linear")
+
+    def test_history_survives_a_malformed_version(self):
+        self.server.history_interval = 0
+        self.req("PUT", "/api/maps/abc", {"version": 0, "root": {"text": "a", "children": ["x"]}})
+        self.assertEqual(self.put_text(1, "b")[0], 200)
+        self.assertEqual(self.put_text(2, "c")[0], 200)
+        status, hist = self.req("GET", "/api/maps/abc/history")
+        self.assertEqual(status, 200)
+        self.assertEqual([(h["version"], h["title"], h["nodes"]) for h in hist], [(2, "b", 1), (1, "", 0)])
+
+
 class AuthTest(unittest.TestCase):
     """Com BRAINSTORM_USER/BRAINSTORM_PASSWORD: tudo exige login, menos a página de login."""
 
@@ -452,6 +548,50 @@ class AuthTest(unittest.TestCase):
         self.assertEqual(json.loads(self.call("GET", "/api/session")[2]), {"auth": False})
 
 
+    def test_public_paths_cannot_reach_other_files(self):
+        for path in ("/fonts/../app.js", "/fonts/%2e%2e/app.js", "/fonts/..%2fapp.js", "//fonts/../index.html",
+                     "/fonts/%2E%2E/index.html", "/login.html/../app.js", "/fonts/./../app.js", "/fonts//../app.js"):
+            self.assertEqual(self.call("GET", path)[0], 302, path)
+            self.assertEqual(self.call("HEAD", path)[0], 302, path)
+        self.assertEqual(self.call("GET", "/login.js")[0], 200)
+        c = self.cookie()
+        self.assertEqual(self.call("GET", "/fonts/../app.js", cookie=c)[0], 200, "com sessão, continua servindo")
+
+    def test_head_goes_through_the_same_checks(self):
+        self.assertEqual(self.call("HEAD", "/app.js")[0], 302)
+        self.assertEqual(self.call("HEAD", "/api/maps")[0], 401)
+        self.assertEqual(self.call("HEAD", "/login.html", headers={"Host": "evil.com"})[0], 403)
+        self.assertEqual(self.call("HEAD", "/login.html")[0], 200)
+        self.assertEqual(self.call("HEAD", "/app.js", cookie=self.cookie())[0], 200)
+
+    def test_login_body_is_limited_before_reading(self):
+        port = self.server.server_address[1]
+        body = json.dumps({"user": "ana", "password": "s3gredo ç"}).encode()
+        for bad in ("-1", "abc"):
+            status, data = raw_request(port, f"POST /api/login HTTP/1.1\nContent-Length: {bad}", body)
+            self.assertEqual(status, 400, bad)
+            self.assertNotIn(b"Set-Cookie", data)
+        self.assertEqual(raw_request(port, "POST /api/login HTTP/1.1\nContent-Length: 10001", body)[0], 413)
+
+    def test_lockout_is_global_not_per_address(self):
+        # um processo local escolhe o endereço de origem (127.x.y.z): cada um não pode valer um limite novo
+        port, codes = self.server.server_address[1], []
+        for i in range(11):
+            conn = http.client.HTTPConnection("127.0.0.1", port, source_address=(f"127.0.0.{i + 2}", 0))
+            conn.request("POST", "/api/login", json.dumps({"user": "ana", "password": "errada"}))
+            codes.append(conn.getresponse().status)
+            conn.close()
+        self.assertEqual(codes, [401] * 10 + [429])
+        self.assertEqual(self.server.login_fails.__class__, list, "contagem única: não cresce com os endereços")
+
+    def test_other_malformed_cookies_do_not_log_out(self):
+        c = self.cookie()
+        for header in (f"ruim[chave]=1; {c}; outro=x", f"{c};a b c", f"x=1;{c}"):
+            self.assertEqual(self.call("GET", "/api/maps", cookie=header)[0], 200, header)
+        for header in (f"x{c}", c + "$", "brainstorm_session="):
+            self.assertEqual(self.call("GET", "/api/maps", cookie=header)[0], 401, header)
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None
@@ -530,6 +670,38 @@ class MigrationTest(unittest.TestCase):
         self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
         self.assertEqual(len(list(self.data.glob("legacy-*"))), 1)
         self.assertEqual(len(self.get("/api/maps")[1]), 1)
+
+
+class MigrationSafetyTest(unittest.TestCase):
+    """A importação do formato antigo só aceita o que a API aceitaria e não segue links simbólicos."""
+
+    def test_bad_ids_symlinks_and_invalid_folders_stay_in_the_backup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d, outside = Path(tmp) / "data", Path(tmp) / "outside"
+            d.mkdir()
+            outside.mkdir()
+            (outside / "secret.png").write_bytes(b"segredo")
+            mp = json.dumps({"version": 1, "root": {"text": "Mapa", "children": []}})
+            for name in ("a", "b", "Bad Id", "x" * 65):
+                (d / f"{name}.json").write_text(mp)
+            (d / "num.json").write_text(json.dumps({"version": 1, "root": {"text": 5}}))
+            (d / "link.json").symlink_to(outside / "secret.png")
+            (d / "files" / "a").mkdir(parents=True)
+            (d / "files" / "a" / ("f" * 32 + ".png")).write_bytes(b"img")
+            (d / "files" / "a" / ("e" * 32 + ".png")).symlink_to(outside / "secret.png")
+            (d / "files" / "a" / "sub").symlink_to(outside, target_is_directory=True)
+            (d / "files" / "b").symlink_to(outside, target_is_directory=True)
+            (d / "files" / "Bad Id").mkdir()
+            (d / "folders").mkdir()
+            (d / "folders" / "tree.json").write_text(json.dumps({"version": 1, "folders": [], "place": {"a": "nao-existe"}}))
+            store = Store(d / "brainstorm.db", d / "attachments")
+            self.assertEqual(migrate_legacy(store, d), 2)
+            self.assertEqual(sorted(m["id"] for m in store.list_docs()), ["a", "b"])
+            self.assertEqual(sorted(p.name for p in (d / "attachments").rglob("*")), ["a", "f" * 32 + ".png"])
+            self.assertEqual(store.folders(), {"version": 0, "folders": [], "place": {}})
+            backup = next(d.glob("legacy-*"))
+            self.assertEqual(len(list(backup.iterdir())), 8, "nada apagado: tudo no backup")
+            self.assertEqual((outside / "secret.png").read_bytes(), b"segredo")
 
 
 class WatchTest(unittest.TestCase):
