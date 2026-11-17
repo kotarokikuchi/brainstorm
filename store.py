@@ -243,14 +243,14 @@ class Store:
         return out
 
     def label_version(self, doc_id, label):
-        """Dá nome (ou tira, com None) à versão atual do documento. Devolve a versão ou None se não existe."""
+        """Dá nome (None mantém o nome já existente) à versão atual do documento. Devolve a versão ou None se não existe."""
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT version, updated, body FROM docs WHERE id = ? AND deleted IS NULL", (doc_id,)).fetchone()
             if not row:
                 return None
             db.execute("INSERT INTO history (doc_id, version, saved, body, label) VALUES (?, ?, ?, ?, ?) "
-                       "ON CONFLICT(doc_id, version) DO UPDATE SET label = excluded.label",
+                       "ON CONFLICT(doc_id, version) DO UPDATE SET label = COALESCE(excluded.label, history.label)",
                        (doc_id, row["version"], row["updated"], row["body"], label))
         return row["version"]
 

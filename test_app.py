@@ -360,6 +360,18 @@ class ApiTest(unittest.TestCase):
         self.assertEqual([(h["version"], h["label"]) for h in hist], [(2, "v1"), (1, None)])
         self.assertEqual(self.req("POST", "/api/maps/abc/history", raw=b"")[0], 201, "sem rótulo")
 
+    def test_history_post_keeps_label_and_validates_body(self):
+        self.server.history_interval = 0
+        self.put_text(0, "a")
+        self.req("POST", "/api/maps/abc/history", {"label": "v1"})
+        self.assertEqual(self.req("POST", "/api/maps/abc/history", {})[0], 201)
+        self.assertEqual(self.req("GET", "/api/maps/abc/history")[1][0]["label"], "v1", "sem rótulo não apaga o existente")
+        for raw in (b"{oops", b"[1]", b'"x"', b"null"):
+            self.assertEqual(self.req("POST", "/api/maps/abc/history", raw=raw)[0], 400, raw)
+        self.put_text(1, "b")
+        self.req("POST", "/api/maps/abc/history", {"label": "   "})
+        self.assertIsNone(self.req("GET", "/api/maps/abc/history")[1][0]["label"], "só espaços = sem rótulo")
+
     def test_named_version_survives_prune(self):
         self.server.history_interval = 0
         self.put_text(0, "a")

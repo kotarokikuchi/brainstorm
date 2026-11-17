@@ -305,13 +305,22 @@ class Handler(SimpleHTTPRequestHandler):
         length = self._length(MAX_LOGIN_BODY)
         if length is None:
             return
-        try:
-            label = json.loads(self.rfile.read(length)).get("label")
-        except (ValueError, RecursionError, AttributeError):
-            label = None
+        raw = self.rfile.read(length)
+        label = None
+        if raw:
+            try:
+                body = json.loads(raw)
+            except (ValueError, RecursionError):
+                body = None
+            if not isinstance(body, dict):
+                self._send(400, {"error": "invalid body"})
+                return
+            label = body.get("label")
         if label is not None and not (isinstance(label, str) and len(label) <= 100 and label.isprintable()):
             self._send(400, {"error": "invalid label"})
             return
+        if label is not None:
+            label = label.strip()
         version = self.server.store.label_version(map_id, label or None)
         self._send(*((201, {"version": version}) if version is not None else (404, {"error": "not found"})))
 
