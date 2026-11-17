@@ -181,6 +181,8 @@ class BackupTest(unittest.TestCase):
         return tarfile.open(fileobj=io.BytesIO(self.fake.objects["bs/" + name][0]), mode="r:gz")
 
     def test_archive_has_data_but_no_secrets(self):
+        (self.store.files("m1") / ".DS_Store").write_bytes(b"x")  # o restore recusaria: nem entra
+        (self.store.files_dir / ".restore-old").mkdir()
         name = self.backup.run()
         self.assertRegex(name, NAME_RE)
         with self.archive(name) as tar:
@@ -198,6 +200,7 @@ class BackupTest(unittest.TestCase):
             self.assertEqual(sorted(r[0] for r in db.execute("SELECT key FROM meta")), ["folders", "schema"])
         self.assertFalse((self.store.files_dir / ".backup-tmp").exists(), "temporários apagados")
         self.assertEqual(self.backup.view()["status"]["lastName"], name)
+        self.backup.restore(name)  # tudo o que foi para o arquivo volta
         self.assertIsNone(self.backup.view()["status"]["lastError"])
 
     def test_failure_goes_to_the_status(self):
@@ -407,7 +410,7 @@ class BackupTest(unittest.TestCase):
         self.assertEqual(clean_config(good)["endpoint"], "https://s3.eu-central-2.wasabisys.com")
         self.assertNotIn("secretKey", clean_config({k: v for k, v in good.items() if k != "secretKey"}))
         for bad in ({"endpoint": "http://s3.wasabisys.com"}, {"endpoint": "https://u:p@s3.wasabisys.com"}, {"endpoint": "https://h/x"},
-                    {"endpoint": "https://"}, {"endpoint": "ftp://h"}, {"bucket": "A"}, {"bucket": "../x"}, {"region": "x/y"},
+                    {"endpoint": "https://"}, {"endpoint": "ftp://h"}, {"endpoint": "https://h:porta"}, {"bucket": "A"}, {"bucket": "../x"}, {"region": "x/y"},
                     {"prefix": "/abs"}, {"secretKey": ""}, {"interval": 5}, {"interval": True}, {"keep": 0}, {"keep": 366},
                     {"keep": "3"}, {"enabled": 1}, {"accessKey": "a\nb"}):
             self.assertIsNone(clean_config({**good, **bad}), bad)

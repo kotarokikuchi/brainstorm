@@ -59,6 +59,10 @@ def clean_config(body):
             return None
         cfg[k] = body[k].strip()
     url = urlsplit(cfg["endpoint"])
+    try:
+        url.port  # porta que não é número
+    except ValueError:
+        return None
     cfg["endpoint"] = cfg["endpoint"].rstrip("/")
     if cfg["endpoint"] and not (url.scheme == "https" and url.hostname and "@" not in url.netloc
                                 and url.path in ("", "/") and not url.query and not url.fragment):
@@ -81,12 +85,17 @@ def configured(cfg):
     return all(cfg[k] for k in ("endpoint", "bucket", "accessKey", "secretKey"))
 
 
+def file_name_ok(name):
+    # o mesmo critério no backup e no restore: o que vai no arquivo sempre volta
+    return bool(name) and not name.startswith(".") and "\\" not in name and name.isprintable()
+
+
 def attachments(files_dir):
     """[(pasta do documento, [arquivos])]: sem pastas com ponto (temporários) e sem links simbólicos."""
     out = []
     for d in sorted(files_dir.iterdir()) if files_dir.is_dir() else []:
-        if not d.name.startswith(".") and d.is_dir() and not d.is_symlink():
-            out.append((d, sorted(f for f in d.iterdir() if f.is_file() and not f.is_symlink())))
+        if ID_RE.fullmatch(d.name) and d.is_dir() and not d.is_symlink():
+            out.append((d, sorted(f for f in d.iterdir() if f.is_file() and not f.is_symlink() and file_name_ok(f.name))))
     return out
 
 
@@ -107,8 +116,7 @@ def check_members(tar):
         ok = (m.name == "brainstorm.db" and m.isfile()) or (parts[0] == "attachments" and (
             (len(parts) == 1 and m.isdir())
             or (len(parts) == 2 and ID_RE.fullmatch(parts[1]) and m.isdir())
-            or (len(parts) == 3 and ID_RE.fullmatch(parts[1]) and parts[2] and not parts[2].startswith(".")
-                and "\\" not in parts[2] and parts[2].isprintable() and m.isfile())))
+            or (len(parts) == 3 and ID_RE.fullmatch(parts[1]) and file_name_ok(parts[2]) and m.isfile())))
         if not ok:
             raise BackupError("invalid archive")
 
@@ -139,7 +147,7 @@ class Backup:
     def view(self):
         cfg, st = self.config(), self.status()
         out = {k: v for k, v in cfg.items() if k != "secretKey"}
-        return {**out, "secretHint": hint(cfg["secretKey"]), "configured": configured(cfg), "running": self.lock.locked(),
+        return {**out, "secretHint": hint(cfg["secretKey"]), "configured": configured(cfg),
                 "status": {"lastSuccess": iso(st.get("lastSuccess")), "lastAttempt": iso(st.get("lastAttempt")),
                            "lastError": st.get("lastError"), "lastName": st.get("lastName")}}
 

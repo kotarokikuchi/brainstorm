@@ -1,6 +1,7 @@
 """Cliente S3 mínimo (Wasabi e outros compatíveis) só com a stdlib: endereço path-style e assinatura SigV4."""
 import hashlib
 import hmac
+import http.client
 import shutil
 import urllib.error
 import urllib.request
@@ -84,8 +85,8 @@ class S3:
             except ET.ParseError:
                 code = ""
             raise S3Error(f"{e.code} {code}".strip()) from None
-        except (urllib.error.URLError, OSError) as e:
-            raise S3Error(f"network error: {getattr(e, 'reason', e)}") from None
+        except (OSError, http.client.HTTPException, ValueError) as e:  # URLError é OSError
+            raise S3Error(f"network error: {getattr(e, 'reason', e) or type(e).__name__}") from None
 
     def put_file(self, key, path):
         size = path.stat().st_size
@@ -95,7 +96,10 @@ class S3:
 
     def get_file(self, key, path):
         with self._request("GET", key) as resp, open(path, "wb") as f:
-            shutil.copyfileobj(resp, f, 1 << 20)
+            try:
+                shutil.copyfileobj(resp, f, 1 << 20)
+            except (OSError, http.client.HTTPException) as e:  # conexão caiu no meio do download
+                raise S3Error(f"network error: {e or type(e).__name__}") from None
 
     def delete(self, key):
         self._request("DELETE", key).close()
