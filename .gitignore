@@ -2,3 +2,7 @@ data/
 __pycache__/
 .superpowers/
 .env
+*.db
+*.db-wal
+*.db-shm
+backup*

@@ -19,6 +19,10 @@ subiu (por exemplo, pelo `python app.py`). Pare o outro servidor e rode
 Outra porta: troque `127.0.0.1:8000:8000` por, por exemplo, `127.0.0.1:8080:8000` no
 `docker-compose.yml`.
 
+**Atenção:** o app fala HTTP puro (senha e dados passam sem criptografia). Para acessar de outra
+máquina, use um túnel SSH (`ssh -L 8000:127.0.0.1:8000 usuario@servidor`) ou um proxy reverso com
+TLS; nunca troque o mapeamento da porta para `0.0.0.0`.
+
 ## Login
 
 Para proteger o acesso, crie um `.env` (modelo em `.env.example`):
@@ -29,8 +33,8 @@ cp .env.example .env    # e troque usuário e senha
 
 Com `BRAINSTORM_USER` e `BRAINSTORM_PASSWORD` definidos (no `.env` ou como variáveis de ambiente,
 que têm prioridade), o app pede login; sem eles, abre sem login. A sessão dura 30 dias; o botão
-"Sair" fica no canto do topo. Depois de 10 senhas erradas em 10 minutos, o login fica bloqueado
-por um tempo.
+"Sair" fica no canto do topo. Depois de 10 senhas erradas em 10 minutos (no total, venham de onde
+vierem), o login fica bloqueado por um tempo.
 
 No Docker, o `docker-compose.yml` repassa as duas variáveis ao container. Elas vêm do ambiente de
 quem roda o comando ou, se não estiverem definidas ali, do `.env`:
@@ -53,9 +57,12 @@ Para arquivar num storage externo, basta guardar esses dois itens. Com o app rod
 banco com segurança assim (o arquivo `.db` sozinho pode estar no meio de uma gravação):
 
 ```bash
-python3 -c "import sqlite3; sqlite3.connect('data/brainstorm.db').backup(sqlite3.connect('backup.db'))"
-cp -r data/attachments backup-attachments
+python3 -c "import sqlite3, os; sqlite3.connect('data/brainstorm.db').backup(sqlite3.connect(os.path.expanduser('~/brainstorm-backup.db')))"
+cp -r data/attachments ~/brainstorm-backup-attachments
 ```
+
+A cópia do banco também leva os hashes das sessões de login e uma impressão (scrypt com sal) do
+usuário e da senha: guarde-a em lugar seguro e use uma senha forte.
 
 Ou pare o app (`docker compose down`) e copie a pasta `data/` inteira.
 
