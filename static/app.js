@@ -481,12 +481,16 @@ $('#new-map').onclick = async () => {
 // ---------- Editor ----------
 async function openMap(id) {
   const r = await api('GET', `/${id}`);
+  if (location.hash !== `#/map/${id}`) return;  // o usuário já saiu enquanto carregava
   if (!r.ok) {
     if (r.status === 500) alert(t('map.openError'));
     location.hash = '#/';
     return;
   }
-  map = await r.json();
+  const doc = await r.json();
+  if (location.hash !== `#/map/${id}`) return;
+  doc.id = id;  // o endereço manda: um corpo com outro id não desvia as chamadas à API
+  map = doc;
   if (map.type && map.type !== 'map') { const type = map.type; map = null; location.hash = `#/${type}/${id}`; return; }  // endereço antigo de quadro ou skill
   history = new History();
   selected = map.root.id;

@@ -42,12 +42,15 @@ export const newBoard = (id, title = 'Quadro sem título') => ({ id, version: 0,
 
 export async function openBoard(id) {
   const r = await deps.api('GET', `/${id}`);
+  if (location.hash !== `#/board/${id}`) return;  // o usuário já saiu enquanto carregava
   if (!r.ok) {
     if (r.status === 500) alert(t('board.openError'));
     location.hash = '#/';
     return;
   }
   const doc = await r.json();
+  if (location.hash !== `#/board/${id}`) return;
+  doc.id = id;  // o endereço manda: um corpo com outro id não desvia as chamadas à API
   if (doc.type !== 'board') { location.hash = `#/map/${id}`; return; }
   await document.fonts.load('20px Kalam').catch(() => {});  // medir texto só com a fonte carregada
   board = doc;

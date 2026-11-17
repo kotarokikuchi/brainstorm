@@ -182,12 +182,15 @@ function bind() {
 
 export async function openSkill(id) {
   const r = await deps.api('GET', `/${id}`);
+  if (location.hash !== `#/skill/${id}`) return;  // o usuário já saiu enquanto carregava
   if (!r.ok) {
     if (r.status === 500) alert(t('map.openError'));
     location.hash = '#/';
     return;
   }
   const doc = await r.json();
+  if (location.hash !== `#/skill/${id}`) return;
+  doc.id = id;  // o endereço manda: um corpo com outro id não desvia as chamadas à API
   if (doc.type !== 'skill') { location.hash = `#/${doc.type ?? 'map'}/${id}`; return; }
   if (!bound) bind();
   skill = doc;

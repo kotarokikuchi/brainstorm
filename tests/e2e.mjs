@@ -1709,6 +1709,15 @@ await sleep(5800);  // a nova tentativa seria a cada 5 s
 assert.equal(await ev(`window.__puts`), 1, '410 não é repetido');
 await ev(`window.fetch = window.__f`);
 
+// corrida: abrir um documento e voltar antes da resposta deixa a lista na tela, sem abrir o editor
+await putDoc('cf3', { version: 0, layout: 'map', root: { id: 'cf3r', text: 'Corrida', children: [] } });
+await ev(`location.hash = '#/'`); await sleep(800);
+await ev(`window.__f = window.fetch; window.fetch = (u, o) => (String(u).endsWith('/api/maps/cf3') && !o?.method ? new Promise(r => setTimeout(r, 1200)).then(() => window.__f(u, o)) : window.__f(u, o))`);
+await ev(`location.hash = '#/map/cf3'`); await sleep(300);
+await ev(`location.hash = '#/'`); await sleep(2000);
+assert.deepEqual(await ev(`[location.hash, document.body.dataset.view]`), ['#/', 'list'], 'voltar antes da resposta fica na lista');
+await ev(`window.fetch = window.__f`);
+
 // Sair: encerra a sessão e volta para a página de login
 await ev(`location.hash = '#/'`); await sleep(800);
 assert.equal(await ev(`!document.querySelector('#logout-btn').hidden`), true, 'botão Sair aparece com login ativo');
