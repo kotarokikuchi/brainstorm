@@ -33,7 +33,8 @@ export default {
   // ---- Estado del guardado automático (texto en la parte superior) ----
   'status.saved': 'Guardado',
   'status.saving': 'Guardando…',
-  'status.conflict': 'Mapa modificado en otra pestaña — recarga',
+  'status.conflict': 'Documento modificado en otra pestaña — recarga',
+  'status.trashed': 'Documento movido a la papelera en otra pestaña',
   'status.saveError': 'Error al guardar — reintentando',
 
   // ---- Documentos (mapa mental o pizarra) ----
@@ -78,7 +79,6 @@ export default {
   'trash.deletedAt': 'eliminado el {date}',  // {date}: fecha y hora ya formateadas
   'trash.purge': 'Eliminar para siempre',  // botón: borrado definitivo
   'trash.purgeConfirm': '¿Eliminar para siempre? No se puede deshacer.',
-  'trash.restoreConflict': 'Ya existe un mapa con ese identificador; no se pudo restaurar.',
 
   // ---- Historial de versiones ----
   'history.title': 'Historial de versiones',  // sugerencia del botón y título del panel
@@ -353,6 +353,7 @@ export default {
   'skill.versions': 'Versiones',
   'skill.versionLabelPrompt': 'Nombre de la versión (opcional):',
   'skill.versionSaved': 'Versión guardada',
+  'skill.versionError': 'No se pudo guardar la versión.',
   'skill.compare': 'Comparar',
   'skill.closeCompare': 'Cerrar comparación',
   'skill.restoreConfirm': '¿Restaurar esta versión? El texto actual queda guardado en el historial.',

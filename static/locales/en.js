@@ -33,7 +33,8 @@ export default {
   // ---- Autosave status (text at the top) ----
   'status.saved': 'Saved',
   'status.saving': 'Saving…',
-  'status.conflict': 'Map changed in another tab — reload',
+  'status.conflict': 'Document changed in another tab — reload',
+  'status.trashed': 'Document moved to the trash in another tab',
   'status.saveError': 'Save failed — retrying',
 
   // ---- Documents (mind map or board) ----
@@ -78,7 +79,6 @@ export default {
   'trash.deletedAt': 'deleted {date}',  // {date}: date and time, already formatted
   'trash.purge': 'Delete forever',  // button: permanent deletion
   'trash.purgeConfirm': 'Delete forever? This can’t be undone.',
-  'trash.restoreConflict': 'A map with this ID already exists; couldn’t restore it.',
 
   // ---- Version history ----
   'history.title': 'Version history',  // button tooltip and panel title
@@ -353,6 +353,7 @@ export default {
   'skill.versions': 'Versions',
   'skill.versionLabelPrompt': 'Version name (optional):',
   'skill.versionSaved': 'Version saved',
+  'skill.versionError': 'Couldn’t save the version.',
   'skill.compare': 'Compare',
   'skill.closeCompare': 'Close comparison',
   'skill.restoreConfirm': 'Restore this version? The current text stays saved in the history.',

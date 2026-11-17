@@ -604,7 +604,7 @@ export function toMarkdown(map) {
   const esc = (t) => String(t ?? '').replace(/\s*\n\s*/g, ' ').replace(/([\\[\]*_`#<>&!])/g, '\\$1');
   const item = (n) => {
     const url = safeUrl(n.url);
-    return url ? `[${esc(n.text)}](${url})` : esc(n.text);
+    return url ? `[${esc(n.text)}](${url.replace(/[()]/g, (c) => (c === '(' ? '%28' : '%29'))})` : esc(n.text);
   };
   const lines = [`# ${item(map.root)}`, ''];
   const walk = (n, depth) => {

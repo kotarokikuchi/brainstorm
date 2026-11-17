@@ -1685,6 +1685,39 @@ const backupApi = await (await fetch(BASE + '/api/settings/backup')).text();
 assert.ok(!backupApi.includes('segredo-storage') && backupApi.includes('…QRST'), 'a API do backup só devolve a máscara');
 assert.match(await ev(`document.querySelector('#backup-list-msg').textContent`), /^Erro: network error/, 'storage fora do ar aparece na lista');
 
+// conflito (409) logo na primeira edição: o aviso ao fechar já vale, sem precisar editar de novo
+const putDoc = (id, body) => fetch(BASE + '/api/maps/' + id, { method: 'PUT', body: JSON.stringify(body) });
+await putDoc('cf1', { version: 0, layout: 'map', root: { id: 'cf1r', text: 'Conflito', children: [] } });
+await ev(`location.hash = '#/map/cf1'`); await sleep(1000);
+await putDoc('cf1', { version: 1, layout: 'map', root: { id: 'cf1r', text: 'Outra aba', children: [] } });  // a "outra aba" grava antes
+await key('F2'); await typeText('Minha edição'); await key('Enter');
+await sleep(900);
+assert.match(await status(), /Documento alterado em outra aba/, 'conflito mostra a mensagem de documento');
+assert.equal(await unloadBlocked(), true, 'beforeunload avisa logo após o conflito');
+assert.equal((await (await fetch(BASE + '/api/maps/cf1')).json()).root.text, 'Outra aba', 'a outra aba não é sobrescrita');
+
+// 410: documento movido para a lixeira em outra aba — para de tentar, mensagem própria, aviso ao fechar
+await putDoc('cf2', { version: 0, layout: 'map', root: { id: 'cf2r', text: 'Lixeira', children: [] } });
+await ev(`location.hash = '#/map/cf2'`); await sleep(1000);
+await fetch(BASE + '/api/maps/cf2', { method: 'DELETE' });
+await ev(`window.__puts = 0; window.__f = window.fetch; window.fetch = (u, o) => { if (o?.method === 'PUT') window.__puts++; return window.__f(u, o); }`);
+await key('F2'); await typeText('Editei na lixeira'); await key('Enter');
+await sleep(900);
+assert.match(await status(), /movido para a lixeira em outra aba/, '410 mostra mensagem própria');
+assert.equal(await unloadBlocked(), true, 'beforeunload avisa com o documento na lixeira');
+await sleep(5800);  // a nova tentativa seria a cada 5 s
+assert.equal(await ev(`window.__puts`), 1, '410 não é repetido');
+await ev(`window.fetch = window.__f`);
+
+// corrida: abrir um documento e voltar antes da resposta deixa a lista na tela, sem abrir o editor
+await putDoc('cf3', { version: 0, layout: 'map', root: { id: 'cf3r', text: 'Corrida', children: [] } });
+await ev(`location.hash = '#/'`); await sleep(800);
+await ev(`window.__f = window.fetch; window.fetch = (u, o) => (String(u).endsWith('/api/maps/cf3') && !o?.method ? new Promise(r => setTimeout(r, 1200)).then(() => window.__f(u, o)) : window.__f(u, o))`);
+await ev(`location.hash = '#/map/cf3'`); await sleep(300);
+await ev(`location.hash = '#/'`); await sleep(2000);
+assert.deepEqual(await ev(`[location.hash, document.body.dataset.view]`), ['#/', 'list'], 'voltar antes da resposta fica na lista');
+await ev(`window.fetch = window.__f`);
+
 // Sair: encerra a sessão e volta para a página de login
 await ev(`location.hash = '#/'`); await sleep(800);
 assert.equal(await ev(`!document.querySelector('#logout-btn').hidden`), true, 'botão Sair aparece com login ativo');

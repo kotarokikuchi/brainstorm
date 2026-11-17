@@ -292,7 +292,7 @@ function renderList() {
     li.classList.toggle('board', kind === 'board');
     li.classList.toggle('skill', kind === 'skill');
     a.href = `#/${kind}/${it.id}`;
-    a.innerHTML = `<svg viewBox="0 0 24 24"><use href="#i-${{ board: 'brush', skill: 'file-text' }[kind] ?? 'sitemap'}"/></svg>`;
+    a.innerHTML = `<svg viewBox="0 0 24 24"><use href="#i-${kind === 'board' ? 'brush' : kind === 'skill' ? 'file-text' : 'sitemap'}"/></svg>`;
     a.append(it.title || t('doc.untitled'));
     for (const tag of (it.tags ?? []).slice(0, 5)) a.append(Object.assign(document.createElement('span'), { className: 'tag', textContent: tag }));
     const time = document.createElement('time');
@@ -445,8 +445,7 @@ $('#new-folder').onclick = async () => {
 $('#trash-list').addEventListener('click', async (e) => {
   const d = e.target.closest('button')?.dataset;
   if (d?.restore) {
-    const r = await fetch(`/api/trash/${d.restore}/restore`, { method: 'POST' });
-    if (r.status === 409) alert(t('trash.restoreConflict'));
+    await fetch(`/api/trash/${d.restore}/restore`, { method: 'POST' });
   } else if (d?.purge) {
     if (!confirm(t('trash.purgeConfirm'))) return;
     await fetch(`/api/trash/${d.purge}`, { method: 'DELETE' });
@@ -481,12 +480,16 @@ $('#new-map').onclick = async () => {
 // ---------- Editor ----------
 async function openMap(id) {
   const r = await api('GET', `/${id}`);
+  if (location.hash !== `#/map/${id}`) return;  // o usuário já saiu enquanto carregava
   if (!r.ok) {
     if (r.status === 500) alert(t('map.openError'));
     location.hash = '#/';
     return;
   }
-  map = await r.json();
+  const doc = await r.json();
+  if (location.hash !== `#/map/${id}`) return;
+  doc.id = id;  // o endereço manda: um corpo com outro id não desvia as chamadas à API
+  map = doc;
   if (map.type && map.type !== 'map') { const type = map.type; map = null; location.hash = `#/${type}/${id}`; return; }  // endereço antigo de quadro ou skill
   history = new History();
   selected = map.root.id;
@@ -917,9 +920,11 @@ async function save() {
   saving = (async () => {
     try {
       const r = await api('PUT', `/${m.id}`, m);
-      if (r.status === 409) {
+      if (r.status === 409 || r.status === 410) {
+        // alterado (409) ou movido para a lixeira (410) em outra aba: não tenta de novo, mas mantém a pendência
         conflict = true;
-        setStatus(t('status.conflict'), true);
+        dirty = true;
+        setStatus(r.status === 409 ? t('status.conflict') : t('status.trashed'), true);
       } else if (!r.ok) {
         throw new Error(`HTTP ${r.status}`);
       } else {
@@ -1260,20 +1265,27 @@ const toWorld = (e) => {
   return [(e.clientX - r.left - view.x) / view.k, (e.clientY - r.top - view.y) / view.k];
 };
 
+function drawLink(k) {
+  const a = boxes.find(b => b.id === k.from), b = boxes.find(b => b.id === k.to);
+  if (!a || !b) return;  // ponta escondida num ramo recolhido
+  if (retarget?.link === k) { drawRetarget(k, a, b); return; }
+  const d = linkPath(a, b, k.bend, k.fromSide, k.toSide), sel = k.id === selectedLink, color = hexColor(k.color) || LINK_GREEN;
+  el('path', {
+    d, class: 'link', fill: 'none', stroke: color, 'stroke-width': sel ? 3 : 2, 'stroke-dasharray': '5 5',
+    'marker-start': markerUrl(k.startMarker, color), 'marker-end': markerUrl(k.endMarker ?? 'arrow', color),
+  }, viewport);
+  if (k.label) drawLinkLabel(k, a, b, color);
+  const hit = el('path', { d, class: 'link-hit', fill: 'none', stroke: 'transparent', 'stroke-width': 14 }, viewport);
+  hit.addEventListener('click', (e) => { e.stopPropagation(); if (selectedLink !== k.id) closeLinkPops(); selectedLink = k.id; render(); });
+  if (sel) drawBendHandle(k, a, b, d);
+}
+
 function drawLinks() {
   for (const k of map.links ?? []) {
-    const a = boxes.find(b => b.id === k.from), b = boxes.find(b => b.id === k.to);
-    if (!a || !b) continue;  // ponta escondida num ramo recolhido
-    if (retarget?.link === k) { drawRetarget(k, a, b); continue; }
-    const d = linkPath(a, b, k.bend, k.fromSide, k.toSide), sel = k.id === selectedLink, color = hexColor(k.color) || LINK_GREEN;
-    el('path', {
-      d, class: 'link', fill: 'none', stroke: color, 'stroke-width': sel ? 3 : 2, 'stroke-dasharray': '5 5',
-      'marker-start': markerUrl(k.startMarker, color), 'marker-end': markerUrl(k.endMarker ?? 'arrow', color),
-    }, viewport);
-    if (k.label) drawLinkLabel(k, a, b, color);
-    const hit = el('path', { d, class: 'link-hit', fill: 'none', stroke: 'transparent', 'stroke-width': 14 }, viewport);
-    hit.addEventListener('click', (e) => { e.stopPropagation(); if (selectedLink !== k.id) closeLinkPops(); selectedLink = k.id; render(); });
-    if (sel) drawBendHandle(k, a, b, d);
+    try { drawLink(k); } catch (err) {
+      // uma ligação inválida no arquivo não derruba o mapa
+      if (!warned.has(k.id)) { warned.add(k.id); console.warn('Ligação inválida ignorada no desenho:', k.id, err); }
+    }
   }
   const from = boxes.find(b => b.id === (linking ? linking.from : selected));
   if (linking) {
@@ -2226,7 +2238,7 @@ $('#branch-layout-row').addEventListener('click', (e) => {
 });
 
 // ---------- Skills (Markdown) ----------
-initSkill({ api, setStatus, scheduleSave, flushSave, loadPlace, resetSave: () => { if (conflict) dirty = false; conflict = false; } });
+initSkill({ api, setStatus, scheduleSave, flushSave, isDirty: () => dirty, loadPlace, resetSave: () => { if (conflict) dirty = false; conflict = false; } });
 
 // ---------- Quadros (lousa) ----------
 initBoard({

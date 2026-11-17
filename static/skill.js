@@ -122,13 +122,16 @@ function bind() {
   input.addEventListener('blur', () => { addTag(input.value); input.value = ''; });
   $('#skill-save-version').onclick = async () => {
     if (!skill) return;
-    const label = prompt(t('skill.versionLabelPrompt'));
-    if (label === null) return;
+    const label = prompt(t('skill.versionLabelPrompt'))?.trim();
+    if (label === undefined) return;
     const doc = skill;
     await deps.flushSave();
     if (skill !== doc) return;
-    const r = await deps.api('POST', `/${skill.id}/history`, label.trim() ? { label: label.trim() } : {});
-    if (!r.ok || skill !== doc) return;
+    // com conflito ou erro de gravação o rótulo iria para o texto de outra aba
+    if (deps.isDirty() || [...label].length > 100) { deps.setStatus(t('skill.versionError'), true); return; }
+    const r = await deps.api('POST', `/${skill.id}/history`, label ? { label } : {});
+    if (skill !== doc) return;
+    if (!r.ok) { deps.setStatus(t('skill.versionError'), true); return; }
     deps.setStatus(t('skill.versionSaved'));
     if (!$('#skill-versions').hidden) loadVersions();
   };
@@ -182,12 +185,15 @@ function bind() {
 
 export async function openSkill(id) {
   const r = await deps.api('GET', `/${id}`);
+  if (location.hash !== `#/skill/${id}`) return;  // o usuário já saiu enquanto carregava
   if (!r.ok) {
     if (r.status === 500) alert(t('map.openError'));
     location.hash = '#/';
     return;
   }
   const doc = await r.json();
+  if (location.hash !== `#/skill/${id}`) return;
+  doc.id = id;  // o endereço manda: um corpo com outro id não desvia as chamadas à API
   if (doc.type !== 'skill') { location.hash = `#/${doc.type ?? 'map'}/${id}`; return; }
   if (!bound) bind();
   skill = doc;

@@ -33,7 +33,8 @@ export default {
   // ---- Estado do salvamento automático (texto no topo) ----
   'status.saved': 'Salvo',
   'status.saving': 'Salvando…',
-  'status.conflict': 'Mapa alterado em outra aba — recarregue',
+  'status.conflict': 'Documento alterado em outra aba — recarregue',
+  'status.trashed': 'Documento movido para a lixeira em outra aba',
   'status.saveError': 'Erro ao salvar — tentando de novo',
 
   // ---- Documentos (mapa mental ou quadro) ----
@@ -78,7 +79,6 @@ export default {
   'trash.deletedAt': 'apagado em {date}',  // {date}: data e hora já formatadas
   'trash.purge': 'Apagar de vez',  // botão: exclusão definitiva
   'trash.purgeConfirm': 'Apagar de vez? Isso não pode ser desfeito.',
-  'trash.restoreConflict': 'Já existe um mapa com esse identificador; não foi possível restaurar.',
 
   // ---- Histórico de versões ----
   'history.title': 'Histórico de versões',  // dica do botão e título do painel
@@ -353,6 +353,7 @@ export default {
   'skill.versions': 'Versões',
   'skill.versionLabelPrompt': 'Nome da versão (opcional):',
   'skill.versionSaved': 'Versão salva',
+  'skill.versionError': 'Não foi possível salvar a versão.',
   'skill.compare': 'Comparar',
   'skill.closeCompare': 'Fechar comparação',
   'skill.restoreConfirm': 'Restaurar esta versão? O texto atual fica salvo no histórico.',

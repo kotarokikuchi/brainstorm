@@ -33,7 +33,8 @@ export default {
   // ---- Autosave status (text in the top bar) ----
   'status.saved': '保存済み',
   'status.saving': '保存中…',
-  'status.conflict': '別のタブでマップが変更されました — 再読み込みしてください',
+  'status.conflict': '別のタブで文書が変更されました — 再読み込みしてください',
+  'status.trashed': '別のタブで文書がゴミ箱に移動されました',
   'status.saveError': '保存エラー — 再試行しています',  // "save error, retrying"
 
   // ---- Documents (mind map or board) ----
@@ -78,7 +79,6 @@ export default {
   'trash.deletedAt': '{date} に削除',  // {date}: date and time, already formatted
   'trash.purge': '完全に削除',  // button: permanent deletion
   'trash.purgeConfirm': '完全に削除しますか？この操作は元に戻せません。',
-  'trash.restoreConflict': '同じ ID のマップがすでに存在するため、復元できませんでした。',
 
   // ---- Version history ----
   'history.title': 'バージョン履歴',  // button tooltip and panel title
@@ -353,6 +353,7 @@ export default {
   'skill.versions': 'バージョン',
   'skill.versionLabelPrompt': 'バージョン名（任意）：',
   'skill.versionSaved': 'バージョンを保存しました',
+  'skill.versionError': 'バージョンを保存できませんでした。',
   'skill.compare': '比較',
   'skill.closeCompare': '比較を閉じる',
   'skill.restoreConfirm': 'このバージョンを復元しますか？現在のテキストは履歴に保存されます。',
