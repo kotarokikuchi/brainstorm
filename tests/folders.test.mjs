@@ -62,3 +62,13 @@ test('searchItems finds folders and documents anywhere, ignoring accents and cas
   assert.deepEqual(searchItems(tree, docs, 'CLI').folders.map(f => f.id), ['c'], 'subpasta também');
   assert.deepEqual(searchItems(tree, docs, 'nada').docs, []);
 });
+
+test('list survives titles and folder names that are not strings', () => {
+  const docs = [{ id: 'a', title: 5, updated: '1' }, { id: 'b', title: null, updated: '2' }, { id: 'c', title: 'Beta', updated: '3' }];
+  const tree = { folders: [{ id: 'f', name: 7, parent: null }, { id: 'g', name: 'Alfa', parent: null }], place: {} };
+  const r = sortItems({ folders: tree.folders, docs }, 'az');
+  assert.deepEqual([r.folders.map(f => f.id), r.docs.map(d => d.id)], [['f', 'g'], ['b', 'a', 'c']]);
+  assert.deepEqual(searchItems(tree, docs, '5').docs.map(d => d.id), ['a']);
+  assert.deepEqual(searchItems(tree, docs, '7').folders.map(f => f.id), ['f']);
+  assert.deepEqual(childFolders(tree, null).map(f => f.id), ['f', 'g']);
+});

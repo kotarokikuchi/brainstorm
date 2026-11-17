@@ -3,9 +3,9 @@
 
 import {
   createElement, resizeTo, elementPaths, fillPath, elementBounds, DEFAULTS, elementAt, elementsInBox,
-  moveElements, resizeElement, bringToFront, sendToBack, duplicateElements, elementsHitBy, paint, elementsInPolygon, forwardOne, backwardOne,
+  moveElements, resizeElement, bringToFront, sendToBack, duplicateElements, elementsHitBy, paint, elementsInPolygon, forwardOne, backwardOne, okElement, sanitizeElement,
 } from './board-model.js';
-import { History, safeUrl, wrapLines } from './model.js';
+import { History, safeUrl, wrapLines, isHex, FILE_ID } from './model.js';
 
 const $ = (s) => document.querySelector(s);
 const SVG = 'http://www.w3.org/2000/svg';
@@ -70,9 +70,9 @@ const el = (tag, attrs, parent) => {
 };
 const ALIGN = { left: ['start', 0], center: ['middle', 0.5], right: ['end', 1] };  // âncora e ponto na caixa
 const DASH = { solid: null, dashed: '8 8', dotted: '1.5 6' };
-const HEX = /^#[0-9a-fA-F]{3,8}$/;
-const FILE_ID = /^[a-f0-9]{32}(\.[a-z0-9]{1,10})?$/;  // mesmo formato que o servidor gera
-const fileUrl = (id) => `/api/maps/${board.id}/files/${id}`;  // cor vinda do arquivo só entra em id/atributo se for hexadecimal
+const fileUrl = (id) => `/api/maps/${board.id}/files/${id}`;
+// cor vinda do arquivo só entra em id/atributo/estilo se for hexadecimal
+const strokeOf = (e) => (isHex(e.strokeColor) ? e.strokeColor : DEFAULTS.strokeColor);
 
 // hachurado: um <pattern> diagonal por cor
 function hatch(color) {
@@ -94,7 +94,7 @@ function baseline(e) {
 }
 function drawLines(g, e, lines, x, y, w) {
   const align = ALIGN[e.textAlign] ?? ALIGN.left, ax = x + w * align[1], b = baseline(e);
-  const t = el('text', { x: ax, y: y + b, fill: e.strokeColor, 'font-size': e.fontSize, 'font-family': fontOf(e), 'text-anchor': align[0] }, g);
+  const t = el('text', { x: ax, y: y + b, fill: strokeOf(e), 'font-size': e.fontSize, 'font-family': fontOf(e), 'text-anchor': align[0] }, g);
   lines.forEach((line, i) => { el('tspan', { x: ax, y: y + b + i * lineH(e.fontSize) }, t).textContent = line; });
 }
 
@@ -105,11 +105,19 @@ function noteLines(e, text = e.text) {
 }
 const fitNote = (e, text = e.text) => { e.h = Math.max(e.h, 2 * NOTE_PAD + noteLines(e, text).length * lineH(e.fontSize)); };
 
+const warned = new Set();  // elementos inválidos já avisados no console
+// um elemento inválido no arquivo não derruba o quadro: fica vazio (dá para selecionar tudo e apagar)
 function drawElement(e) {
+  try { return drawOne(e); } catch (err) {
+    if (!warned.has(e?.id)) { warned.add(e?.id); console.warn('Elemento inválido ignorado no desenho:', e?.id, err); }
+    return el('g', { class: 'el' });
+  }
+}
+function drawOne(e) {
   const g = el('g', { class: 'el', 'data-id': e.id, opacity: (e.opacity ?? 100) / 100 });
   if (erasing?.ids.has(e.id)) g.classList.add('erasing');
   if (e.type === 'note') {
-    el('rect', { class: 'note-bg', x: e.x, y: e.y, width: e.w, height: e.h, rx: 4, fill: HEX.test(e.backgroundColor ?? '') ? e.backgroundColor : NOTE_COLOR }, g);
+    el('rect', { class: 'note-bg', x: e.x, y: e.y, width: e.w, height: e.h, rx: 4, fill: isHex(e.backgroundColor) ? e.backgroundColor : NOTE_COLOR }, g);
     if (editingText?.el !== e) drawLines(g, e, noteLines(e), e.x + NOTE_PAD, e.y + NOTE_PAD, e.w - 2 * NOTE_PAD);
     return g;
   }
@@ -121,11 +129,11 @@ function drawElement(e) {
     if (FILE_ID.test(e.fileId ?? '')) el('image', { href: fileUrl(e.fileId), x: e.x, y: e.y, width: e.w, height: e.h, preserveAspectRatio: 'none' }, g);
     return g;
   }
-  const bg = HEX.test(e.backgroundColor ?? '') && fillPath(e);
+  const bg = isHex(e.backgroundColor) && fillPath(e);
   if (bg) el('path', { d: bg, fill: e.fillStyle === 'solid' ? e.backgroundColor : hatch(e.backgroundColor), stroke: 'none' }, g);
   for (const d of elementPaths(e)) {
     el('path', {
-      d, fill: 'none', stroke: e.strokeColor, 'stroke-width': e.strokeWidth,
+      d, fill: 'none', stroke: strokeOf(e), 'stroke-width': e.strokeWidth,
       'stroke-dasharray': e.type === 'freedraw' ? null : DASH[e.strokeStyle], 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
     }, g);
   }
@@ -176,8 +184,14 @@ document.querySelector('#board-tools').addEventListener('click', (e) => {
 
 const snapshot = () => JSON.stringify(board.elements);
 function changed(before) {
+  try { render(); } catch (err) {
+    // a mudança quebrou o desenho: volta ao estado anterior (nada é salvo) e deixa o erro aparecer
+    board.elements = JSON.parse(before);
+    selection = selection.filter(id => board.elements.some(x => x.id === id));
+    render();
+    throw err;
+  }
   history.push(before);
-  render();
   deps.scheduleSave(board);
 }
 function restore(state) {
@@ -226,7 +240,7 @@ svg.addEventListener('pointerdown', (e) => {
     gesture = { kind: 'lasso', pts: [toWorld(e)], keep: e.shiftKey ? [...selection] : [] };
   } else if (tool === 'note' && e.button === 0) {
     e.preventDefault();
-    const [x, y] = toWorld(e), bg = HEX.test(style.backgroundColor) ? style.backgroundColor : NOTE_COLOR;
+    const [x, y] = toWorld(e), bg = isHex(style.backgroundColor) ? style.backgroundColor : NOTE_COLOR;
     startText(createElement('note', [x - NOTE_SIZE / 2, y - NOTE_SIZE / 2], { ...style, backgroundColor: bg, w: NOTE_SIZE, h: NOTE_SIZE, text: '' }), true);
     return;
   } else if (tool === 'text' && e.button === 0) {
@@ -364,7 +378,7 @@ const imageInput = $('#board-image-input');
 let pendingPaste = 0;
 imageInput.addEventListener('change', () => { const f = imageInput.files[0]; imageInput.value = ''; insertImage(f); });
 // área de transferência do sistema: vale entre abas e depois de recarregar (a variável clipboard é só o plano B)
-const CLIP = 'application/x-galho-board';
+const CLIP = 'application/x-galho-board', MAX_CLIP = 1e6;
 const boardKeys = (e) => board && document.body.dataset.view === 'board' && !e.target.closest?.('input, textarea, select');
 let pendingCut = 0;
 const selected = () => board.elements.filter(x => selection.includes(x.id));
@@ -404,6 +418,7 @@ document.addEventListener('cut', (e) => {  // recortar = copiar e apagar
 document.addEventListener('paste', (e) => {
   if (!boardKeys(e) || !e.clipboardData) return;
   const json = e.clipboardData.getData(CLIP);
+  if (json.length > MAX_CLIP) { clearTimeout(pendingPaste); e.preventDefault(); return; }  // grande demais: recusa
   const f = [...e.clipboardData.files].find(x => x.type.startsWith('image/'));
   const text = e.clipboardData.getData('text/plain').replace(/\s+$/, '');
   if (!json && !f && !text) return;  // nada aproveitável: fica o plano B (cópia interna)
@@ -570,19 +585,15 @@ function act(name) {
   changed(before);
 }
 
-// elementos colados podem ter vindo de outro site: só tipos conhecidos, com posição e pontos numéricos
-const KINDS = new Set([...SHAPES, 'text', 'image', 'note']);
-const okElement = (x) => !!x && typeof x === 'object' && KINDS.has(x.type)
-  && [x.x, x.y, x.w ?? 0, x.h ?? 0].every(Number.isFinite)
-  && (x.points === undefined || (Array.isArray(x.points) && x.points.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite))))
-  && (x.text === undefined || typeof x.text === 'string');
+// elementos colados podem ter vindo de outro site: okElement recusa o que não dá para desenhar,
+// sanitizeElement limpa o resto (board-model.js)
 async function paste() {
   if (!clipboard) return;
   let items;
   try { items = JSON.parse(clipboard); } catch { return; }
   if (!Array.isArray(items) || !items.every(okElement)) return;
   const id = board.id;
-  items = await bringFiles(items);
+  items = await bringFiles(items.map(sanitizeElement));
   if (board?.id !== id || !items.length) return;  // trocou de quadro durante a cópia dos arquivos
   const before = snapshot();
   const copies = duplicateElements(items, items.map(x => x.id), 20).map(({ fileSrc, ...c }) => c);
@@ -661,7 +672,7 @@ function placeTextArea() {
   const lines = note ? noteLines(e, textArea.value) : textArea.value.split('\n');
   mctx.font = `${e.fontSize}px ${fontOf(e)}`;
   Object.assign(textArea.style, {
-    left: `${view.x + (e.x + pad) * k}px`, top: `${view.y + (e.y + pad) * k}px`, color: e.strokeColor, textAlign: e.textAlign ?? 'left',
+    left: `${view.x + (e.x + pad) * k}px`, top: `${view.y + (e.y + pad) * k}px`, color: strokeOf(e), textAlign: e.textAlign ?? 'left',
     // propriedades separadas: o atalho "font" zeraria a altura de linha e cortaria as últimas linhas
     fontFamily: fontOf(e), fontSize: `${e.fontSize * k}px`, lineHeight: `${lineH(e.fontSize) * k}px`,
     whiteSpace: note ? 'pre-wrap' : 'pre',  // na nota, a caixa quebra na largura dela
