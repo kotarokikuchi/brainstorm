@@ -292,7 +292,7 @@ function renderList() {
     li.classList.toggle('board', kind === 'board');
     li.classList.toggle('skill', kind === 'skill');
     a.href = `#/${kind}/${it.id}`;
-    a.innerHTML = `<svg viewBox="0 0 24 24"><use href="#i-${{ board: 'brush', skill: 'file-text' }[kind] ?? 'sitemap'}"/></svg>`;
+    a.innerHTML = `<svg viewBox="0 0 24 24"><use href="#i-${kind === 'board' ? 'brush' : kind === 'skill' ? 'file-text' : 'sitemap'}"/></svg>`;
     a.append(it.title || t('doc.untitled'));
     for (const tag of (it.tags ?? []).slice(0, 5)) a.append(Object.assign(document.createElement('span'), { className: 'tag', textContent: tag }));
     const time = document.createElement('time');
