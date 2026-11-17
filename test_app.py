@@ -395,6 +395,20 @@ class ApiTest(unittest.TestCase):
         self.assertIsNone(store.label_version("nope", "x"))
         self.assertEqual(store.history("abc")[0]["label"], "x")
 
+    def test_schema_version_and_settings(self):
+        store = self.server.store
+        with store._db() as db:
+            self.assertEqual(db.execute("SELECT value FROM meta WHERE key = 'schema'").fetchone()[0], "1")
+            db.execute("UPDATE meta SET value = '7' WHERE key = 'schema'")
+        Store(store.db_path, store.files_dir)  # abrir de novo não baixa a versão
+        with store._db() as db:
+            self.assertEqual(db.execute("SELECT value FROM meta WHERE key = 'schema'").fetchone()[0], "7")
+        self.assertIsNone(store.setting("x"))
+        store.set_setting("x", {"a": "ç"})
+        self.assertEqual(store.setting("x"), {"a": "ç"})
+        store.set_setting("x", None)
+        self.assertIsNone(store.setting("x"))
+
     def test_static_files_are_revalidated(self):
         # sem isso o navegador reaproveita JS antigo (cache heurístico) depois de uma atualização
         status, headers, _ = self.raw_get("/app.js")
