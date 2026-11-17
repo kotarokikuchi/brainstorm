@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from s3 import S3, S3Error
-from store import ID_RE, SCHEMA_VERSION, migrate, valid_doc
+from store import ID_RE, SCHEMA_VERSION, load_json, migrate, valid_doc
 
 NAME_RE = re.compile(r"brainstorm-\d{4}-\d{2}-\d{2}-\d{6}\.tar\.gz")
 INTERVALS = (6, 12, 24, 168)  # horas
@@ -128,10 +128,7 @@ def check_members(tar, free):
 
 def doc_ok(doc_id, body):
     # mesma validação da API: o id vai nas rotas da página, o corpo é aberto pelo editor
-    try:
-        return isinstance(doc_id, str) and bool(ID_RE.fullmatch(doc_id)) and valid_doc(json.loads(body))
-    except (TypeError, ValueError, RecursionError):
-        return False
+    return isinstance(doc_id, str) and bool(ID_RE.fullmatch(doc_id)) and valid_doc(load_json(body))
 
 
 def iso(t):

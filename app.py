@@ -17,7 +17,7 @@ from urllib.parse import unquote, urlsplit
 
 from backup import NAME_RE, Backup, BackupError, Busy, NotConfigured, clean_config, hint, text_ok
 from s3 import S3Error
-from store import ID_RE, Store, migrate_legacy, valid_doc, valid_folders
+from store import ID_RE, Store, load_json, migrate_legacy, valid_doc, valid_folders
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 5_000_000
@@ -251,10 +251,7 @@ class Handler(SimpleHTTPRequestHandler):
         length = self._length(MAX_BODY)
         if length is None:
             return
-        try:
-            body = json.loads(self.rfile.read(length))
-        except (ValueError, RecursionError):
-            body = None
+        body = load_json(self.rfile.read(length))
         if not valid_doc(body):
             self._send(400, {"error": "invalid map"})
             return
@@ -285,13 +282,10 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _duplicate(self, map_id):
         # corpo opcional {"suffix": "..."}: o que acrescentar ao título (no idioma da interface); inválido ou ausente = padrão
-        length = self._length(MAX_LOGIN_BODY)
-        if length is None:
+        responded, body = self._json()
+        if responded:
             return
-        try:
-            suffix = json.loads(self.rfile.read(length)).get("suffix")
-        except (ValueError, RecursionError, AttributeError):
-            suffix = None
+        suffix = body.get("suffix") if isinstance(body, dict) else None
         if not isinstance(suffix, str) or not 0 < len(suffix) <= 40 or not suffix.isprintable():
             suffix = " (cópia)"
         new_id = self.server.store.duplicate(map_id, suffix)
@@ -323,10 +317,7 @@ class Handler(SimpleHTTPRequestHandler):
         raw = self.rfile.read(length)
         label = None
         if raw:
-            try:
-                body = json.loads(raw)
-            except (ValueError, RecursionError):
-                body = None
+            body = load_json(raw)
             if not isinstance(body, dict):
                 self._send(400, {"error": "invalid body"})
                 return
@@ -419,10 +410,7 @@ class Handler(SimpleHTTPRequestHandler):
         length = self._length(MAX_BODY)
         if length is None:
             return
-        try:
-            body = json.loads(self.rfile.read(length))
-        except (ValueError, RecursionError):
-            body = None
+        body = load_json(self.rfile.read(length))
         if not valid_folders(body):
             self._send(400, {"error": "invalid folders"})
             return
@@ -430,14 +418,11 @@ class Handler(SimpleHTTPRequestHandler):
         self._send(200 if ok else 409, saved)
 
     def _json(self, limit=MAX_LOGIN_BODY):
-        # (respondeu?, corpo): corpo None se não for JSON válido
+        # (respondeu?, corpo): corpo None se não for JSON válido (ver load_json)
         length = self._length(limit)
         if length is None:
             return True, None
-        try:
-            return False, json.loads(self.rfile.read(length))
-        except (ValueError, RecursionError):
-            return False, None
+        return False, load_json(self.rfile.read(length))
 
     # ---- Configurações (segredos nunca voltam: só o final mascarado) ----
     def _settings(self, method, path):

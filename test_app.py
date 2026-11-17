@@ -589,6 +589,22 @@ class ApiTest(unittest.TestCase):
         for version in ("9" * 30, "%C2%B2", "1%0A"):  # estoura o inteiro do SQLite; "²".isdigit() é True
             self.assertEqual(self.req("GET", f"/api/maps/abc/history/{version}")[0], 400, version)
 
+    def test_nan_and_lone_surrogates_are_400(self):
+        # NaN/Infinity não são JSON (o navegador não abriria o documento); surrogate sozinho não vira UTF-8
+        lone = b'"\\ud800"'
+        for raw in (b'{"version": 0, "root": {"text": "a", "children": [], "x": NaN}}',
+                    b'{"version": 0, "root": {"text": "a", "children": [], "x": -Infinity}}',
+                    b'{"version": 0, "root": {"text": "a", "children": [], "x": 1e400}}',
+                    b'{"version": 0, "root": {"text": ' + lone + b', "children": []}}'):
+            self.assertEqual(self.req("PUT", "/api/maps/abc", raw=raw)[0], 400, raw)
+        folders = b'{"version": 0, "folders": [{"id": "f1", "name": ' + lone + b', "parent": null}], "place": {}}'
+        self.assertEqual(self.req("PUT", "/api/folders", raw=folders)[0], 400)
+        self.assertEqual(self.req("PUT", "/api/settings/llm/openai", raw=b'{"key": "abc", "model": NaN}')[0], 400)
+        self.assertEqual(self.req("GET", "/api/maps")[1], [], "nada gravado")
+        ok = b'{"version": 0, "root": {"text": "\\ud83d\\ude80", "children": []}}'  # par válido (emoji)
+        self.assertEqual(self.req("PUT", "/api/maps/abc", raw=ok)[0], 200)
+        self.assertEqual(self.req("GET", "/api/maps/abc")[1]["root"]["text"], "\U0001f680")
+
     def test_folder_validation_limits(self):
         folder = lambda i, parent: {"id": f"f{i}", "name": "p", "parent": parent}
         tree = lambda folders, place=None: {"version": 0, "folders": folders, "place": place or {}}
@@ -817,6 +833,14 @@ class AuthTest(unittest.TestCase):
         self.assertEqual(self.call("HEAD", "/login.html", headers={"Host": "evil.com"})[0], 403)
         self.assertEqual(self.call("HEAD", "/login.html")[0], 200)
         self.assertEqual(self.call("HEAD", "/app.js", cookie=self.cookie())[0], 200)
+
+    def test_login_with_a_lone_surrogate_is_401(self):
+        raw = b'{"user": "ana", "password": "\\ud800"}'
+        req = urllib.request.Request(self.base + "/api/login", data=raw, method="POST")
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(req)
+        e.exception.close()
+        self.assertEqual(e.exception.code, 401)
 
     def test_login_body_is_limited_before_reading(self):
         port = self.server.server_address[1]
