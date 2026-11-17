@@ -113,8 +113,8 @@ button.icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; s
 .seg button.active { background: #e8eefe; border-color: var(--accent); color: var(--accent); }
 .switch { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 14px; cursor: pointer; }
 .switch input { display: none; }
-.switch span { width: 34px; height: 20px; border-radius: 10px; background: #dcdbe6; position: relative; transition: background .15s; }
-.switch span::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s; }
+.switch input + span { width: 34px; height: 20px; border-radius: 10px; background: #dcdbe6; position: relative; transition: background .15s; }
+.switch input + span::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s; }
 .switch input:checked + span { background: var(--accent); }
 .switch input:checked + span::after { left: 16px; }
 .boundary { pointer-events: none; }
@@ -357,4 +357,8 @@ body.presenting #canvas { cursor: default; }
 #login-error { margin: 0; color: var(--danger); font-size: 13px; }
 #login-error[hidden] { display: none; }
 #logout-btn[hidden] { display: none; }
-body[data-view="list"] #logout-btn { margin-left: auto; }  /* na lista, #status (que empurra para a direita) some */
+/* seletor de idioma: no topo (à esquerda do Sair) e no cartão de login */
+#lang { font: inherit; font-size: 13px; color: var(--ink); border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 5px 6px; cursor: pointer; }
+#lang:hover { border-color: var(--accent); }
+body[data-view="list"] #lang { margin-left: auto; }  /* na lista, #status (que empurra para a direita) some */
+.login-card #lang { display: block; margin: 18px auto 0; color: var(--muted); }

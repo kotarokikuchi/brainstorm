@@ -4,10 +4,12 @@ import {
 } from './model.js';
 import { folderOf, childFolders, folderPath, removeFolder, placeDoc, subtree, moveFolder, folderOptions, sortItems, searchItems } from './folders.js';
 import { initBoard, openBoard, closeBoard, currentBoard, newBoard, boardSvg, boardPlace, renameBoard } from './board.js';
+import { LANGS, lang, setLang, t, applyI18n, fmtDateTime } from './i18n.js';
 
 const $ = (s) => document.querySelector(s);
 const SVG = 'http://www.w3.org/2000/svg';
 const svg = $('#canvas'), viewport = $('#viewport'), input = $('#editor'), statusEl = $('#status');
+applyI18n();  // textos do HTML no idioma escolhido, antes do primeiro desenho
 
 let map = null;          // mapa aberto
 let selected = null;     // id do nó selecionado
@@ -132,6 +134,17 @@ $('#logout-btn').onclick = async () => {
   location.href = '/login.html';
 };
 
+// ---------- Idioma: guarda a escolha e recarrega (depois de salvar o que estiver pendente) ----------
+const langSelect = $('#lang');
+langSelect.append(...LANGS.map(l => new Option(l.name, l.code)));
+langSelect.value = lang;
+langSelect.onchange = async () => {
+  finishEdit(true);
+  await flushSave();
+  setLang(langSelect.value);
+  location.reload();
+};
+
 // ---------- Rotas ----------
 window.addEventListener('hashchange', route);
 route();
@@ -143,7 +156,7 @@ async function route() {
   const m = location.hash.match(/^#\/(map|board)\/([a-z0-9-]+)$/);
   // saindo de um documento que não conseguiu salvar: pergunta antes de abandonar as alterações
   if (dirty && pending && pending.id !== m?.[2]) {
-    if (!confirm('Este documento tem alterações que não foram salvas (erro ao salvar). Sair mesmo assim e perdê-las?')) {
+    if (!confirm(t('doc.unsavedLeaveConfirm'))) {
       const kind = pending.type === 'board' ? 'board' : 'map';
       window.history.replaceState(null, '', `#/${kind}/${pending.id}`);  // volta o endereço sem nova navegação
       return;
@@ -160,9 +173,11 @@ async function route() {
   else showList(location.hash.match(/^#\/folder\/([a-z0-9-]+)$/)?.[1] ?? null);
 }
 
+// duplicar: o sufixo do título da cópia vai no idioma da interface
+const duplicateDoc = (id) => fetch(`/api/maps/${id}/duplicate`, { method: 'POST', body: JSON.stringify({ suffix: t('doc.copySuffix') }) });
 // apagar documento: pergunta antes (vai para a lixeira, dá para restaurar)
 const confirmTrash = (type, title) =>
-  confirm(`Apagar ${type === 'board' ? 'o quadro' : 'o mapa'} "${title || '(sem título)'}"? Ele vai para a lixeira, de onde dá para restaurar.`);
+  confirm(type === 'board' ? t('doc.trashConfirmBoard', { title: title || t('doc.untitled') }) : t('doc.trashConfirmMap', { title: title || t('doc.untitled') }));
 
 // ---------- Pastas ----------
 let tree = { version: 0, folders: [], place: {} }, listFolder = null;
@@ -179,7 +194,7 @@ async function saveTree(change) {
     if (r.status !== 409) break;
     tree = await r.json();
   }
-  alert('Não foi possível salvar as pastas.');
+  alert(t('folder.saveError'));
   return false;
 }
 
@@ -206,11 +221,11 @@ async function showList(folderId = null) {
 function renderList() {
   const { items, trash } = listData, query = searchInput.value.trim();
   // trilha: Meus mapas › Trabalho › Clientes
-  const crumbs = [{ id: null, name: 'Meus mapas' }, ...folderPath(tree, listFolder)];
+  const crumbs = [{ id: null, name: t('list.root') }, ...folderPath(tree, listFolder)];
   $('#list-title').replaceChildren(...crumbs.flatMap((c, i) => {
     const sep = Object.assign(document.createElement('span'), { className: 'crumb-sep', textContent: '›' });
     if (c.id && i === crumbs.length - 1) {  // pasta aberta: clicar no nome edita ali mesmo
-      const cur = Object.assign(document.createElement('span'), { className: 'crumb-current', textContent: c.name, title: 'Clique para renomear', tabIndex: 0 });
+      const cur = Object.assign(document.createElement('span'), { className: 'crumb-current', textContent: c.name, title: t('common.clickToRename'), tabIndex: 0 });
       const edit = () => inlineEdit(cur, c.name, async (name) => { await renameFolder(c, name); showList(listFolder); });
       cur.onclick = edit;
       cur.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); edit(); } };
@@ -229,12 +244,12 @@ function renderList() {
     return b;
   };
   // buscando: resultados de todas as pastas, com o lugar de cada um; senão, o conteúdo da pasta aberta
-  const found = query ? searchItems(tree, items, query) : { folders: childFolders(tree, listFolder), docs: items.filter(it => folderOf(tree, it.id) === listFolder) };
-  const sorted = sortItems(found, sortSelect.value);
+  const found = query ? searchItems(tree, items, query) : { folders: childFolders(tree, listFolder, lang), docs: items.filter(it => folderOf(tree, it.id) === listFolder) };
+  const sorted = sortItems(found, sortSelect.value, lang);
   const where = (folderId) => {
     const s = document.createElement('small');
     s.className = 'where';
-    s.textContent = ['Meus mapas', ...folderPath(tree, folderId).map(f => f.name)].join(' › ');
+    s.textContent = [t('list.root'), ...folderPath(tree, folderId).map(f => f.name)].join(' › ');
     return query ? [s] : [];
   };
   const subfolders = sorted.folders.map(f => {
@@ -247,7 +262,7 @@ function renderList() {
     Object.assign(li.dataset, { drag: `folder:${f.id}`, drop: f.id });
     li.draggable = true;
     a.append(...where(f.parent ?? null));
-    li.append(a, btn('Mover', 'moveFolder', f.id), btn('Renomear', 'renameFolder', f.id), btn('Apagar', 'deleteFolder', f.id));
+    li.append(a, btn(t('common.move'), 'moveFolder', f.id), btn(t('common.rename'), 'renameFolder', f.id), btn(t('common.delete'), 'deleteFolder', f.id));
     return li;
   });
   const docs = sorted.docs;
@@ -258,29 +273,29 @@ function renderList() {
     li.classList.toggle('board', kind === 'board');
     a.href = `#/${kind}/${it.id}`;
     a.innerHTML = `<svg viewBox="0 0 24 24"><use href="#i-${kind === 'board' ? 'brush' : 'sitemap'}"/></svg>`;
-    a.append(it.title || '(sem título)');
+    a.append(it.title || t('doc.untitled'));
     const time = document.createElement('time');
-    time.textContent = new Date(it.updated).toLocaleString('pt-BR');
+    time.textContent = fmtDateTime(new Date(it.updated));
     li.dataset.drag = `doc:${it.id}`;
     li.draggable = true;
     a.append(...where(folderOf(tree, it.id)));
-    li.append(a, time, btn('Mover', 'moveDoc', it.id), btn('Duplicar', 'duplicate', it.id), btn('Apagar', 'delete', it.id));
+    li.append(a, time, btn(t('common.move'), 'moveDoc', it.id), btn(t('common.duplicate'), 'duplicate', it.id), btn(t('common.delete'), 'delete', it.id));
     return li;
   }));
   const trashShown = query ? searchItems(tree, trash, query).docs : trash;
   $('#empty').hidden = subfolders.length + docs.length > 0 || (!!query && trashShown.length > 0);
-  $('#empty').textContent = query ? `Nada encontrado para “${query}”.` : listFolder ? 'Pasta vazia.' : 'Nenhum mapa ainda. Crie o primeiro.';
+  $('#empty').textContent = query ? t('list.searchNoResults', { query }) : listFolder ? t('list.emptyFolder') : t('list.empty');
   // lixeira só no Início; buscando, aparece (aberta) com o que bate com a busca, de qualquer pasta
   $('#trash').hidden = !trashShown.length || (!!listFolder && !query);
   if (query && trashShown.length) $('#trash').open = true;
-  $('#trash summary').textContent = `Lixeira (${trashShown.length})`;
-  $('#trash-list').replaceChildren(...trashShown.map(t => {
+  $('#trash summary').textContent = t('trash.title', { n: trashShown.length });
+  $('#trash-list').replaceChildren(...trashShown.map(it => {
     const li = document.createElement('li');
     const name = document.createElement('span');
-    name.textContent = t.title || '(sem título)';
+    name.textContent = it.title || t('doc.untitled');
     const time = document.createElement('time');
-    time.textContent = `apagado em ${new Date(t.deleted).toLocaleString('pt-BR')}`;
-    li.append(name, time, btn('Restaurar', 'restore', t.id), btn('Apagar de vez', 'purge', t.id));
+    time.textContent = t('trash.deletedAt', { date: fmtDateTime(new Date(it.deleted)) });
+    li.append(name, time, btn(t('common.restore'), 'restore', it.id), btn(t('trash.purge'), 'purge', it.id));
     return li;
   }));
 }
@@ -289,7 +304,7 @@ function renderList() {
 $('#maps').addEventListener('click', async (e) => {
   const d = e.target.closest('button')?.dataset;
   if (d?.duplicate) {
-    const r = await fetch(`/api/maps/${d.duplicate}/duplicate`, { method: 'POST' });
+    const r = await duplicateDoc(d.duplicate);
     if (r.ok && listFolder) { const { id } = await r.json(); await saveTree(t => placeDoc(t, id, listFolder)); }  // cópia na mesma pasta
   } else if (d?.delete) {
     const it = listData.items.find(x => x.id === d.delete);
@@ -299,10 +314,10 @@ $('#maps').addEventListener('click', async (e) => {
   else if (d?.moveDoc || d?.moveFolder) return openMoveMenu(d.moveDoc ? 'doc' : 'folder', d.moveDoc ?? d.moveFolder, e.target.closest('button'));
   else if (d?.renameFolder) {
     const f = tree.folders.find(x => x.id === d.renameFolder);
-    if (!f || !(await renameFolder(f, prompt('Nome da pasta', f.name)))) return;
+    if (!f || !(await renameFolder(f, prompt(t('folder.renamePrompt'), f.name)))) return;
   } else if (d?.deleteFolder) {
     const f = tree.folders.find(x => x.id === d.deleteFolder);
-    if (!f || !confirm(`Apagar a pasta "${f.name}"? O que está dentro dela (mapas, quadros e subpastas) vai para a pasta de cima.`)) return;
+    if (!f || !confirm(t('folder.deleteConfirm', { name: f.name }))) return;
     await saveTree(t => removeFolder(t, f.id));
   } else return;
   showList(listFolder);
@@ -325,8 +340,8 @@ function openMoveMenu(kind, id, anchor) {
     b.disabled = to === here || banned.has(to);
     return b;
   };
-  const title = Object.assign(document.createElement('p'), { textContent: 'Mover para' });
-  moveMenu.replaceChildren(title, item(null, 'Meus mapas', 0), ...folderOptions(tree).map(o => item(o.id, o.name, o.depth + 1)));
+  const title = Object.assign(document.createElement('p'), { textContent: t('folder.moveTo') });
+  moveMenu.replaceChildren(title, item(null, t('list.root'), 0), ...folderOptions(tree, null, 0, lang).map(o => item(o.id, o.name, o.depth + 1)));
   moveMenu.onclick = (e) => { const b = e.target.closest('button[data-to]'); if (b) moveItem(kind, id, b.dataset.to || null); };
   const r = anchor.getBoundingClientRect();
   Object.assign(moveMenu.style, { top: `${r.bottom + 6}px`, left: `${Math.max(8, r.right - 260)}px` });
@@ -398,7 +413,7 @@ titleEl.onclick = editTitle;
 titleEl.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); editTitle(); } };
 
 $('#new-folder').onclick = async () => {
-  const name = prompt('Nome da nova pasta')?.trim();
+  const name = prompt(t('folder.newPrompt'))?.trim();
   if (!name) return;
   const parent = listFolder;
   if (await saveTree(t => ({ ...t, folders: [...t.folders, { id: uid(), name: name.slice(0, 200), parent }] }))) showList(parent);
@@ -407,35 +422,35 @@ $('#trash-list').addEventListener('click', async (e) => {
   const d = e.target.closest('button')?.dataset;
   if (d?.restore) {
     const r = await fetch(`/api/trash/${d.restore}/restore`, { method: 'POST' });
-    if (r.status === 409) alert('Já existe um mapa com esse identificador; não foi possível restaurar.');
+    if (r.status === 409) alert(t('trash.restoreConflict'));
   } else if (d?.purge) {
-    if (!confirm('Apagar de vez? Isso não pode ser desfeito.')) return;
+    if (!confirm(t('trash.purgeConfirm'))) return;
     await fetch(`/api/trash/${d.purge}`, { method: 'DELETE' });
   } else return;
   showList(listFolder);
 });
 
 $('#new-board').onclick = async () => {
-  const b = newBoard(uid());
+  const b = newBoard(uid(), t('doc.untitledBoard'));
   const r = await api('PUT', `/${b.id}`, b);
   if (r.ok && listFolder) await saveTree(t => placeDoc(t, b.id, listFolder));  // nasce na pasta aberta
   if (r.ok) location.hash = `#/board/${b.id}`;
-  else alert('Não foi possível criar o quadro.');
+  else alert(t('list.createBoardError'));
 };
 
 $('#new-map').onclick = async () => {
-  const m = newMap(uid());
+  const m = newMap(uid(), t('doc.centralTopic'));
   const r = await api('PUT', `/${m.id}`, m);
   if (r.ok && listFolder) await saveTree(t => placeDoc(t, m.id, listFolder));  // nasce na pasta aberta
   if (r.ok) location.hash = `#/map/${m.id}`;
-  else alert('Não foi possível criar o mapa.');
+  else alert(t('list.createMapError'));
 };
 
 // ---------- Editor ----------
 async function openMap(id) {
   const r = await api('GET', `/${id}`);
   if (!r.ok) {
-    if (r.status === 500) alert('Não foi possível abrir este mapa: o arquivo dele está corrompido.');
+    if (r.status === 500) alert(t('map.openError'));
     location.hash = '#/';
     return;
   }
@@ -453,7 +468,7 @@ async function openMap(id) {
   if (conflict) dirty = false;  // edições do mapa em conflito foram abandonadas ao sair dele
   conflict = false;
   document.body.dataset.view = 'editor';
-  setStatus('Salvo');
+  setStatus(t('status.saved'));
   stylePop.hidden = true;
   const place = loadPlace(id);
   if (place && findNode(map.root, place.selected)) selected = place.selected;
@@ -854,7 +869,7 @@ function scheduleSave(doc = map) {
   if (conflict) { dirty = true; return; }
   dirty = true;
   pending = doc;
-  setStatus('Salvando…');
+  setStatus(t('status.saving'));
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, 500);
 }
@@ -872,16 +887,16 @@ async function save() {
       const r = await api('PUT', `/${m.id}`, m);
       if (r.status === 409) {
         conflict = true;
-        setStatus('Mapa alterado em outra aba — recarregue', true);
+        setStatus(t('status.conflict'), true);
       } else if (!r.ok) {
         throw new Error(`HTTP ${r.status}`);
       } else {
         m.version = (await r.json()).version;
-        if (!dirty) setStatus('Salvo');
+        if (!dirty) setStatus(t('status.saved'));
       }
     } catch {
       dirty = true;
-      setStatus('Erro ao salvar — tentando de novo', true);
+      setStatus(t('status.saveError'), true);
       retryTimer = setTimeout(save, 5000);
     }
   })();
@@ -925,7 +940,7 @@ const swatch = (c) => {
   const b = document.createElement('button');
   b.dataset.value = c;
   if (isHex(c)) b.style.background = c;
-  b.title = c === '' ? 'Automática' : c === 'none' ? 'Sem preenchimento' : c;
+  b.title = c === '' ? t('map.style.auto') : c === 'none' ? t('map.style.noFill') : c;
   return b;
 };
 for (const row of document.querySelectorAll('#style-pop .swatches[data-extra], #text-pop .swatches[data-extra]')) {
@@ -1545,8 +1560,8 @@ function placeLinkBar() {
 function editLinkLabel() {
   const k = currentLink();
   if (!k) return;
-  const t = prompt('Rótulo da ligação', k.label ?? '');
-  if (t !== null && (t.trim() || null) !== (k.label ?? null)) setLink({ label: t.trim() || null });
+  const label = prompt(t('map.link.labelPrompt'), k.label ?? '');
+  if (label !== null && (label.trim() || null) !== (k.label ?? null)) setLink({ label: label.trim() || null });
 }
 
 linkColors.querySelector('.swatches').append(...['', ...PALETTE, ...EXTRA_COLORS].map(swatch));
@@ -1614,7 +1629,7 @@ async function uploadFile(file) {
   const r = await fetch(`/api/maps/${map.id}/files`, {
     method: 'POST', headers: { 'X-Filename': encodeURIComponent(file.name) }, body: file,
   });
-  if (!r.ok) throw new Error(r.status === 413 ? 'arquivo maior que 20 MB' : `HTTP ${r.status}`);
+  if (!r.ok) throw new Error(r.status === 413 ? t('error.fileTooLarge') : `HTTP ${r.status}`);
   return r.json();
 }
 
@@ -1622,13 +1637,13 @@ async function uploadFile(file) {
 const naturalSize = (file) => new Promise((resolve, reject) => {
   const url = URL.createObjectURL(file), im = new Image();
   im.onload = () => { resolve({ w: im.naturalWidth, h: im.naturalHeight }); URL.revokeObjectURL(url); };
-  im.onerror = () => { reject(new Error('imagem inválida')); URL.revokeObjectURL(url); };
+  im.onerror = () => { reject(new Error(t('error.invalidImage'))); URL.revokeObjectURL(url); };
   im.src = url;
 });
 
 async function addImage(file) {
   if (!file) return;
-  if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) { alert('Use uma imagem PNG, JPG, GIF ou WEBP.'); return; }
+  if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) { alert(t('common.imageTypeError')); return; }
   const id = selected;
   try {
     const [size, info] = await Promise.all([naturalSize(file), uploadFile(file)]);
@@ -1636,7 +1651,7 @@ async function addImage(file) {
     const n = findNode(map.root, id)?.node;
     if (n) mutate(() => { n.image = { id: info.id, ...size }; });
   } catch (e) {
-    alert(`Não foi possível adicionar a imagem: ${e.message}`);
+    alert(t('map.image.addError', { error: e.message }));
   }
 }
 
@@ -1684,7 +1699,7 @@ function fillAttachList(n) {
     size.textContent = fmtSize(a.size ?? 0);
     const rm = document.createElement('button');
     rm.dataset.remove = i;
-    rm.title = 'Remover anexo';
+    rm.title = t('map.attach.remove');
     rm.textContent = '×';
     li.append(size, rm);
     return li;
@@ -1700,7 +1715,7 @@ async function addAttachments(files) {
       added.push({ id: info.id, name: info.name, size: info.size });
     }
   } catch (e) {
-    alert(`Não foi possível enviar o arquivo: ${e.message}`);
+    alert(t('map.attach.uploadError', { error: e.message }));
   }
   const n = findNode(map.root, id)?.node;
   if (n && added.length) mutate(() => { n.attachments = [...(n.attachments ?? []), ...added]; });
@@ -1757,10 +1772,10 @@ function fillCommentList(n) {
     const li = document.createElement('li');
     li.textContent = c.text;
     const time = document.createElement('time');
-    time.textContent = new Date(c.at).toLocaleString('pt-BR');
+    time.textContent = fmtDateTime(new Date(c.at));
     const del = document.createElement('button');
     del.dataset.del = i;
-    del.title = 'Apagar comentário';
+    del.title = t('map.comment.delete');
     del.textContent = '×';
     li.append(time, del);
     return li;
@@ -1885,7 +1900,7 @@ function renderOutline() {
     bullet.dataset.toggle = n.id;
     bullet.style.color = branchColor(map.root, n.id);
     bullet.textContent = n.children.length ? (n.collapsed ? '▸' : '▾') : '•';
-    bullet.title = n.children.length ? 'Recolher / expandir' : '';
+    bullet.title = n.children.length ? t('map.menu.collapse') : '';
     const input = document.createElement('input');
     input.value = n.text;
     input.dataset.id = n.id;
@@ -1962,7 +1977,7 @@ $('#outline-btn').onclick = () => setOutline(!outlineOn);
 
 // ---------- Exportar: PNG, PDF (impressão) e Markdown ----------
 const exportMenu = $('#export-menu');
-const fileBase = () => ((map ? map.root.text : currentBoard().title).replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'mapa').slice(0, 60);
+const fileBase = () => ((map ? map.root.text : currentBoard().title).replace(/[^\p{L}\p{N} _-]/gu, '').trim() || t('export.fileFallback')).slice(0, 60);
 
 function download(blob, name) {
   const a = document.createElement('a');
@@ -2041,7 +2056,7 @@ exportMenu.addEventListener('click', async (e) => {
   const kind = e.target.closest('[data-export]')?.dataset.export;
   if (!kind) return;
   exportMenu.hidden = true;
-  try { await EXPORTS[kind](); } catch (err) { alert(`Não foi possível exportar: ${err.message}`); }
+  try { await EXPORTS[kind](); } catch (err) { alert(t('export.error', { error: err.message })); }
 });
 
 // ---------- Histórico de versões ----------
@@ -2053,19 +2068,19 @@ async function loadHistory() {
     const li = document.createElement('li');
     const info = document.createElement('div');
     const when = document.createElement('strong');
-    when.textContent = new Date(v.saved).toLocaleString('pt-BR');
+    when.textContent = fmtDateTime(new Date(v.saved));
     const what = document.createElement('small');
-    what.textContent = `${v.title} · ${v.nodes} tópico${v.nodes === 1 ? '' : 's'}`;
+    what.textContent = v.nodes === 1 ? t('history.entryOne', { title: v.title }) : t('history.entryMany', { title: v.title, n: v.nodes });
     info.append(when, what);
     const btn = document.createElement('button');
     btn.dataset.restore = v.version;
-    btn.textContent = 'Restaurar';
+    btn.textContent = t('common.restore');
     li.append(info, btn);
     return li;
   });
   if (!rows.length) {
     const li = document.createElement('li');
-    li.textContent = 'Nenhuma versão anterior ainda.';
+    li.textContent = t('history.empty');
     rows.push(li);
   }
   $('#history-list').replaceChildren(...rows);
@@ -2080,9 +2095,9 @@ $('#history-btn').onclick = async () => {
 $('#history-close').onclick = () => { historyPanel.hidden = true; };
 $('#history-list').addEventListener('click', async (e) => {
   const v = e.target.closest('[data-restore]')?.dataset.restore;
-  if (!v || !confirm('Restaurar esta versão? (Ctrl+Z desfaz)')) return;
+  if (!v || !confirm(t('history.restoreConfirm'))) return;
   const r = await api('GET', `/${map.id}/history/${v}`);
-  if (!r.ok) { alert('Não foi possível carregar esta versão.'); return; }
+  if (!r.ok) { alert(t('history.loadError')); return; }
   const old = await r.json();
   historyPanel.hidden = true;
   // restaurar é uma mudança como outra qualquer: entra no desfazer e é salva por cima da atual
@@ -2100,9 +2115,9 @@ mapMenu.addEventListener('click', async (e) => {
   const doc = map ?? currentBoard(), id = doc.id, kind = doc.type === 'board' ? 'board' : 'map';
   await flushSave();
   if (action === 'duplicate') {
-    const r = await fetch(`/api/maps/${id}/duplicate`, { method: 'POST' });
+    const r = await duplicateDoc(id);
     if (r.ok) location.hash = `#/${kind}/${(await r.json()).id}`;
-    else alert('Não foi possível duplicar o mapa.');
+    else alert(t('doc.duplicateError'));
   } else if (action === 'trash') {
     if (!confirmTrash(kind, kind === 'board' ? doc.title : doc.root.text)) return;
     dirty = false;  // o mapa vai inteiro para a lixeira; nada pendente a perguntar

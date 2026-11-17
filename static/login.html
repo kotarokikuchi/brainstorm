@@ -3,19 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Entrar · Brainstorm</title>
+  <title data-i18n="login.title">Entrar · Brainstorm</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="login-page">
   <main class="login-card">
     <div class="brand"><span class="logo"></span>Brainstorm</div>
     <form id="login-form">
-      <label>Usuário<input id="login-user" name="user" autocomplete="username" required autofocus></label>
-      <label>Senha<input id="login-password" name="password" type="password" autocomplete="current-password" required></label>
+      <label><span data-i18n="login.user">Usuário</span><input id="login-user" name="user" autocomplete="username" required autofocus></label>
+      <label><span data-i18n="login.password">Senha</span><input id="login-password" name="password" type="password" autocomplete="current-password" required></label>
       <p id="login-error" role="alert" hidden></p>
-      <button class="primary" type="submit">Entrar</button>
+      <button class="primary" type="submit" data-i18n="login.submit">Entrar</button>
     </form>
+    <select id="lang" data-i18n-title="lang.select" title="Idioma" data-i18n-aria-label="lang.select" aria-label="Idioma"></select>
   </main>
-  <script src="login.js"></script>
+  <script type="module" src="login.js"></script>
 </body>
 </html>

@@ -11,8 +11,9 @@ const tmp = mkdtempSync(join(tmpdir(), 'galho-e2e-'));
 const server = spawn('python3', ['-c',
   'import sys; from pathlib import Path; from app import make_server; make_server(Path(sys.argv[1]), int(sys.argv[2]), auth=("e2e", "senha-e2e")).serve_forever()',
   join(tmp, 'data'), String(PORT)], { cwd: new URL('..', import.meta.url).pathname, stdio: 'ignore' });
-const chrome = spawn('google-chrome', ['--headless=new', '--disable-gpu', '--remote-debugging-port=' + CDP,
-  '--window-size=1400,800', '--user-data-dir=' + join(tmp, 'chrome'), 'about:blank'], { stdio: 'ignore' });
+// o teste confere textos em português: o navegador roda em pt-BR, seja qual for o idioma da máquina
+const chrome = spawn('google-chrome', ['--headless=new', '--disable-gpu', '--remote-debugging-port=' + CDP, '--lang=pt-BR', '--accept-lang=pt-BR',
+  '--window-size=1400,800', '--user-data-dir=' + join(tmp, 'chrome'), 'about:blank'], { stdio: 'ignore', env: { ...process.env, LANGUAGE: 'pt_BR' } });
 // maxRetries: o Chrome ainda pode estar gravando o perfil quando o processo sai
 process.on('exit', () => { chrome.kill(); server.kill(); rmSync(tmp, { recursive: true, force: true, maxRetries: 5 }); });
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(1));
@@ -61,6 +62,10 @@ await cmd('Page.enable');
 // página de login: sem sessão o app manda para ela; senha errada avisa; a certa entra
 await cmd('Page.navigate', { url: BASE + '/' }); await sleep(1200);
 assert.equal(await ev(`location.pathname`), '/login.html', 'sem login, vai para a página de login');
+// se as opções do Chrome não bastarem nesta máquina, a escolha guardada garante o pt-BR
+if (await ev(`navigator.language`) !== 'pt-BR') { await ev(`localStorage.setItem('galho:lang', 'pt-BR')`); await cmd('Page.navigate', { url: BASE + '/login.html' }); await sleep(1200); }
+assert.deepEqual(await ev(`[document.documentElement.lang, document.querySelector('#lang').value, document.querySelector('#lang').options.length, document.title]`),
+  ['pt-BR', 'pt-BR', 4, 'Entrar · Brainstorm'], 'página de login carrega os textos e o seletor de idioma sem sessão');
 const submitLogin = (u, p) => ev(`(() => { document.querySelector('#login-user').value = '${u}'; document.querySelector('#login-password').value = '${p}'; document.querySelector('#login-form').requestSubmit(); })()`);
 await submitLogin('e2e', 'errada'); await sleep(1600);
 assert.equal(await ev(`document.querySelector('#login-error').hidden ? '' : document.querySelector('#login-error').textContent`), 'Usuário ou senha incorretos.', 'senha errada avisa');
@@ -1550,6 +1555,21 @@ await typeText('depois');
 await key('Enter');
 await sleep(900);
 assert.ok((await secMap()).children.find(c => c.text === 'cor').children.some(c => c.text === 'depois'), 'mapa continua salvando depois das colagens forjadas');
+
+// seletor de idioma: a escolha fica guardada e a página recarrega; sem dicionário para o idioma, a interface segue em português
+await ev(`location.hash = '#/'`); await sleep(800);
+assert.deepEqual(await ev(`[...document.querySelectorAll('#lang option')].map(o => o.textContent)`), ['Português (Brasil)', 'English', 'Español', '日本語']);
+assert.equal(await ev(`document.querySelector('#lang').title`), 'Idioma');
+const pickLang = async (code) => {
+  await ev(`(() => { window.sameDocument = true; const s = document.querySelector('#lang'); s.value = '${code}'; s.dispatchEvent(new Event('change')); })()`);
+  await sleep(1500);
+  return ev(`[window.sameDocument ?? 'reloaded', localStorage.getItem('galho:lang'), document.querySelector('#lang').value, document.documentElement.lang]`);
+};
+assert.deepEqual(await pickLang('ja'), ['reloaded', 'ja', 'ja', 'ja'], 'escolher outro idioma guarda a escolha e recarrega');
+assert.deepEqual(await ev(`[document.querySelector('#new-map').textContent, document.querySelector('#search').placeholder, document.querySelector('#logout-btn').title]`),
+  ['Novo mapa', 'Buscar mapas, quadros e pastas', 'Sair'], 'idioma ainda sem dicionário: interface em português');
+assert.ok((await ev(`document.querySelector('#trash summary').textContent`)).startsWith('Lixeira ('), 'textos montados em JS também caem no português');
+assert.deepEqual(await pickLang('pt-BR'), ['reloaded', 'pt-BR', 'pt-BR', 'pt-BR'], 'volta para o português');
 
 // Sair: encerra a sessão e volta para a página de login
 await ev(`location.hash = '#/'`); await sleep(800);

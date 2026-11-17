@@ -58,55 +58,56 @@
   </svg>
   <header class="topbar">
     <a href="#/" class="brand"><span class="logo"></span>Brainstorm</a>
-    <span id="title" tabindex="0" title="Clique para renomear"></span>
-    <button id="map-menu-btn" class="icon topbar-toggle" title="Opções do mapa"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
+    <span id="title" tabindex="0" data-i18n-title="common.clickToRename" title="Clique para renomear"></span>
+    <button id="map-menu-btn" class="icon topbar-toggle" data-i18n-title="topbar.docOptions" title="Opções do mapa"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
     <span id="status"></span>
     <span class="history-btns">
-      <button id="undo" class="icon" title="Desfazer (Ctrl+Z)"><svg viewBox="0 0 24 24"><use href="#i-arrow-back-up"/></svg></button>
-      <button id="redo" class="icon" title="Refazer (Ctrl+Shift+Z)"><svg viewBox="0 0 24 24"><use href="#i-arrow-forward-up"/></svg></button>
-      <button id="present-btn" class="icon" title="Apresentar"><svg viewBox="0 0 24 24"><use href="#i-player-play"/></svg></button>
-      <button id="history-btn" class="icon topbar-toggle" title="Histórico de versões"><svg viewBox="0 0 24 24"><use href="#i-history"/></svg></button>
-      <button id="export-btn" class="icon topbar-toggle" title="Exportar"><svg viewBox="0 0 24 24"><use href="#i-download"/></svg></button>
+      <button id="undo" class="icon" data-i18n-title="common.undo" title="Desfazer (Ctrl+Z)"><svg viewBox="0 0 24 24"><use href="#i-arrow-back-up"/></svg></button>
+      <button id="redo" class="icon" data-i18n-title="common.redo" title="Refazer (Ctrl+Shift+Z)"><svg viewBox="0 0 24 24"><use href="#i-arrow-forward-up"/></svg></button>
+      <button id="present-btn" class="icon" data-i18n-title="topbar.present" title="Apresentar"><svg viewBox="0 0 24 24"><use href="#i-player-play"/></svg></button>
+      <button id="history-btn" class="icon topbar-toggle" data-i18n-title="history.title" title="Histórico de versões"><svg viewBox="0 0 24 24"><use href="#i-history"/></svg></button>
+      <button id="export-btn" class="icon topbar-toggle" data-i18n-title="export.title" title="Exportar"><svg viewBox="0 0 24 24"><use href="#i-download"/></svg></button>
     </span>
-    <button id="logout-btn" class="icon" title="Sair" hidden><svg viewBox="0 0 24 24"><use href="#i-logout"/></svg></button>
+    <select id="lang" data-i18n-title="lang.select" title="Idioma" data-i18n-aria-label="lang.select" aria-label="Idioma"></select>
+    <button id="logout-btn" class="icon" data-i18n-title="topbar.logout" title="Sair" hidden><svg viewBox="0 0 24 24"><use href="#i-logout"/></svg></button>
   </header>
   <aside id="history-panel" class="card" hidden>
-    <div class="panel-head"><strong>Histórico de versões</strong><button id="history-close" class="icon" title="Fechar">×</button></div>
-    <p class="muted">Uma cópia a cada 2 min de edição · últimas 50</p>
+    <div class="panel-head"><strong data-i18n="history.title">Histórico de versões</strong><button id="history-close" class="icon" data-i18n-title="common.close" title="Fechar">×</button></div>
+    <p class="muted" data-i18n="history.hint">Uma cópia a cada 2 min de edição · últimas 50</p>
     <ul id="history-list"></ul>
   </aside>
   <div id="map-menu" class="card menu" hidden>
-    <button data-map-action="duplicate">Duplicar</button>
+    <button data-map-action="duplicate" data-i18n="common.duplicate">Duplicar</button>
     <hr>
-    <button data-map-action="trash" class="danger">Mover para a lixeira</button>
+    <button data-map-action="trash" class="danger" data-i18n="doc.moveToTrash">Mover para a lixeira</button>
   </div>
   <div id="export-menu" class="card menu" hidden>
-    <button data-export="png">Imagem (PNG)</button>
-    <button data-export="pdf">PDF (imprimir / salvar)</button>
-    <button data-export="svg">Vetor (SVG)</button>
-    <button data-export="md">Texto (Markdown)</button>
+    <button data-export="png" data-i18n="export.png">Imagem (PNG)</button>
+    <button data-export="pdf" data-i18n="export.pdf">PDF (imprimir / salvar)</button>
+    <button data-export="svg" data-i18n="export.svg">Vetor (SVG)</button>
+    <button data-export="md" data-i18n="export.md">Texto (Markdown)</button>
   </div>
 
   <main id="list-view">
     <div class="list-head">
-      <h1 id="list-title">Meus mapas</h1>
+      <h1 id="list-title" data-i18n="list.root">Meus mapas</h1>
       <span class="new-buttons">
-        <button id="new-folder"><svg viewBox="0 0 24 24"><use href="#i-folder-plus"/></svg>Nova pasta</button>
-        <button id="new-board"><svg viewBox="0 0 24 24"><use href="#i-brush"/></svg>Novo quadro</button>
-        <button id="new-map" class="primary"><svg viewBox="0 0 24 24"><use href="#i-sitemap"/></svg>Novo mapa</button>
+        <button id="new-folder"><svg viewBox="0 0 24 24"><use href="#i-folder-plus"/></svg><span data-i18n="list.newFolder">Nova pasta</span></button>
+        <button id="new-board"><svg viewBox="0 0 24 24"><use href="#i-brush"/></svg><span data-i18n="list.newBoard">Novo quadro</span></button>
+        <button id="new-map" class="primary"><svg viewBox="0 0 24 24"><use href="#i-sitemap"/></svg><span data-i18n="list.newMap">Novo mapa</span></button>
       </span>
     </div>
     <div class="list-tools">
-      <label class="search"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg><input id="search" type="search" placeholder="Buscar mapas, quadros e pastas" autocomplete="off"></label>
-      <label class="sort" title="Ordenar"><svg viewBox="0 0 24 24"><use href="#i-arrows-sort"/></svg><select id="sort">
-        <option value="recent">Modificados recentemente</option>
-        <option value="oldest">Modificados há mais tempo</option>
-        <option value="az">Nome (A–Z)</option>
-        <option value="za">Nome (Z–A)</option>
+      <label class="search"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg><input id="search" type="search" data-i18n-placeholder="list.searchPlaceholder" placeholder="Buscar mapas, quadros e pastas" autocomplete="off"></label>
+      <label class="sort" data-i18n-title="list.sortBy" title="Ordenar"><svg viewBox="0 0 24 24"><use href="#i-arrows-sort"/></svg><select id="sort">
+        <option value="recent" data-i18n="list.sortRecent">Modificados recentemente</option>
+        <option value="oldest" data-i18n="list.sortOldest">Modificados há mais tempo</option>
+        <option value="az" data-i18n="list.sortAz">Nome (A–Z)</option>
+        <option value="za" data-i18n="list.sortZa">Nome (Z–A)</option>
       </select></label>
     </div>
     <ul id="maps"></ul>
-    <p id="empty" hidden>Nenhum mapa ainda. Crie o primeiro.</p>
+    <p id="empty" hidden data-i18n="list.empty">Nenhum mapa ainda. Crie o primeiro.</p>
     <div id="move-menu" class="card menu" hidden></div>
     <details id="trash" hidden>
       <summary>Lixeira</summary>
@@ -126,237 +127,237 @@
 
     <!-- barra flutuante sobre o nó selecionado -->
     <div id="toolbar" class="card" hidden>
-      <button id="style-btn" class="icon" title="Cor e forma"><svg viewBox="0 0 24 24"><use href="#i-bucket-droplet"/></svg></button>
-      <button id="text-btn" class="icon" title="Estilo do texto"><svg viewBox="0 0 24 24"><use href="#i-text-color"/></svg></button>
-      <button id="image-btn" class="icon" title="Imagem"><svg viewBox="0 0 24 24"><use href="#i-photo"/></svg></button>
-      <button id="attach-btn" class="icon" title="Anexos"><svg viewBox="0 0 24 24"><use href="#i-paperclip"/></svg></button>
-      <button id="url-btn" class="icon" title="Link"><svg viewBox="0 0 24 24"><use href="#i-link"/></svg></button>
-      <button id="comment-btn" class="icon" title="Comentários (Alt+Shift+C)"><svg viewBox="0 0 24 24"><use href="#i-message"/></svg></button>
-      <button id="link-btn" class="icon" title="Ligar a outro nó"><svg viewBox="0 0 24 24"><use href="#i-line"/></svg></button>
-      <button id="delete-btn" class="icon" title="Apagar (Del)"><svg viewBox="0 0 24 24"><use href="#i-trash"/></svg></button>
-      <button id="more-btn" class="icon" title="Mais opções"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
+      <button id="style-btn" class="icon" data-i18n-title="map.toolbar.style" title="Cor e forma"><svg viewBox="0 0 24 24"><use href="#i-bucket-droplet"/></svg></button>
+      <button id="text-btn" class="icon" data-i18n-title="map.toolbar.text" title="Estilo do texto"><svg viewBox="0 0 24 24"><use href="#i-text-color"/></svg></button>
+      <button id="image-btn" class="icon" data-i18n-title="map.toolbar.image" title="Imagem"><svg viewBox="0 0 24 24"><use href="#i-photo"/></svg></button>
+      <button id="attach-btn" class="icon" data-i18n-title="map.toolbar.attachments" title="Anexos"><svg viewBox="0 0 24 24"><use href="#i-paperclip"/></svg></button>
+      <button id="url-btn" class="icon" data-i18n-title="common.link" title="Link"><svg viewBox="0 0 24 24"><use href="#i-link"/></svg></button>
+      <button id="comment-btn" class="icon" data-i18n-title="map.toolbar.comments" title="Comentários (Alt+Shift+C)"><svg viewBox="0 0 24 24"><use href="#i-message"/></svg></button>
+      <button id="link-btn" class="icon" data-i18n-title="map.connect" title="Ligar a outro nó"><svg viewBox="0 0 24 24"><use href="#i-line"/></svg></button>
+      <button id="delete-btn" class="icon" data-i18n-title="map.toolbar.delete" title="Apagar (Del)"><svg viewBox="0 0 24 24"><use href="#i-trash"/></svg></button>
+      <button id="more-btn" class="icon" data-i18n-title="common.moreOptions" title="Mais opções"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
     </div>
     <div id="image-pop" class="card" hidden>
       <label id="image-drop" class="drop">
         <svg viewBox="0 0 24 24"><use href="#i-photo"/></svg>
-        <strong>Solte a imagem aqui ou clique para escolher</strong>
-        <small>PNG, JPG, GIF ou WEBP · até 20 MB</small>
+        <strong data-i18n="map.image.drop">Solte a imagem aqui ou clique para escolher</strong>
+        <small data-i18n="map.image.formats">PNG, JPG, GIF ou WEBP · até 20 MB</small>
         <input type="file" id="image-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
       </label>
-      <button id="image-remove" class="danger-link" hidden>Remover imagem</button>
+      <button id="image-remove" class="danger-link" hidden data-i18n="map.image.remove">Remover imagem</button>
     </div>
     <div id="attach-pop" class="card" hidden>
-      <p class="pop-title">Anexos</p>
+      <p class="pop-title" data-i18n="map.attach.title">Anexos</p>
       <ul id="attach-list"></ul>
       <label id="attach-drop" class="drop">
         <svg viewBox="0 0 24 24"><use href="#i-paperclip"/></svg>
-        <strong>Adicionar arquivos</strong>
-        <small>Solte aqui ou clique · até 20 MB cada</small>
+        <strong data-i18n="map.attach.add">Adicionar arquivos</strong>
+        <small data-i18n="map.attach.hint">Solte aqui ou clique · até 20 MB cada</small>
         <input type="file" id="attach-input" multiple hidden>
       </label>
     </div>
     <div id="comment-pop" class="card" hidden>
       <ul id="comment-list"></ul>
       <form id="comment-form">
-        <input id="comment-input" placeholder="Adicionar comentário" autocomplete="off">
-        <button type="submit" class="icon" title="Enviar (Enter)"><svg viewBox="0 0 24 24"><use href="#i-send"/></svg></button>
+        <input id="comment-input" data-i18n-placeholder="map.comment.placeholder" placeholder="Adicionar comentário" autocomplete="off">
+        <button type="submit" class="icon" data-i18n-title="map.comment.send" title="Enviar (Enter)"><svg viewBox="0 0 24 24"><use href="#i-send"/></svg></button>
       </form>
     </div>
     <div id="text-pop" class="card" hidden>
       <div class="seg text-toggles">
-        <button data-toggle="textBold" class="icon" title="Negrito (Ctrl+B)"><b>B</b></button>
-        <button data-toggle="textItalic" class="icon" title="Itálico (Ctrl+I)"><i>I</i></button>
+        <button data-toggle="textBold" class="icon" data-i18n-title="map.text.bold" title="Negrito (Ctrl+B)"><b>B</b></button>
+        <button data-toggle="textItalic" class="icon" data-i18n-title="map.text.italic" title="Itálico (Ctrl+I)"><i>I</i></button>
       </div>
-      <p>Tamanho</p>
-      <div class="seg" data-prop="textSize"><button data-value="small">Pequeno</button><button data-value="">Médio</button><button data-value="large">Grande</button></div>
-      <p>Cor do texto</p>
+      <p data-i18n="map.text.size">Tamanho</p>
+      <div class="seg" data-prop="textSize"><button data-value="small" data-i18n="map.text.small">Pequeno</button><button data-value="" data-i18n="map.text.medium">Médio</button><button data-value="large" data-i18n="map.text.large">Grande</button></div>
+      <p data-i18n="map.text.color">Cor do texto</p>
       <div class="swatches" data-prop="textColor" data-extra="auto"></div>
     </div>
     <div id="url-pop" class="card" hidden>
       <form id="url-form">
-        <input id="url-input" placeholder="Endereço (https://…)" autocomplete="off" spellcheck="false">
-        <button type="submit" class="primary">Salvar</button>
+        <input id="url-input" data-i18n-placeholder="map.url.placeholder" placeholder="Endereço (https://…)" autocomplete="off" spellcheck="false">
+        <button type="submit" class="primary" data-i18n="common.save">Salvar</button>
       </form>
-      <p id="url-error" hidden>Use um endereço http:// ou https://</p>
-      <button id="url-remove" class="danger-link" hidden>Remover link</button>
+      <p id="url-error" hidden data-i18n="map.url.invalid">Use um endereço http:// ou https://</p>
+      <button id="url-remove" class="danger-link" hidden data-i18n="map.url.remove">Remover link</button>
     </div>
     <div id="node-menu" class="card menu" hidden>
-      <button data-action="child">Novo filho <kbd>Tab</kbd></button>
-      <button data-action="sibling">Novo irmão <kbd>Enter</kbd></button>
-      <button data-action="collapse">Recolher / expandir <kbd>Espaço</kbd></button>
-      <button data-action="focus">Focar neste ramo <kbd>Ctrl+.</kbd></button>
+      <button data-action="child"><span data-i18n="map.menu.child">Novo filho</span> <kbd>Tab</kbd></button>
+      <button data-action="sibling"><span data-i18n="map.menu.sibling">Novo irmão</span> <kbd>Enter</kbd></button>
+      <button data-action="collapse"><span data-i18n="map.menu.collapse">Recolher / expandir</span> <kbd data-i18n="key.space">Espaço</kbd></button>
+      <button data-action="focus"><span data-i18n="map.menu.focus">Focar neste ramo</span> <kbd>Ctrl+.</kbd></button>
       <div id="branch-layout-row" class="menu-seg">
-        <span>Mostrar ramo como</span>
-        <div class="seg"><button data-value="">Mapa</button><button data-value="org">Organograma</button><button data-value="list">Lista</button></div>
+        <span data-i18n="map.menu.showBranchAs">Mostrar ramo como</span>
+        <div class="seg"><button data-value="" data-i18n="map.layout.map">Mapa</button><button data-value="org" data-i18n="map.layout.org">Organograma</button><button data-value="list" data-i18n="map.layout.list">Lista</button></div>
       </div>
       <hr>
-      <button data-action="link">Ligar a outro nó</button>
-      <button data-action="copy">Copiar ramo <kbd>Ctrl+C</kbd></button>
-      <button data-action="cut">Recortar ramo <kbd>Ctrl+X</kbd></button>
-      <button data-action="paste">Colar ramo <kbd>Ctrl+V</kbd></button>
+      <button data-action="link" data-i18n="map.connect">Ligar a outro nó</button>
+      <button data-action="copy"><span data-i18n="map.menu.copyBranch">Copiar ramo</span> <kbd>Ctrl+C</kbd></button>
+      <button data-action="cut"><span data-i18n="map.menu.cutBranch">Recortar ramo</span> <kbd>Ctrl+X</kbd></button>
+      <button data-action="paste"><span data-i18n="map.menu.pasteBranch">Colar ramo</span> <kbd>Ctrl+V</kbd></button>
       <hr>
-      <button data-action="delete" class="danger">Apagar <kbd>Del</kbd></button>
+      <button data-action="delete" class="danger"><span data-i18n="common.delete">Apagar</span> <kbd>Del</kbd></button>
     </div>
     <!-- barra da ligação selecionada -->
     <div id="link-toolbar" class="card" hidden>
-      <button id="link-color-btn" class="icon" title="Cor"><span class="dot"></span></button>
+      <button id="link-color-btn" class="icon" data-i18n-title="map.link.color" title="Cor"><span class="dot"></span></button>
       <span class="sep"></span>
-      <button id="link-start-btn" class="icon" title="Ponta inicial"></button>
-      <button id="link-swap" class="icon" title="Inverter direção"><svg viewBox="0 0 24 24"><use href="#i-arrows-exchange"/></svg></button>
-      <button id="link-end-btn" class="icon" title="Ponta final"></button>
+      <button id="link-start-btn" class="icon" data-i18n-title="map.link.startMarker" title="Ponta inicial"></button>
+      <button id="link-swap" class="icon" data-i18n-title="map.link.swap" title="Inverter direção"><svg viewBox="0 0 24 24"><use href="#i-arrows-exchange"/></svg></button>
+      <button id="link-end-btn" class="icon" data-i18n-title="map.link.endMarker" title="Ponta final"></button>
       <span class="sep"></span>
-      <button id="link-more" class="icon" title="Mais opções"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
+      <button id="link-more" class="icon" data-i18n-title="common.moreOptions" title="Mais opções"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
     </div>
-    <div id="link-colors" class="card link-pop" hidden><p>Cores do tema</p><div class="swatches"></div></div>
+    <div id="link-colors" class="card link-pop" hidden><p data-i18n="map.style.themeColors">Cores do tema</p><div class="swatches"></div></div>
     <div id="link-markers" class="card link-pop" hidden></div>
     <div id="link-menu" class="card menu link-pop" hidden>
-      <button data-action="label">Adicionar rótulo</button>
+      <button data-action="label" data-i18n="map.link.addLabel">Adicionar rótulo</button>
       <hr>
-      <button data-action="delete" class="danger">Excluir ligação</button>
+      <button data-action="delete" class="danger" data-i18n="map.link.delete">Excluir ligação</button>
     </div>
     <div id="style-pop" class="card" hidden>
       <div class="tabs">
-        <button data-tab="shape" class="active">Forma</button>
-        <button data-tab="border">Borda</button>
-        <button data-tab="line">Linha</button>
+        <button data-tab="shape" class="active" data-i18n="map.style.tabShape">Forma</button>
+        <button data-tab="border" data-i18n="map.style.tabBorder">Borda</button>
+        <button data-tab="line" data-i18n="map.style.tabLine">Linha</button>
       </div>
       <div data-panel="shape">
-        <p>Cores do tema</p>
+        <p data-i18n="map.style.themeColors">Cores do tema</p>
         <div class="swatches" data-prop="color" data-extra="auto none"></div>
-        <p>Cores personalizadas</p>
-        <div class="customs"><div class="swatches" data-prop="color" data-custom></div><button class="add-custom icon" data-prop="color" title="Escolher cor">+</button></div>
+        <p data-i18n="map.style.customColors">Cores personalizadas</p>
+        <div class="customs"><div class="swatches" data-prop="color" data-custom></div><button class="add-custom icon" data-prop="color" data-i18n-title="map.style.pickColor" title="Escolher cor">+</button></div>
         <hr>
         <div class="seg shapes" data-prop="shape">
-          <button data-value="underline" class="icon" title="Linha"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
-          <button data-value="rect" class="icon" title="Retângulo"><svg viewBox="0 0 24 24"><use href="#i-square"/></svg></button>
-          <button data-value="rounded" class="icon" title="Arredondado"><svg viewBox="0 0 24 24"><use href="#i-square-rounded"/></svg></button>
-          <button data-value="pill" class="icon" title="Elipse"><svg viewBox="0 0 24 24" style="transform:rotate(90deg)"><use href="#i-oval"/></svg></button>
-          <button data-value="cloud" class="icon" title="Nuvem"><svg viewBox="0 0 24 24"><use href="#i-cloud"/></svg></button>
+          <button data-value="underline" class="icon" data-i18n-title="map.shape.underline" title="Linha"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
+          <button data-value="rect" class="icon" data-i18n-title="map.shape.rect" title="Retângulo"><svg viewBox="0 0 24 24"><use href="#i-square"/></svg></button>
+          <button data-value="rounded" class="icon" data-i18n-title="map.shape.rounded" title="Arredondado"><svg viewBox="0 0 24 24"><use href="#i-square-rounded"/></svg></button>
+          <button data-value="pill" class="icon" data-i18n-title="map.shape.pill" title="Elipse"><svg viewBox="0 0 24 24" style="transform:rotate(90deg)"><use href="#i-oval"/></svg></button>
+          <button data-value="cloud" class="icon" data-i18n-title="map.shape.cloud" title="Nuvem"><svg viewBox="0 0 24 24"><use href="#i-cloud"/></svg></button>
         </div>
-        <label class="switch"><input type="checkbox" id="boundary"><span></span> Mostrar como contorno</label>
+        <label class="switch"><input type="checkbox" id="boundary"><span></span> <span data-i18n="map.style.boundary">Mostrar como contorno</span></label>
       </div>
       <div data-panel="border" hidden>
-        <p>Cor da borda</p>
+        <p data-i18n="map.style.borderColor">Cor da borda</p>
         <div class="swatches" data-prop="borderColor" data-extra="auto"></div>
-        <div class="customs"><div class="swatches" data-prop="borderColor" data-custom></div><button class="add-custom icon" data-prop="borderColor" title="Escolher cor">+</button></div>
-        <p>Espessura</p>
-        <div class="seg" data-prop="borderWidth"><button data-value="thin">Fina</button><button data-value="medium">Média</button><button data-value="thick">Grossa</button></div>
-        <p>Estilo</p>
-        <div class="seg" data-prop="borderStyle"><button data-value="solid">Sólida</button><button data-value="dashed">Tracejada</button><button data-value="dotted">Pontilhada</button></div>
+        <div class="customs"><div class="swatches" data-prop="borderColor" data-custom></div><button class="add-custom icon" data-prop="borderColor" data-i18n-title="map.style.pickColor" title="Escolher cor">+</button></div>
+        <p data-i18n="map.style.width">Espessura</p>
+        <div class="seg" data-prop="borderWidth"><button data-value="thin" data-i18n="map.style.thin">Fina</button><button data-value="medium" data-i18n="map.style.medium">Média</button><button data-value="thick" data-i18n="map.style.thick">Grossa</button></div>
+        <p data-i18n="map.style.style">Estilo</p>
+        <div class="seg" data-prop="borderStyle"><button data-value="solid" data-i18n="map.style.solid">Sólida</button><button data-value="dashed" data-i18n="map.style.dashed">Tracejada</button><button data-value="dotted" data-i18n="map.style.dotted">Pontilhada</button></div>
       </div>
       <div data-panel="line" hidden>
-        <p>Cor da linha até o pai</p>
+        <p data-i18n="map.style.lineColor">Cor da linha até o pai</p>
         <div class="swatches" data-prop="lineColor" data-extra="auto"></div>
-        <div class="customs"><div class="swatches" data-prop="lineColor" data-custom></div><button class="add-custom icon" data-prop="lineColor" title="Escolher cor">+</button></div>
-        <p>Espessura</p>
-        <div class="seg" data-prop="lineWidth"><button data-value="thin">Fina</button><button data-value="medium">Média</button><button data-value="thick">Grossa</button></div>
-        <p>Estilo</p>
-        <div class="seg" data-prop="lineStyle"><button data-value="solid">Sólida</button><button data-value="dashed">Tracejada</button></div>
+        <div class="customs"><div class="swatches" data-prop="lineColor" data-custom></div><button class="add-custom icon" data-prop="lineColor" data-i18n-title="map.style.pickColor" title="Escolher cor">+</button></div>
+        <p data-i18n="map.style.width">Espessura</p>
+        <div class="seg" data-prop="lineWidth"><button data-value="thin" data-i18n="map.style.thin">Fina</button><button data-value="medium" data-i18n="map.style.medium">Média</button><button data-value="thick" data-i18n="map.style.thick">Grossa</button></div>
+        <p data-i18n="map.style.style">Estilo</p>
+        <div class="seg" data-prop="lineStyle"><button data-value="solid" data-i18n="map.style.solid">Sólida</button><button data-value="dashed" data-i18n="map.style.dashed">Tracejada</button></div>
       </div>
       <input type="color" id="custom-color" hidden>
     </div>
     </div>
 
     <!-- botões "+" ao lado do nó selecionado -->
-    <button id="add-child" class="adder" title="Novo filho (Tab)">+</button>
-    <button id="add-sibling" class="adder" title="Novo irmão (Enter)">+</button>
+    <button id="add-child" class="adder" data-i18n-title="map.addChild" title="Novo filho (Tab)">+</button>
+    <button id="add-sibling" class="adder" data-i18n-title="map.addSibling" title="Novo irmão (Enter)">+</button>
     <!-- modo "Ligar": contorno verde e um "+" em cada lado do nó de origem -->
     <div id="link-ring" hidden></div>
-    <button class="link-anchor" data-side="top" hidden title="Sair por cima">+</button>
-    <button class="link-anchor" data-side="right" hidden title="Sair pela direita">+</button>
-    <button class="link-anchor" data-side="bottom" hidden title="Sair por baixo">+</button>
-    <button class="link-anchor" data-side="left" hidden title="Sair pela esquerda">+</button>
-    <div id="hints"><span><kbd>Tab</kbd> filho</span><span><kbd>Enter</kbd> irmão</span></div>
+    <button class="link-anchor" data-side="top" hidden data-i18n-title="map.link.exitTop" title="Sair por cima">+</button>
+    <button class="link-anchor" data-side="right" hidden data-i18n-title="map.link.exitRight" title="Sair pela direita">+</button>
+    <button class="link-anchor" data-side="bottom" hidden data-i18n-title="map.link.exitBottom" title="Sair por baixo">+</button>
+    <button class="link-anchor" data-side="left" hidden data-i18n-title="map.link.exitLeft" title="Sair pela esquerda">+</button>
+    <div id="hints"><span><kbd>Tab</kbd> <span data-i18n="map.hint.child">filho</span></span><span><kbd>Enter</kbd> <span data-i18n="map.hint.sibling">irmão</span></span></div>
 
     <div id="outline-view" hidden><ul class="outline"></ul></div>
     <div id="focus-bar" class="card" hidden>
-      <span>Foco: <strong id="focus-title"></strong></span>
-      <button id="focus-exit">Sair do foco <kbd>Esc</kbd></button>
+      <span><span data-i18n="map.focus.label">Foco:</span> <strong id="focus-title"></strong></span>
+      <button id="focus-exit"><span data-i18n="map.focus.exit">Sair do foco</span> <kbd>Esc</kbd></button>
     </div>
     <div id="present-bar" class="card" hidden>
-      <button id="present-prev" class="icon" title="Anterior (←)"><svg viewBox="0 0 24 24"><use href="#i-chevron-left"/></svg></button>
+      <button id="present-prev" class="icon" data-i18n-title="present.prev" title="Anterior (←)"><svg viewBox="0 0 24 24"><use href="#i-chevron-left"/></svg></button>
       <span id="present-count"></span>
-      <button id="present-next" class="icon" title="Próximo (→ ou Espaço)"><svg viewBox="0 0 24 24"><use href="#i-chevron-right"/></svg></button>
-      <button id="present-exit" class="icon" title="Sair (Esc)"><svg viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
+      <button id="present-next" class="icon" data-i18n-title="present.next" title="Próximo (→ ou Espaço)"><svg viewBox="0 0 24 24"><use href="#i-chevron-right"/></svg></button>
+      <button id="present-exit" class="icon" data-i18n-title="present.exit" title="Sair (Esc)"><svg viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
     </div>
     <div id="dock" class="card">
-      <button id="outline-btn" class="icon" title="Outline (Alt+Shift+O)"><svg viewBox="0 0 24 24"><use href="#i-list"/></svg></button>
-      <select id="layout-select" title="Layout">
-        <option value="map">Mapa</option>
-        <option value="org">Organograma</option>
-        <option value="list">Lista</option>
+      <button id="outline-btn" class="icon" data-i18n-title="map.outline" title="Outline (Alt+Shift+O)"><svg viewBox="0 0 24 24"><use href="#i-list"/></svg></button>
+      <select id="layout-select" data-i18n-title="map.layout.title" title="Layout">
+        <option value="map" data-i18n="map.layout.map">Mapa</option>
+        <option value="org" data-i18n="map.layout.org">Organograma</option>
+        <option value="list" data-i18n="map.layout.list">Lista</option>
       </select>
-      <button id="zoom-out" class="icon" title="Diminuir zoom"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
-      <button id="zoom-reset" title="Zoom 100%">100%</button>
-      <button id="zoom-in" class="icon" title="Aumentar zoom"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
-      <button id="zoom-fit" class="icon" title="Ajustar à tela"><svg viewBox="0 0 24 24"><use href="#i-arrows-maximize"/></svg></button>
+      <button id="zoom-out" class="icon" data-i18n-title="zoom.out" title="Diminuir zoom"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
+      <button id="zoom-reset" data-i18n-title="zoom.reset" title="Zoom 100%">100%</button>
+      <button id="zoom-in" class="icon" data-i18n-title="zoom.in" title="Aumentar zoom"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
+      <button id="zoom-fit" class="icon" data-i18n-title="zoom.fit" title="Ajustar à tela"><svg viewBox="0 0 24 24"><use href="#i-arrows-maximize"/></svg></button>
     </div>
   </section>
 
   <section id="board-view">
     <svg id="board-canvas"><g id="board-root"></g></svg>
     <div id="board-tools" class="card">
-      <button data-tool="hand" data-key="H" class="icon" title="Mover a tela (H ou Espaço)"><svg viewBox="0 0 24 24"><use href="#i-hand-stop"/></svg></button>
-      <button data-tool="select" data-key="V" class="icon" title="Selecionar (V ou 1)"><svg viewBox="0 0 24 24"><use href="#i-pointer"/></svg></button>
+      <button data-tool="hand" data-key="H" class="icon" data-i18n-title="board.tool.hand" title="Mover a tela (H ou Espaço)"><svg viewBox="0 0 24 24"><use href="#i-hand-stop"/></svg></button>
+      <button data-tool="select" data-key="V" class="icon" data-i18n-title="board.tool.select" title="Selecionar (V ou 1)"><svg viewBox="0 0 24 24"><use href="#i-pointer"/></svg></button>
       <span class="sep"></span>
-      <button data-tool="rectangle" data-key="R" class="icon" title="Retângulo (R ou 2)"><svg viewBox="0 0 24 24"><use href="#i-square"/></svg></button>
-      <button data-tool="diamond" data-key="D" class="icon" title="Losango (D ou 3)"><svg viewBox="0 0 24 24"><use href="#i-square-rotated"/></svg></button>
-      <button data-tool="ellipse" data-key="O" class="icon" title="Elipse (O ou 4)"><svg viewBox="0 0 24 24"><use href="#i-circle"/></svg></button>
-      <button data-tool="arrow" data-key="A" class="icon" title="Seta (A ou 5)"><svg viewBox="0 0 24 24"><use href="#i-arrow-narrow-right"/></svg></button>
-      <button data-tool="line" data-key="L" class="icon" title="Linha (L ou 6)"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
-      <button data-tool="freedraw" data-key="P" class="icon" title="Lápis (P ou 7)"><svg viewBox="0 0 24 24"><use href="#i-pencil"/></svg></button>
-      <button data-tool="text" data-key="T" class="icon" title="Texto (T ou 8)"><svg viewBox="0 0 24 24"><use href="#i-letter-t"/></svg></button>
-      <button data-tool="note" data-key="N" class="icon" title="Nota adesiva (N)"><svg viewBox="0 0 24 24"><use href="#i-note"/></svg></button>
+      <button data-tool="rectangle" data-key="R" class="icon" data-i18n-title="board.tool.rectangle" title="Retângulo (R ou 2)"><svg viewBox="0 0 24 24"><use href="#i-square"/></svg></button>
+      <button data-tool="diamond" data-key="D" class="icon" data-i18n-title="board.tool.diamond" title="Losango (D ou 3)"><svg viewBox="0 0 24 24"><use href="#i-square-rotated"/></svg></button>
+      <button data-tool="ellipse" data-key="O" class="icon" data-i18n-title="board.tool.ellipse" title="Elipse (O ou 4)"><svg viewBox="0 0 24 24"><use href="#i-circle"/></svg></button>
+      <button data-tool="arrow" data-key="A" class="icon" data-i18n-title="board.tool.arrow" title="Seta (A ou 5)"><svg viewBox="0 0 24 24"><use href="#i-arrow-narrow-right"/></svg></button>
+      <button data-tool="line" data-key="L" class="icon" data-i18n-title="board.tool.line" title="Linha (L ou 6)"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
+      <button data-tool="freedraw" data-key="P" class="icon" data-i18n-title="board.tool.freedraw" title="Lápis (P ou 7)"><svg viewBox="0 0 24 24"><use href="#i-pencil"/></svg></button>
+      <button data-tool="text" data-key="T" class="icon" data-i18n-title="board.tool.text" title="Texto (T ou 8)"><svg viewBox="0 0 24 24"><use href="#i-letter-t"/></svg></button>
+      <button data-tool="note" data-key="N" class="icon" data-i18n-title="board.tool.note" title="Nota adesiva (N)"><svg viewBox="0 0 24 24"><use href="#i-note"/></svg></button>
       <span class="sep"></span>
-      <button data-tool="eraser" data-key="E" class="icon" title="Borracha (E ou 0)"><svg viewBox="0 0 24 24"><use href="#i-eraser"/></svg></button>
+      <button data-tool="eraser" data-key="E" class="icon" data-i18n-title="board.tool.eraser" title="Borracha (E ou 0)"><svg viewBox="0 0 24 24"><use href="#i-eraser"/></svg></button>
       <span class="sep"></span>
-      <button id="board-more-btn" class="icon" title="Mais ferramentas"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
+      <button id="board-more-btn" class="icon" data-i18n-title="board.tool.more" title="Mais ferramentas"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
       <div id="board-more" class="card menu" hidden>
-        <button data-tool="image"><span><svg viewBox="0 0 24 24"><use href="#i-photo"/></svg>Inserir imagem</span><kbd>9</kbd></button>
-        <button data-tool="bucket"><span><svg viewBox="0 0 24 24"><use href="#i-bucket-droplet"/></svg>Balde de tinta</span><kbd>B</kbd></button>
-        <button data-tool="lasso"><span><svg viewBox="0 0 24 24"><use href="#i-lasso"/></svg>Seleção de laço</span><kbd>Q</kbd></button>
-        <button data-tool="laser"><span><svg viewBox="0 0 24 24"><use href="#i-laser"/></svg>Ponteiro laser</span><kbd>K</kbd></button>
+        <button data-tool="image"><span><svg viewBox="0 0 24 24"><use href="#i-photo"/></svg><span data-i18n="board.tool.image">Inserir imagem</span></span><kbd>9</kbd></button>
+        <button data-tool="bucket"><span><svg viewBox="0 0 24 24"><use href="#i-bucket-droplet"/></svg><span data-i18n="board.tool.bucket">Balde de tinta</span></span><kbd>B</kbd></button>
+        <button data-tool="lasso"><span><svg viewBox="0 0 24 24"><use href="#i-lasso"/></svg><span data-i18n="board.tool.lasso">Seleção de laço</span></span><kbd>Q</kbd></button>
+        <button data-tool="laser"><span><svg viewBox="0 0 24 24"><use href="#i-laser"/></svg><span data-i18n="board.tool.laser">Ponteiro laser</span></span><kbd>K</kbd></button>
       </div>
     </div>
     <div id="board-props" class="card" hidden>
-      <p>Traço</p><div class="swatches" data-prop="strokeColor"></div>
-      <p>Fundo</p><div class="swatches" data-prop="backgroundColor"></div>
-      <p>Preenchimento</p><div class="seg" data-prop="fillStyle"><button data-value="hachure" title="Hachurado" aria-label="Hachurado"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12 12 4M4 20 20 4M12 20l8-8" stroke-width="1.5"/></svg></button><button data-value="solid" title="Sólido" aria-label="Sólido"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"/></svg></button></div>
-      <p>Espessura</p><div class="seg" data-prop="strokeWidth"><button data-value="1" title="Fina" aria-label="Fina"><svg viewBox="0 0 24 24"><path d="M4 12h16" stroke-width="1"/></svg></button><button data-value="2" title="Média" aria-label="Média"><svg viewBox="0 0 24 24"><path d="M4 12h16" stroke-width="2.5"/></svg></button><button data-value="4" title="Grossa" aria-label="Grossa"><svg viewBox="0 0 24 24"><path d="M4 12h16" stroke-width="5"/></svg></button></div>
-      <p>Estilo do traço</p><div class="seg" data-prop="strokeStyle"><button data-value="solid" title="Sólido" aria-label="Sólido"><svg viewBox="0 0 24 24"><path d="M3 12h18"/></svg></button><button data-value="dashed" title="Tracejado" aria-label="Tracejado"><svg viewBox="0 0 24 24"><path d="M3 12h18" stroke-dasharray="5 3" stroke-linecap="butt"/></svg></button><button data-value="dotted" title="Pontilhado" aria-label="Pontilhado"><svg viewBox="0 0 24 24"><path d="M4 12h17" stroke-dasharray="0 4.3"/></svg></button></div>
-      <p>Desleixo</p><div class="seg" data-prop="roughness"><button data-value="0" title="Arquiteto" aria-label="Arquiteto"><svg viewBox="0 0 24 24"><path d="M3 16C8 6 16 6 21 16"/></svg></button><button data-value="1" title="Artista" aria-label="Artista"><svg viewBox="0 0 24 24"><path d="M3 15c2-5 4-7 6-4s3 4 5 0 4-6 7 1"/></svg></button><button data-value="2" title="Cartunista" aria-label="Cartunista"><svg viewBox="0 0 24 24"><path d="M3 15c2-5 4-7 6-4s3 4 5 0 4-6 7 1M4 18c2-6 4-7 6-4s3 4 5-1 4-5 6 2" stroke-width="1.5"/></svg></button></div>
-      <div id="board-font-row"><p>Família da fonte</p><div class="seg" data-prop="fontFamily"><button data-value="hand" title="Manuscrita" aria-label="Manuscrita"><svg viewBox="0 0 24 24"><use href="#i-pencil"/></svg></button><button data-value="normal" title="Normal" aria-label="Normal"><svg viewBox="0 0 24 24"><path d="M6 20 12 4l6 16M8.5 14h7"/></svg></button><button data-value="code" title="Código" aria-label="Código"><svg viewBox="0 0 24 24"><path d="M7 8l-4 4 4 4M17 8l4 4-4 4M14 4l-4 16"/></svg></button></div>
-        <p>Tamanho do texto</p><div class="seg" data-prop="fontSize"><button data-value="16">P</button><button data-value="20">M</button><button data-value="28">G</button><button data-value="36">XG</button></div>
-        <p>Alinhamento do texto</p><div class="seg" data-prop="textAlign"><button data-value="left" title="À esquerda" aria-label="À esquerda"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h14"/></svg></button><button data-value="center" title="Centralizado" aria-label="Centralizado"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M5 18h14"/></svg></button><button data-value="right" title="À direita" aria-label="À direita"><svg viewBox="0 0 24 24"><path d="M4 6h16M10 12h10M6 18h14"/></svg></button></div></div>
-      <p>Opacidade</p><input type="range" id="board-opacity" min="0" max="100" step="10">
+      <p data-i18n="board.props.stroke">Traço</p><div class="swatches" data-prop="strokeColor"></div>
+      <p data-i18n="board.props.background">Fundo</p><div class="swatches" data-prop="backgroundColor"></div>
+      <p data-i18n="board.props.fill">Preenchimento</p><div class="seg" data-prop="fillStyle"><button data-value="hachure" data-i18n-title="board.props.fillHachure" title="Hachurado" data-i18n-aria-label="board.props.fillHachure" aria-label="Hachurado"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12 12 4M4 20 20 4M12 20l8-8" stroke-width="1.5"/></svg></button><button data-value="solid" data-i18n-title="board.props.fillSolid" title="Sólido" data-i18n-aria-label="board.props.fillSolid" aria-label="Sólido"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"/></svg></button></div>
+      <p data-i18n="board.props.width">Espessura</p><div class="seg" data-prop="strokeWidth"><button data-value="1" data-i18n-title="board.props.widthThin" title="Fina" data-i18n-aria-label="board.props.widthThin" aria-label="Fina"><svg viewBox="0 0 24 24"><path d="M4 12h16" stroke-width="1"/></svg></button><button data-value="2" data-i18n-title="board.props.widthMedium" title="Média" data-i18n-aria-label="board.props.widthMedium" aria-label="Média"><svg viewBox="0 0 24 24"><path d="M4 12h16" stroke-width="2.5"/></svg></button><button data-value="4" data-i18n-title="board.props.widthThick" title="Grossa" data-i18n-aria-label="board.props.widthThick" aria-label="Grossa"><svg viewBox="0 0 24 24"><path d="M4 12h16" stroke-width="5"/></svg></button></div>
+      <p data-i18n="board.props.strokeStyle">Estilo do traço</p><div class="seg" data-prop="strokeStyle"><button data-value="solid" data-i18n-title="board.props.strokeSolid" title="Sólido" data-i18n-aria-label="board.props.strokeSolid" aria-label="Sólido"><svg viewBox="0 0 24 24"><path d="M3 12h18"/></svg></button><button data-value="dashed" data-i18n-title="board.props.strokeDashed" title="Tracejado" data-i18n-aria-label="board.props.strokeDashed" aria-label="Tracejado"><svg viewBox="0 0 24 24"><path d="M3 12h18" stroke-dasharray="5 3" stroke-linecap="butt"/></svg></button><button data-value="dotted" data-i18n-title="board.props.strokeDotted" title="Pontilhado" data-i18n-aria-label="board.props.strokeDotted" aria-label="Pontilhado"><svg viewBox="0 0 24 24"><path d="M4 12h17" stroke-dasharray="0 4.3"/></svg></button></div>
+      <p data-i18n="board.props.roughness">Desleixo</p><div class="seg" data-prop="roughness"><button data-value="0" data-i18n-title="board.props.roughArchitect" title="Arquiteto" data-i18n-aria-label="board.props.roughArchitect" aria-label="Arquiteto"><svg viewBox="0 0 24 24"><path d="M3 16C8 6 16 6 21 16"/></svg></button><button data-value="1" data-i18n-title="board.props.roughArtist" title="Artista" data-i18n-aria-label="board.props.roughArtist" aria-label="Artista"><svg viewBox="0 0 24 24"><path d="M3 15c2-5 4-7 6-4s3 4 5 0 4-6 7 1"/></svg></button><button data-value="2" data-i18n-title="board.props.roughCartoonist" title="Cartunista" data-i18n-aria-label="board.props.roughCartoonist" aria-label="Cartunista"><svg viewBox="0 0 24 24"><path d="M3 15c2-5 4-7 6-4s3 4 5 0 4-6 7 1M4 18c2-6 4-7 6-4s3 4 5-1 4-5 6 2" stroke-width="1.5"/></svg></button></div>
+      <div id="board-font-row"><p data-i18n="board.props.fontFamily">Família da fonte</p><div class="seg" data-prop="fontFamily"><button data-value="hand" data-i18n-title="board.props.fontHand" title="Manuscrita" data-i18n-aria-label="board.props.fontHand" aria-label="Manuscrita"><svg viewBox="0 0 24 24"><use href="#i-pencil"/></svg></button><button data-value="normal" data-i18n-title="board.props.fontNormal" title="Normal" data-i18n-aria-label="board.props.fontNormal" aria-label="Normal"><svg viewBox="0 0 24 24"><path d="M6 20 12 4l6 16M8.5 14h7"/></svg></button><button data-value="code" data-i18n-title="board.props.fontCode" title="Código" data-i18n-aria-label="board.props.fontCode" aria-label="Código"><svg viewBox="0 0 24 24"><path d="M7 8l-4 4 4 4M17 8l4 4-4 4M14 4l-4 16"/></svg></button></div>
+        <p data-i18n="board.props.fontSize">Tamanho do texto</p><div class="seg" data-prop="fontSize"><button data-value="16" data-i18n="board.props.sizeS">P</button><button data-value="20" data-i18n="board.props.sizeM">M</button><button data-value="28" data-i18n="board.props.sizeL">G</button><button data-value="36" data-i18n="board.props.sizeXL">XG</button></div>
+        <p data-i18n="board.props.textAlign">Alinhamento do texto</p><div class="seg" data-prop="textAlign"><button data-value="left" data-i18n-title="board.props.alignLeft" title="À esquerda" data-i18n-aria-label="board.props.alignLeft" aria-label="À esquerda"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h14"/></svg></button><button data-value="center" data-i18n-title="board.props.alignCenter" title="Centralizado" data-i18n-aria-label="board.props.alignCenter" aria-label="Centralizado"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M5 18h14"/></svg></button><button data-value="right" data-i18n-title="board.props.alignRight" title="À direita" data-i18n-aria-label="board.props.alignRight" aria-label="À direita"><svg viewBox="0 0 24 24"><path d="M4 6h16M10 12h10M6 18h14"/></svg></button></div></div>
+      <p data-i18n="board.props.opacity">Opacidade</p><input type="range" id="board-opacity" min="0" max="100" step="10">
       <div id="board-sel-actions">
-        <p>Camadas</p><div class="seg"><button data-act="back" title="Para o fundo" aria-label="Para o fundo"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button><button data-act="backward" title="Uma para trás" aria-label="Uma para trás"><svg viewBox="0 0 24 24"><path d="M12 5v14M7 14l5 5 5-5"/></svg></button><button data-act="forward" title="Uma para frente" aria-label="Uma para frente"><svg viewBox="0 0 24 24"><path d="M12 19V5M7 10l5-5 5 5"/></svg></button><button data-act="front" title="Para a frente de tudo" aria-label="Para a frente de tudo"><svg viewBox="0 0 24 24"><path d="M12 20V9M7 14l5-5 5 5M5 4h14"/></svg></button></div>
-        <p>Ações</p><div class="seg"><button data-act="duplicate" title="Duplicar" aria-label="Duplicar"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button><button data-act="delete" title="Apagar" aria-label="Apagar"><svg viewBox="0 0 24 24"><use href="#i-trash"/></svg></button><button data-act="link" title="Link (Ctrl+K)" aria-label="Link"><svg viewBox="0 0 24 24"><use href="#i-link"/></svg></button></div>
+        <p data-i18n="board.props.layers">Camadas</p><div class="seg"><button data-act="back" data-i18n-title="board.props.toBack" title="Para o fundo" data-i18n-aria-label="board.props.toBack" aria-label="Para o fundo"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button><button data-act="backward" data-i18n-title="board.props.backward" title="Uma para trás" data-i18n-aria-label="board.props.backward" aria-label="Uma para trás"><svg viewBox="0 0 24 24"><path d="M12 5v14M7 14l5 5 5-5"/></svg></button><button data-act="forward" data-i18n-title="board.props.forward" title="Uma para frente" data-i18n-aria-label="board.props.forward" aria-label="Uma para frente"><svg viewBox="0 0 24 24"><path d="M12 19V5M7 10l5-5 5 5"/></svg></button><button data-act="front" data-i18n-title="board.props.toFront" title="Para a frente de tudo" data-i18n-aria-label="board.props.toFront" aria-label="Para a frente de tudo"><svg viewBox="0 0 24 24"><path d="M12 20V9M7 14l5-5 5 5M5 4h14"/></svg></button></div>
+        <p data-i18n="board.props.actions">Ações</p><div class="seg"><button data-act="duplicate" data-i18n-title="common.duplicate" title="Duplicar" data-i18n-aria-label="common.duplicate" aria-label="Duplicar"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button><button data-act="delete" data-i18n-title="common.delete" title="Apagar" data-i18n-aria-label="common.delete" aria-label="Apagar"><svg viewBox="0 0 24 24"><use href="#i-trash"/></svg></button><button data-act="link" data-i18n-title="board.props.link" title="Link (Ctrl+K)" data-i18n-aria-label="common.link" aria-label="Link"><svg viewBox="0 0 24 24"><use href="#i-link"/></svg></button></div>
       </div>
     </div>
     <div id="board-bottom" class="card">
-      <button id="board-zoom-out" class="icon" title="Diminuir zoom (Ctrl −)"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
-      <button id="board-zoom" title="Zoom 100%">100%</button>
-      <button id="board-zoom-in" class="icon" title="Aumentar zoom (Ctrl +)"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
+      <button id="board-zoom-out" class="icon" data-i18n-title="board.zoomOut" title="Diminuir zoom (Ctrl −)"><svg viewBox="0 0 24 24"><use href="#i-minus"/></svg></button>
+      <button id="board-zoom" data-i18n-title="zoom.reset" title="Zoom 100%">100%</button>
+      <button id="board-zoom-in" class="icon" data-i18n-title="board.zoomIn" title="Aumentar zoom (Ctrl +)"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
       <span class="sep"></span>
-      <button id="board-undo" class="icon" title="Desfazer (Ctrl+Z)"><svg viewBox="0 0 24 24"><use href="#i-arrow-back-up"/></svg></button>
-      <button id="board-redo" class="icon" title="Refazer (Ctrl+Shift+Z)"><svg viewBox="0 0 24 24"><use href="#i-arrow-forward-up"/></svg></button>
+      <button id="board-undo" class="icon" data-i18n-title="common.undo" title="Desfazer (Ctrl+Z)"><svg viewBox="0 0 24 24"><use href="#i-arrow-back-up"/></svg></button>
+      <button id="board-redo" class="icon" data-i18n-title="common.redo" title="Refazer (Ctrl+Shift+Z)"><svg viewBox="0 0 24 24"><use href="#i-arrow-forward-up"/></svg></button>
       <span class="sep"></span>
-      <button id="board-help-btn" class="icon" title="Atalhos (?)"><svg viewBox="0 0 24 24"><use href="#i-help"/></svg></button>
+      <button id="board-help-btn" class="icon" data-i18n-title="board.help.button" title="Atalhos (?)"><svg viewBox="0 0 24 24"><use href="#i-help"/></svg></button>
     </div>
     <input type="file" id="board-image-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
     <textarea id="board-text" hidden spellcheck="false" wrap="off"></textarea>
     <div id="board-help" class="card" hidden>
-      <strong>Atalhos do quadro</strong>
+      <strong data-i18n="board.help.title">Atalhos do quadro</strong>
       <dl>
-        <dt>H / Espaço</dt><dd>Mover a tela</dd><dt>V ou 1</dt><dd>Selecionar</dd>
-        <dt>R ou 2</dt><dd>Retângulo</dd><dt>D ou 3</dt><dd>Losango</dd><dt>O ou 4</dt><dd>Elipse</dd>
-        <dt>A ou 5</dt><dd>Seta</dd><dt>L ou 6</dt><dd>Linha</dd><dt>P ou 7</dt><dd>Lápis</dd>
-        <dt>9</dt><dd>Inserir imagem (ou colar com Ctrl+V, ou arrastar o arquivo para a lousa)</dd><dt>K</dt><dd>Ponteiro laser: rastro que some sozinho (não é salvo)</dd><dt>Q</dt><dd>Seleção de laço: contorno livre (Shift soma à seleção)</dd><dt>B</dt><dd>Balde de tinta: pinta o fundo da forma (ou a cor da linha/texto)</dd><dt>T ou 8</dt><dd>Texto (ou duplo clique); Enter quebra a linha, Esc ou clicar fora conclui</dd><dt>N</dt><dd>Nota adesiva: clique cria e já edita; o texto quebra dentro dela</dd><dt>E ou 0</dt><dd>Borracha</dd>
-        <dt>Ctrl+Z / Ctrl+Shift+Z</dt><dd>Desfazer / refazer</dd><dt>Ctrl+D</dt><dd>Duplicar</dd>
-        <dt>Ctrl+C / Ctrl+X / Ctrl+V</dt><dd>Copiar / recortar / colar (também entre abas e com outros programas)</dd><dt>Ctrl+A</dt><dd>Selecionar tudo</dd>
-        <dt>Ctrl+K</dt><dd>Link no elemento (clique no ícone abre)</dd><dt>Delete</dt><dd>Apagar</dd><dt>Setas</dt><dd>Mover 1 px (Shift: 10)</dd>
-        <dt>Ctrl+] / [</dt><dd>Uma camada para frente / para trás</dd><dt>Ctrl+Shift+] / [</dt><dd>Para a frente de tudo / para o fundo</dd><dt>Ctrl+rodinha, Ctrl ±</dt><dd>Zoom</dd>
+        <dt data-i18n="board.help.panKeys">H / Espaço</dt><dd data-i18n="board.help.pan">Mover a tela</dd><dt data-i18n="board.help.selectKeys">V ou 1</dt><dd data-i18n="board.help.select">Selecionar</dd>
+        <dt data-i18n="board.help.rectangleKeys">R ou 2</dt><dd data-i18n="board.help.rectangle">Retângulo</dd><dt data-i18n="board.help.diamondKeys">D ou 3</dt><dd data-i18n="board.help.diamond">Losango</dd><dt data-i18n="board.help.ellipseKeys">O ou 4</dt><dd data-i18n="board.help.ellipse">Elipse</dd>
+        <dt data-i18n="board.help.arrowKeys">A ou 5</dt><dd data-i18n="board.help.arrow">Seta</dd><dt data-i18n="board.help.lineKeys">L ou 6</dt><dd data-i18n="board.help.line">Linha</dd><dt data-i18n="board.help.freedrawKeys">P ou 7</dt><dd data-i18n="board.help.freedraw">Lápis</dd>
+        <dt>9</dt><dd data-i18n="board.help.image">Inserir imagem (ou colar com Ctrl+V, ou arrastar o arquivo para a lousa)</dd><dt>K</dt><dd data-i18n="board.help.laser">Ponteiro laser: rastro que some sozinho (não é salvo)</dd><dt>Q</dt><dd data-i18n="board.help.lasso">Seleção de laço: contorno livre (Shift soma à seleção)</dd><dt>B</dt><dd data-i18n="board.help.bucket">Balde de tinta: pinta o fundo da forma (ou a cor da linha/texto)</dd><dt data-i18n="board.help.textKeys">T ou 8</dt><dd data-i18n="board.help.text">Texto (ou duplo clique); Enter quebra a linha, Esc ou clicar fora conclui</dd><dt>N</dt><dd data-i18n="board.help.note">Nota adesiva: clique cria e já edita; o texto quebra dentro dela</dd><dt data-i18n="board.help.eraserKeys">E ou 0</dt><dd data-i18n="board.help.eraser">Borracha</dd>
+        <dt>Ctrl+Z / Ctrl+Shift+Z</dt><dd data-i18n="board.help.undoRedo">Desfazer / refazer</dd><dt>Ctrl+D</dt><dd data-i18n="board.help.duplicate">Duplicar</dd>
+        <dt>Ctrl+C / Ctrl+X / Ctrl+V</dt><dd data-i18n="board.help.clipboard">Copiar / recortar / colar (também entre abas e com outros programas)</dd><dt>Ctrl+A</dt><dd data-i18n="board.help.selectAll">Selecionar tudo</dd>
+        <dt>Ctrl+K</dt><dd data-i18n="board.help.link">Link no elemento (clique no ícone abre)</dd><dt>Delete</dt><dd data-i18n="board.help.delete">Apagar</dd><dt data-i18n="board.help.nudgeKeys">Setas</dt><dd data-i18n="board.help.nudge">Mover 1 px (Shift: 10)</dd>
+        <dt>Ctrl+] / [</dt><dd data-i18n="board.help.layerStep">Uma camada para frente / para trás</dd><dt>Ctrl+Shift+] / [</dt><dd data-i18n="board.help.layerEnds">Para a frente de tudo / para o fundo</dd><dt data-i18n="board.help.zoomKeys">Ctrl+rodinha, Ctrl ±</dt><dd data-i18n="board.help.zoom">Zoom</dd>
       </dl>
     </div>
   </section>

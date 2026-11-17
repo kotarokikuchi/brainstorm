@@ -48,8 +48,8 @@ const node = (text = '') => ({
   id: uid(), text, color: null, shape: null, collapsed: false, side: null, children: [],
 });
 
-export function newMap(id) {
-  return { id, version: 0, layout: 'map', root: node('Mapa central'), links: [] };
+export function newMap(id, text = 'Mapa central') {
+  return { id, version: 0, layout: 'map', root: node(text), links: [] };
 }
 
 export function findNode(root, id, parent = null, depth = 0) {
