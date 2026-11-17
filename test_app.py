@@ -1,4 +1,5 @@
 import contextlib
+from concurrent.futures import ThreadPoolExecutor
 import io
 import json
 import os
@@ -406,6 +407,28 @@ class AuthTest(unittest.TestCase):
         self.stop()
         self.start()
         self.assertEqual(self.call("GET", "/api/maps", cookie=c)[0], 200)
+
+    def test_changing_the_password_ends_all_sessions(self):
+        c = self.cookie()
+        self.stop()
+        self.server = make_server(self.data, 0, auth=("ana", "senha nova"))
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        self.assertEqual(self.call("GET", "/api/maps", cookie=c)[0], 401)
+
+    def test_concurrent_attempts_cannot_pass_the_limit(self):
+        self.server.login_delay = 0.3
+        with ThreadPoolExecutor(30) as pool:
+            codes = list(pool.map(lambda _: self.login(password="errada")[0], range(30)))
+        self.assertEqual(codes.count(401), 10, "só 10 tentativas chegam a conferir a senha")
+        self.assertEqual(codes.count(429), 20)
+        self.assertEqual(self.login()[0], 429)
+
+    def test_correct_login_clears_the_failure_count(self):
+        for _ in range(9):
+            self.login(password="errada")
+        self.assertEqual(self.login()[0], 200)
+        self.assertEqual(self.login(password="errada")[0], 401, "contagem zerada: não bloqueia")
 
     def test_login_from_another_site_is_blocked(self):
         status, headers, _ = self.call("POST", "/api/login", {"user": "ana", "password": "s3gredo ç"}, headers={"Origin": "http://evil.example"})

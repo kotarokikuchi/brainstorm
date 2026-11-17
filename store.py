@@ -197,6 +197,15 @@ class Store:
             row = db.execute("SELECT expires FROM sessions WHERE token_hash = ?", (self._hash(token),)).fetchone()
         return bool(row) and row["expires"] > time.time()
 
+    def reset_sessions_if_auth_changed(self, user, password):
+        # guarda só uma impressão (sha256) das credenciais; se mudou, apaga todas as sessões
+        fp = hashlib.sha256(f"brainstorm-auth\0{user}\0{password}".encode()).hexdigest()
+        with self._db() as db:
+            row = db.execute("SELECT value FROM meta WHERE key = 'auth_fingerprint'").fetchone()
+            if row is None or row["value"] != fp:
+                db.execute("DELETE FROM sessions")
+                db.execute("INSERT OR REPLACE INTO meta VALUES ('auth_fingerprint', ?)", (fp,))
+
     def end_session(self, token):
         with self._db() as db:
             db.execute("DELETE FROM sessions WHERE token_hash = ?", (self._hash(token),))
