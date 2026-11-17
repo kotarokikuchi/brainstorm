@@ -484,7 +484,7 @@ async function openMap(id) {
     return;
   }
   map = await r.json();
-  if (map.type !== 'map') { const type = map.type; map = null; location.hash = `#/${type}/${id}`; return; }  // endereço antigo de quadro ou skill
+  if (map.type && map.type !== 'map') { const type = map.type; map = null; location.hash = `#/${type}/${id}`; return; }  // endereço antigo de quadro ou skill
   history = new History();
   selected = map.root.id;
   toolbarOn = false;
