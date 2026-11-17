@@ -1,4 +1,4 @@
-// Dicionários de idioma: toda chave usada existe, nenhuma sobra, e as traduções batem com o pt-BR.
+// Language dictionaries: every key used exists, none is left over, and the translations match pt-BR.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -8,11 +8,11 @@ const files = (ext) => readdirSync(dir).filter(f => f.endsWith(ext)).map(f => [f
 const ptBR = (await import('../static/locales/pt-BR.js')).default;
 const placeholders = (s) => [...s.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort();
 
-// chaves usadas: t('...') nos .js e data-i18n*="..." nos .html
+// used keys: t('...') in the .js files and data-i18n*="..." in the .html files
 const used = new Map(), dynamic = [];
 for (const [name, src] of files('.js')) {
   for (const m of src.matchAll(/\bt\('([^']+)'/g)) used.set(m[1], name);
-  // chave montada em tempo de execução escaparia desta conferência (o i18n.js, que define o t, fica de fora)
+  // a key built at runtime would escape this check (i18n.js, which defines t, is left out)
   if (name !== 'i18n.js') dynamic.push(...(src.match(/\bt\((?!')[^\n]{0,30}/g) ?? []).map(c => `${name}: ${c}`));
 }
 for (const [name, src] of files('.html')) {
@@ -20,9 +20,9 @@ for (const [name, src] of files('.html')) {
 }
 
 test('every key used in the code and in the HTML exists in pt-BR', () => {
-  assert.ok(used.size > 100, 'a busca encontrou as chaves');
+  assert.ok(used.size > 100, 'the search found the keys');
   assert.deepEqual([...used].filter(([k]) => !(k in ptBR)).map(([k, f]) => `${k} (${f})`), []);
-  assert.deepEqual(dynamic, [], 't() só com chave literal');
+  assert.deepEqual(dynamic, [], 't() only with a literal key');
 });
 
 test('pt-BR has no unused keys', () => {
@@ -32,10 +32,20 @@ test('pt-BR has no unused keys', () => {
 test('every locale has the same keys and placeholders as pt-BR, and no empty text', async () => {
   for (const f of readdirSync(new URL('locales/', dir)).filter(f => f.endsWith('.js'))) {
     const dict = (await import(`../static/locales/${f}`)).default;
-    assert.deepEqual(Object.keys(dict).sort(), Object.keys(ptBR).sort(), `${f}: mesmas chaves do pt-BR`);
+    assert.deepEqual(Object.keys(dict).sort(), Object.keys(ptBR).sort(), `${f}: same keys as pt-BR`);
     for (const [k, v] of Object.entries(dict)) {
-      assert.ok(typeof v === 'string' && v.trim(), `${f}: ${k} vazio`);
-      assert.deepEqual(placeholders(v), placeholders(ptBR[k]), `${f}: ${k} usa os mesmos {campos}`);
+      assert.ok(typeof v === 'string' && v.trim(), `${f}: ${k} is empty`);
+      assert.deepEqual(placeholders(v), placeholders(ptBR[k]), `${f}: ${k} uses the same {placeholders}`);
     }
   }
+});
+
+test('language detection: saved choice > browser language > English', async () => {
+  const { pick } = await import('../static/i18n.js');
+  assert.equal(pick('ja', ['pt-BR']), 'ja', 'saved choice wins');
+  assert.equal(pick('xx', ['pt-PT']), 'pt-BR', 'invalid saved choice is ignored');
+  assert.equal(pick(null, ['de-DE', 'es-AR']), 'es', 'first supported browser language');
+  assert.equal(pick(null, ['en-US']), 'en');
+  assert.equal(pick(null, ['de-DE']), 'en', 'unsupported browser language falls back to English');
+  assert.equal(pick(null, []), 'en');
 });

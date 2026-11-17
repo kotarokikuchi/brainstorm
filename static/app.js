@@ -11,27 +11,27 @@ import { LANGS, lang, setLang, t, applyI18n, fmtDateTime } from './i18n.js';
 const $ = (s) => document.querySelector(s);
 const SVG = 'http://www.w3.org/2000/svg';
 const svg = $('#canvas'), viewport = $('#viewport'), input = $('#editor'), statusEl = $('#status');
-applyI18n();  // textos do HTML no idioma escolhido, antes do primeiro desenho
+applyI18n();  // HTML texts in the chosen language, before the first paint
 
-let map = null;          // mapa aberto
-let selected = null;     // id do nó selecionado
+let map = null;          // open map
+let selected = null;     // id of the selected node
 let editing = null;
-let toolbarOn = false;   // barra flutuante visível (só depois de clicar num nó)
-let focusId = null;      // modo foco: id do ramo mostrado como centro (null = mapa inteiro)
-let outlineOn = false;   // modo outline: lista editável no lugar do mapa      // {id, isNew} enquanto o input está ativo
-let boxes = [];          // caixas do último render
+let toolbarOn = false;   // floating bar visible (only after clicking a node)
+let focusId = null;      // focus mode: id of the branch shown as the centre (null = whole map)
+let outlineOn = false;   // outline mode: editable list in place of the map      // {id, isNew} while the input is active
+let boxes = [];          // boxes from the last render
 let history = new History();
-const view = { x: 0, y: 0, k: 1 };  // translação + escala do viewport
+const view = { x: 0, y: 0, k: 1 };  // viewport translation + scale
 const WIDTHS = { thin: 1.5, medium: 3, thick: 5 };
 const DASHES = { solid: null, dashed: '8 6', dotted: '1 5' };
-// texto escuro em fundos claros (branco, amarelo...), branco nos escuros
+// dark text on light backgrounds (white, yellow...), white on dark ones
 const textOn = (hex) => {
   const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
   return 0.299 * r + 0.587 * g + 0.114 * b > 170 ? '#1d1d2b' : '#fff';
 };
-// estado do autosave
+// autosave state
 let saveTimer = null, retryTimer = null, dirty = false, saving = null, conflict = false;
-let pending = null;  // mapa com alteração pendente (sobrevive a sair do editor)
+let pending = null;  // map with a pending change (survives leaving the editor)
 
 // ---------- API ----------
 const api = (method, path = '', body) => fetch('/api/maps' + path, {
@@ -40,50 +40,50 @@ const api = (method, path = '', body) => fetch('/api/maps' + path, {
   body: body && JSON.stringify(body),
 });
 
-// ---------- Onde parou: posição, zoom e seleção de cada documento (só neste navegador) ----------
+// ---------- Where you left off: position, zoom and selection of each document (this browser only) ----------
 const PLACE = 'brainstorm:place:';
 function savePlace() {
   const board = currentBoard(), id = map?.id ?? board?.id ?? currentSkill()?.id;
   const place = map ? { view: { ...view }, selected, focusId, outlineOn } : board ? boardPlace() : currentSkill() ? skillPlace() : null;
-  try { if (id) localStorage.setItem(PLACE + id, JSON.stringify(place)); } catch { /* armazenamento bloqueado: só não lembra */ }
+  try { if (id) localStorage.setItem(PLACE + id, JSON.stringify(place)); } catch { /* storage blocked: it just does not remember */ }
 }
 function loadPlace(id) {
   try {
     const p = JSON.parse(localStorage.getItem(PLACE + id));
     const v = p?.view;
-    if (p?.mode) return p;  // skill: modo, rolagem e cursor
+    if (p?.mode) return p;  // skill: mode, scroll and cursor
     return v && [v.x, v.y, v.k].every(Number.isFinite) && v.k > 0 ? p : null;
   } catch { return null; }
 }
-window.addEventListener('pagehide', savePlace);  // recarregar (F5 ou automática) e fechar a aba
+window.addEventListener('pagehide', savePlace);  // reload (F5 or automatic) and closing the tab
 
-// ---------- Área de transferência do mapa (sistema): entre abas, depois de recarregar e com outros programas ----------
+// ---------- Map clipboard (system): across tabs, after a reload and with other programs ----------
 const BRANCH = 'application/x-brainstorm-branch', MAX_CLIP = 1e6;
 let pendingMapPaste = 0, pendingMapCut = 0;
-// o que vem colado pode ter sido posto por outro site: só ramos com texto e filhos bem formados
+// what gets pasted may have been put there by another site: only branches with text and well-formed children
 const okBranch = (b, depth = 0) => !!b && typeof b === 'object' && typeof b.text === 'string'
   && Array.isArray(b.children) && depth < 100 && b.children.every(c => okBranch(c, depth + 1));
 const mapKeys = (e) => map && !editing && !presenting && document.body.dataset.view === 'editor' && !e.target.closest?.('input, textarea, select');
 function copyBranchTo(e) {
   actions.copy();
   e.clipboardData.setData(BRANCH, clipboard);
-  e.clipboardData.setData('text/plain', branchToText(JSON.parse(clipboard)));  // lista com recuo para outros programas
+  e.clipboardData.setData('text/plain', branchToText(JSON.parse(clipboard)));  // indented list for other programs
   e.preventDefault();
 }
 document.addEventListener('copy', (e) => { if (mapKeys(e) && selected) copyBranchTo(e); });
-document.addEventListener('cut', (e) => {  // recortar = copiar e apagar (o nó central não sai)
+document.addEventListener('cut', (e) => {  // cut = copy and delete (the central node stays)
   if (!mapKeys(e) || !selected || selected === map.root.id) return;
   clearTimeout(pendingMapCut);
   copyBranchTo(e);
   deleteSelected();
 });
-// colar: ramo do Brainstorm > texto (cada linha vira um tópico, recuo vira filho) — sob o tópico selecionado
+// paste: Brainstorm branch > text (each line becomes a topic, indent becomes child) — under the selected topic
 document.addEventListener('paste', (e) => {
   if (!mapKeys(e) || !e.clipboardData || !selected) return;
   const json = e.clipboardData.getData(BRANCH), text = e.clipboardData.getData('text/plain');
-  if (json.length > MAX_CLIP) { clearTimeout(pendingMapPaste); e.preventDefault(); return; }  // grande demais: recusa
+  if (json.length > MAX_CLIP) { clearTimeout(pendingMapPaste); e.preventDefault(); return; }  // too big: refuse
   let branches = [];
-  try { branches = json ? [JSON.parse(json)] : textToBranches(text.slice(0, 100000)); } catch { /* ramo inválido: ignora */ }
+  try { branches = json ? [JSON.parse(json)] : textToBranches(text.slice(0, 100000)); } catch { /* invalid branch: ignore */ }
   if (!branches.length || !branches.every(b => okBranch(b))) return;
   clearTimeout(pendingMapPaste);
   e.preventDefault();
@@ -91,19 +91,19 @@ document.addEventListener('paste', (e) => {
   pasteBranches(branches);
 });
 
-// cola os ramos sob o tópico selecionado; vindos de outro mapa, imagens e anexos são copiados para este
+// pastes the branches under the selected topic; from another map, images and attachments are copied into this one
 async function pasteBranches(branches) {
   const id = map.id, parent = selected, ready = [];
   for (const { src, ...raw } of branches) {
-    const b = sanitizeBranch(raw);  // estilo com tipo errado sai antes de entrar no mapa
+    const b = sanitizeBranch(raw);  // a style of the wrong type is dropped before entering the map
     if (src && src !== id) await bringNodeFiles(b, src);
     ready.push(b);
   }
-  if (map?.id !== id || !findNode(map.root, parent)) return;  // trocou de mapa (ou o tópico sumiu) durante a cópia
+  if (map?.id !== id || !findNode(map.root, parent)) return;  // switched maps (or the topic vanished) during the copy
   mutate(() => { for (const b of ready) selected = pasteBranch(map, parent, b).id; });
 }
 async function copyFile(src, fileId, name) {
-  // id fora do formato do servidor (ex.: "..") faria a URL apontar para outra coisa que não um arquivo
+  // an id outside the server's format (e.g. "..") would make the URL point at something other than a file
   if (!/^[a-z0-9-]{1,64}$/.test(src) || typeof fileId !== 'string' || !FILE_ID.test(fileId)) throw new Error('origem inválida');
   const r = await fetch(`/api/maps/${src}/files/${encodeURIComponent(fileId)}`);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -116,14 +116,14 @@ async function bringNodeFiles(n, src) {
   if (Array.isArray(n.attachments)) {
     const kept = [];
     for (const a of n.attachments) {
-      try { kept.push({ ...a, id: await copyFile(src, a.id, a.name) }); } catch { /* arquivo sumiu: fica de fora */ }
+      try { kept.push({ ...a, id: await copyFile(src, a.id, a.name) }); } catch { /* file is gone: left out */ }
     }
     if (kept.length) n.attachments = kept; else delete n.attachments;
   }
   for (const c of n.children) await bringNodeFiles(c, src);
 }
 
-// ---------- Login: sessão expirada ou encerrada em outra aba leva à página de login ----------
+// ---------- Login: a session that expired or ended in another tab leads to the login page ----------
 const plainFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
   const r = await plainFetch(...args);
@@ -132,12 +132,12 @@ window.fetch = async (...args) => {
 };
 fetch('/api/session').then(r => r.json()).then(s => { $('#logout-btn').hidden = !s.auth; }).catch(() => {});
 $('#logout-btn').onclick = async () => {
-  await flushSave();  // nada se perde ao sair
+  await flushSave();  // nothing is lost on leaving
   await plainFetch('/api/logout', { method: 'POST' });
   location.href = '/login.html';
 };
 
-// ---------- Idioma: guarda a escolha e recarrega (depois de salvar o que estiver pendente) ----------
+// ---------- Language: stores the choice and reloads (after saving anything pending) ----------
 const langSelect = $('#lang');
 langSelect.append(...LANGS.map(l => new Option(l.name, l.code)));
 langSelect.value = lang;
@@ -148,20 +148,20 @@ langSelect.onchange = async () => {
   location.reload();
 };
 
-// ---------- Rotas ----------
+// ---------- Routes ----------
 window.addEventListener('hashchange', route);
 route();
 
 async function route() {
-  savePlace();  // ainda com o documento anterior aberto
-  finishEdit(true);  // navegar no meio da digitação confirma o texto
+  savePlace();  // the previous document is still open
+  finishEdit(true);  // navigating mid-typing confirms the text
   await flushSave();
   const m = location.hash.match(/^#\/(map|board|skill)\/([a-z0-9-]+)$/);
-  // saindo de um documento que não conseguiu salvar: pergunta antes de abandonar as alterações
+  // leaving a document that failed to save: ask before abandoning the changes
   if (dirty && pending && pending.id !== m?.[2]) {
     if (!confirm(t('doc.unsavedLeaveConfirm'))) {
       const kind = ['board', 'skill'].includes(pending.type) ? pending.type : 'map';
-      window.history.replaceState(null, '', `#/${kind}/${pending.id}`);  // volta o endereço sem nova navegação
+      window.history.replaceState(null, '', `#/${kind}/${pending.id}`);  // restores the address without a new navigation
       return;
     }
     dirty = false;
@@ -173,31 +173,31 @@ async function route() {
   closeSkill();
   const settings = location.hash.match(/^#\/settings\/(llm|backup)$/)?.[1];
   if (settings) { map = null; $('.brand').href = '#/'; openSettings(settings); return; }
-  if (m) { await loadTree(); $('.brand').href = folderHref(folderOf(tree, m[2])); }  // voltar cai na pasta do documento
-  searchInput.value = '';  // navegar (abrir pasta, voltar) limpa a busca
+  if (m) { await loadTree(); $('.brand').href = folderHref(folderOf(tree, m[2])); }  // going back lands in the document's folder
+  searchInput.value = '';  // navigating (opening a folder, going back) clears the search
   if (m?.[1] === 'board') { map = null; openBoard(m[2]); } else if (m?.[1] === 'skill') { map = null; openSkill(m[2]); } else if (m) openMap(m[2]);
   else {
-    const kind = { '#/maps': 'map', '#/boards': 'board', '#/skills': 'skill' }[location.hash] ?? null;  // "Listar mapas / quadros"
+    const kind = { '#/maps': 'map', '#/boards': 'board', '#/skills': 'skill' }[location.hash] ?? null;  // "List maps / boards"
     showList(location.hash.match(/^#\/folder\/([a-z0-9-]+)$/)?.[1] ?? null, kind);
   }
 }
 
-// duplicar: o sufixo do título da cópia vai no idioma da interface
+// duplicate: the copy's title suffix uses the interface language
 const duplicateDoc = (id) => fetch(`/api/maps/${id}/duplicate`, { method: 'POST', body: JSON.stringify({ suffix: t('doc.copySuffix') }) });
-// apagar documento: pergunta antes (vai para a lixeira, dá para restaurar)
+// deleting a document: ask first (it goes to the trash, it can be restored)
 const confirmTrash = (type, title) => {
   const o = { title: title || t('doc.untitled') };
   return confirm(type === 'board' ? t('doc.trashConfirmBoard', o) : type === 'skill' ? t('doc.trashConfirmSkill', o) : t('doc.trashConfirmMap', o));
 };
 
-// ---------- Pastas ----------
+// ---------- Folders ----------
 let tree = { version: 0, folders: [], place: {} }, listFolder = null, listKind = null;  // listKind: 'map' | 'board' | 'skill' | null
 const folderHref = (id) => (id ? `#/folder/${id}` : '#/');
 async function loadTree() {
   const r = await fetch('/api/folders');
   if (r.ok) tree = await r.json();
 }
-// grava as pastas; se outra aba gravou antes (409), reaplica a mudança sobre a versão nova
+// saves the folders; if another tab saved first (409), reapplies the change on top of the new version
 async function saveTree(change) {
   for (let i = 0; i < 2; i++) {
     const r = await fetch('/api/folders', { method: 'PUT', body: JSON.stringify(change(tree)) });
@@ -209,12 +209,12 @@ async function saveTree(change) {
   return false;
 }
 
-// ---------- Lista de mapas ----------
-// ordenação (lembrada neste navegador) e busca (em todas as pastas, pelo nome)
+// ---------- Map list ----------
+// sort order (remembered in this browser) and search (across all folders, by name)
 const searchInput = $('#search'), sortSelect = $('#sort');
-try { sortSelect.value = localStorage.getItem('brainstorm:sort') || 'recent'; } catch { /* sem armazenamento */ }
+try { sortSelect.value = localStorage.getItem('brainstorm:sort') || 'recent'; } catch { /* no storage */ }
 if (!sortSelect.value) sortSelect.value = 'recent';
-sortSelect.onchange = () => { try { localStorage.setItem('brainstorm:sort', sortSelect.value); } catch { /* idem */ } renderList(); sortSelect.blur(); };
+sortSelect.onchange = () => { try { localStorage.setItem('brainstorm:sort', sortSelect.value); } catch { /* same */ } renderList(); sortSelect.blur(); };
 searchInput.addEventListener('input', () => renderList());
 searchInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') { searchInput.value = ''; renderList(); } });
 let listData = { items: [], trash: [] };
@@ -232,13 +232,13 @@ async function showList(folderId = null, kind = null) {
 
 function renderList() {
   const { items, trash } = listData, query = searchInput.value.trim();
-  // trilha: Meus mapas › Trabalho › Clientes
+  // breadcrumb: My maps › Work › Clients
   const crumbs = [{ id: null, name: t('list.root') }, ...folderPath(tree, listFolder)];
   if (listKind) crumbs.push({ kind: true, name: { board: t('topbar.boards'), skill: t('topbar.skills') }[listKind] ?? t('topbar.maps') });
   $('#list-title').replaceChildren(...crumbs.flatMap((c, i) => {
     const sep = Object.assign(document.createElement('span'), { className: 'crumb-sep', textContent: '›' });
     if (c.kind) return [sep, Object.assign(document.createElement('span'), { className: 'crumb-kind', textContent: c.name })];
-    if (c.id && i === crumbs.length - 1) {  // pasta aberta: clicar no nome edita ali mesmo
+    if (c.id && i === crumbs.length - 1) {  // open folder: clicking the name edits it in place
       const cur = Object.assign(document.createElement('span'), { className: 'crumb-current', textContent: c.name, title: t('common.clickToRename'), tabIndex: 0 });
       const edit = () => inlineEdit(cur, c.name, async (name) => { await renameFolder(c, name); showList(listFolder); });
       cur.onclick = edit;
@@ -248,7 +248,7 @@ function renderList() {
     const a = document.createElement('a');
     a.href = folderHref(c.id);
     a.textContent = c.name;
-    a.dataset.drop = c.id ?? '';  // soltar aqui move para essa pasta
+    a.dataset.drop = c.id ?? '';  // dropping here moves into this folder
     return i ? [sep, a] : [a];
   }));
   const btn = (text, data, value) => {
@@ -257,8 +257,8 @@ function renderList() {
     b.dataset[data] = value;
     return b;
   };
-  // buscando ou listando só mapas/quadros: itens de todas as pastas, com o lugar de cada um;
-  // senão, o conteúdo da pasta aberta
+  // searching or listing only maps/boards: items from all folders, with each one's location;
+  // otherwise, the contents of the open folder
   const ofKind = listKind ? items.filter(it => (it.type ?? 'map') === listKind) : items;
   const found = query ? searchItems(tree, ofKind, query)
     : listKind ? { folders: [], docs: ofKind }
@@ -308,7 +308,7 @@ function renderList() {
   $('#empty').textContent = query ? t('list.searchNoResults', { query })
     : listKind === 'board' ? t('list.noBoards') : listKind === 'skill' ? t('list.noSkills') : listKind === 'map' ? t('list.noMaps')
     : listFolder ? t('list.emptyFolder') : t('list.empty');
-  // lixeira só no Início; buscando, aparece (aberta) com o que bate com a busca, de qualquer pasta
+  // trash only at Home; when searching, it shows up (open) with whatever matches the search, from any folder
   $('#trash').hidden = !trashShown.length || ((!!listFolder || !!listKind) && !query);
   if (query && trashShown.length) $('#trash').open = true;
   $('#trash summary').textContent = t('trash.title', { n: trashShown.length });
@@ -323,12 +323,12 @@ function renderList() {
   }));
 }
 
-// lista: duplicar / mover para a lixeira (dá para restaurar, então não pergunta)
+// list: duplicate / move to trash (it can be restored, so it does not ask)
 $('#maps').addEventListener('click', async (e) => {
   const d = e.target.closest('button')?.dataset;
   if (d?.duplicate) {
     const r = await duplicateDoc(d.duplicate);
-    if (r.ok && listFolder) { const { id } = await r.json(); await saveTree(t => placeDoc(t, id, listFolder)); }  // cópia na mesma pasta
+    if (r.ok && listFolder) { const { id } = await r.json(); await saveTree(t => placeDoc(t, id, listFolder)); }  // copy in the same folder
   } else if (d?.delete) {
     const it = listData.items.find(x => x.id === d.delete);
     if (!confirmTrash(it?.type, it?.title)) return;
@@ -345,11 +345,11 @@ $('#maps').addEventListener('click', async (e) => {
   } else return;
   showList(listFolder);
 });
-// mover: menu "Mover para" (lista de pastas em árvore) ou arrastar e soltar sobre pasta/trilha
+// move: "Move to" menu (folder tree list) or drag and drop onto a folder/breadcrumb
 const moveMenu = $('#move-menu');
 async function moveItem(kind, id, to) {
   moveMenu.hidden = true;
-  if (kind === 'folder' && to && subtree(tree, id).has(to)) return;  // pasta dentro dela mesma
+  if (kind === 'folder' && to && subtree(tree, id).has(to)) return;  // folder inside itself
   if (await saveTree(t => (kind === 'doc' ? placeDoc(t, id, to) : moveFolder(t, id, to) ?? t))) showList(listFolder);
 }
 function openMoveMenu(kind, id, anchor) {
@@ -402,7 +402,7 @@ async function renameFolder(f, input) {
   if (!name || name === f.name) return false;
   return saveTree(t => ({ ...t, folders: t.folders.map(x => (x.id === f.id ? { ...x, name } : x)) }));
 }
-// texto vira campo ali mesmo: Enter ou clicar fora salva (onSave com o texto aparado), Esc desiste
+// the text becomes a field in place: Enter or clicking outside saves (onSave with the trimmed text), Esc cancels
 function inlineEdit(span, value, onSave) {
   const input = Object.assign(document.createElement('input'), { value, className: 'inline-input', maxLength: 200 });
   const fit = () => { input.style.width = `${Math.max(3, input.value.length + 1)}ch`; };
@@ -426,7 +426,7 @@ function inlineEdit(span, value, onSave) {
   input.select();
 }
 
-// nome do documento no topo: clicar edita ali mesmo (no mapa, é o texto do nó central)
+// document name at the top: clicking edits it in place (on a map, it is the central node's text)
 const titleEl = $('#title');
 const editTitle = () => {
   if (map) inlineEdit(titleEl, map.root.text, (t) => mutate(() => { map.root.text = t; }));
@@ -456,7 +456,7 @@ $('#trash-list').addEventListener('click', async (e) => {
 $('#new-board').onclick = async () => {
   const b = newBoard(uid(), t('doc.untitledBoard'));
   const r = await api('PUT', `/${b.id}`, b);
-  if (r.ok && listFolder) await saveTree(t => placeDoc(t, b.id, listFolder));  // nasce na pasta aberta
+  if (r.ok && listFolder) await saveTree(t => placeDoc(t, b.id, listFolder));  // created in the open folder
   if (r.ok) location.hash = `#/board/${b.id}`;
   else alert(t('list.createBoardError'));
 };
@@ -464,7 +464,7 @@ $('#new-board').onclick = async () => {
 $('#new-skill').onclick = async () => {
   const sk = newSkill(uid(), t('doc.untitledSkill'), t('skill.template', { title: t('doc.untitledSkill') }));
   const r = await api('PUT', `/${sk.id}`, sk);
-  if (r.ok && listFolder) await saveTree(t => placeDoc(t, sk.id, listFolder));  // nasce na pasta aberta
+  if (r.ok && listFolder) await saveTree(t => placeDoc(t, sk.id, listFolder));  // created in the open folder
   if (r.ok) location.hash = `#/skill/${sk.id}`;
   else alert(t('list.createSkillError'));
 };
@@ -472,7 +472,7 @@ $('#new-skill').onclick = async () => {
 $('#new-map').onclick = async () => {
   const m = newMap(uid(), t('doc.centralTopic'));
   const r = await api('PUT', `/${m.id}`, m);
-  if (r.ok && listFolder) await saveTree(t => placeDoc(t, m.id, listFolder));  // nasce na pasta aberta
+  if (r.ok && listFolder) await saveTree(t => placeDoc(t, m.id, listFolder));  // created in the open folder
   if (r.ok) location.hash = `#/map/${m.id}`;
   else alert(t('list.createMapError'));
 };
@@ -480,7 +480,7 @@ $('#new-map').onclick = async () => {
 // ---------- Editor ----------
 async function openMap(id) {
   const r = await api('GET', `/${id}`);
-  if (location.hash !== `#/map/${id}`) return;  // o usuário já saiu enquanto carregava
+  if (location.hash !== `#/map/${id}`) return;  // the user already left while it was loading
   if (!r.ok) {
     if (r.status === 500) alert(t('map.openError'));
     location.hash = '#/';
@@ -488,9 +488,9 @@ async function openMap(id) {
   }
   const doc = await r.json();
   if (location.hash !== `#/map/${id}`) return;
-  doc.id = id;  // o endereço manda: um corpo com outro id não desvia as chamadas à API
+  doc.id = id;  // the URL wins: a body with a different id does not redirect the API calls
   map = doc;
-  if (map.type && map.type !== 'map') { const type = map.type; map = null; location.hash = `#/${type}/${id}`; return; }  // endereço antigo de quadro ou skill
+  if (map.type && map.type !== 'map') { const type = map.type; map = null; location.hash = `#/${type}/${id}`; return; }  // old board or skill address
   history = new History();
   selected = map.root.id;
   toolbarOn = false;
@@ -500,7 +500,7 @@ async function openMap(id) {
   if (presenting) stopPresentation();
   document.body.classList.remove('outline-mode');
   $('#outline-view').hidden = true;
-  if (conflict) dirty = false;  // edições do mapa em conflito foram abandonadas ao sair dele
+  if (conflict) dirty = false;  // conflicting map edits were abandoned on leaving it
   conflict = false;
   document.body.dataset.view = 'editor';
   setStatus(t('status.saved'));
@@ -513,12 +513,12 @@ async function openMap(id) {
   if (place?.outlineOn) setOutline(true);
 }
 
-// medida de texto via canvas (mesma fonte do SVG)
+// text measurement via canvas (same font as the SVG)
 const ctx = document.createElement('canvas').getContext('2d');
 const FONT = getComputedStyle(document.body).fontFamily;
 const BASE_SIZE = [24, 15, 14], SIZE_SCALE = { small: 0.85, large: 1.3 };
-const isBold = (n, depth) => n.textBold ?? depth <= 1;  // raiz e 1º nível são negrito por padrão
-// fonte do nó: padrão do nível + negrito/itálico/tamanho escolhidos
+const isBold = (n, depth) => n.textBold ?? depth <= 1;  // root and 1st level are bold by default
+// node font: level default + chosen bold/italic/size
 function fontFor(depth, n = {}) {
   const d = Math.min(depth, 2), weight = isBold(n, depth) ? (depth === 1 ? 600 : 700) : 400;
   const size = Math.round(BASE_SIZE[d] * (SIZE_SCALE[n.textSize] ?? 1));
@@ -527,24 +527,24 @@ function fontFor(depth, n = {}) {
 const PAD = [24, 36, 20], BASE_H = [44, 36, 28], LINE_H = [30, 20, 18];
 const lvl = (depth) => Math.min(depth, 2);
 
-// linhas do texto: uma só, ou quebradas para caber na largura fixa do nó (redimensionado)
+// text lines: a single one, or wrapped to fit the node's fixed (resized) width
 function linesFor(n, depth, width) {
   const text = String(n.text ?? '');
   ctx.font = fontFor(depth, n);
   return width ? wrapLines(text, width - PAD[lvl(depth)], (t) => ctx.measureText(t).width) : [text];
 }
 
-// id de arquivo vindo do mapa só vira URL se tiver o formato gerado pelo servidor (FILE_ID)
+// a file id from the map only becomes a URL if it has the format the server generates (FILE_ID)
 const fileUrl = (id) => `/api/maps/${map.id}/files/${id}`;
 
-// tamanho de exibição da imagem: no máx. 200 px (ou a largura fixa do nó), sem ampliar
+// image display size: at most 200 px (or the node's fixed width), never enlarged
 function imageSize(image, width) {
   if (!image || !FILE_ID.test(image.id) || !(image.w > 0 && image.h > 0)) return null;
   const s = Math.min(1, ((width ?? 216) - 16) / image.w);
   return { w: Math.round(image.w * s), h: Math.round(image.h * s) };
 }
 
-const ICON_W = 26;  // ícones dentro do nó (comentário, link)
+const ICON_W = 26;  // icons inside the node (comment, link)
 const inlineIcons = (n) => (n.comments?.length ? 1 : 0) + (n.url ? 1 : 0);
 
 function measure(n, depth) {
@@ -567,10 +567,10 @@ const el = (tag, attrs = {}, parent) => {
 function render() {
   if (!map) return;
   $('#title').textContent = map.root.text;
-  if (focusId && !findNode(map.root, focusId)) focusId = null;  // ramo focado foi apagado/desfeito
+  if (focusId && !findNode(map.root, focusId)) focusId = null;  // the focused branch was deleted/undone
   const res = layout(map, measure, focusId);
   boxes = res.nodes;
-  // seleção nunca fica num nó invisível (recolhido/apagado/fora do foco): sobe ao ancestral visível
+  // selection never stays on an invisible node (collapsed/deleted/out of focus): it moves up to the visible ancestor
   if (selected !== null && !boxes.some(b => b.id === selected)) {
     let id = selected;
     while (id && !boxes.some(b => b.id === id)) id = findNode(map.root, id)?.parent?.id;
@@ -580,9 +580,9 @@ function render() {
   if (focusId) $('#focus-title').textContent = findNode(map.root, focusId).node.text;
   viewport.setAttribute('transform', `translate(${view.x} ${view.y}) scale(${view.k})`);
   viewport.replaceChildren();
-  // na lista, arestas longas primeiro: o tronco fica segmentado com a cor de cada ramo
+  // in the list, longest edges first: the trunk is segmented with each branch's colour
   const edges = map.layout === 'list' ? [...res.edges].reverse() : res.edges;
-  // "mostrar como contorno": área tracejada em volta do ramo, atrás de tudo
+  // "show as outline": dashed area around the branch, behind everything
   for (const b of boxes) {
     if (!findNode(map.root, b.id).node.boundary) continue;
     const r = branchBounds(map, boxes, b.id, 12);
@@ -592,7 +592,7 @@ function render() {
     }, viewport);
   }
   for (const e of edges) {
-    // a linha até o pai é estilizada pelo filho; ramo com sub-layout usa o estilo dele (e.kind)
+    // the line to the parent is styled by the child; a branch with a sub-layout uses its style (and e.kind)
     const n = findNode(map.root, e.to.id).node;
     el('path', {
       class: 'edge', d: edgePath(e.kind ?? map.layout, e.from, e.to), fill: 'none', stroke: hexColor(n.lineColor) || e.color,
@@ -601,9 +601,9 @@ function render() {
     }, viewport);
   }
   for (const b of boxes) {
-    // um nó inválido no arquivo não derruba o mapa: fica como estiver (dá para selecionar e apagar)
+    // an invalid node in the file does not bring the map down: it stays as is (you can select and delete it)
     try { drawNode(b); } catch (err) {
-      if (!warned.has(b.id)) { warned.add(b.id); console.warn('Tópico inválido ignorado no desenho:', b.id, err); }
+      if (!warned.has(b.id)) { warned.add(b.id); console.warn('Invalid topic skipped while drawing:', b.id, err); }
     }
   }
   drawLinks();
@@ -615,18 +615,18 @@ function render() {
   placeLinkBar();
 }
 
-const warned = new Set();  // nós inválidos já avisados no console
+const warned = new Set();  // invalid nodes already reported in the console
 function drawNode(b) {
   const n = findNode(map.root, b.id).node;
   const g = el('g', { class: 'node', 'data-id': b.id }, viewport);
   g.addEventListener('click', (ev) => { ev.stopPropagation(); select(b.id, true); });
   g.addEventListener('dblclick', (ev) => { ev.stopPropagation(); startEdit(b.id, false); });
   if (drag?.active && drag.ids.has(b.id)) g.classList.add('dragging');
-  // forma efetiva: raiz sem caixa, 1º nível pílula, demais sublinhado
-  const shape = b.shape;  // forma efetiva (effectiveShape): estilo em nó sem forma vira caixa
+  // effective shape: root without a box, 1st level pill, the rest underlined
+  const shape = b.shape;  // effective shape (effectiveShape): a style on a shapeless node turns it into a box
   const boxed = ['pill', 'rect', 'rounded', 'cloud'].includes(shape);
   const solid = boxed && !n.fillNone && !!(n.shape || b.depth === 1 || n.color);
-  // borda: explícita, ou automática quando a caixa não tem preenchimento
+  // border: explicit, or automatic when the box has no fill
   const border = n.borderColor || n.borderWidth || n.borderStyle || (boxed && !solid);
   const line = {
     stroke: border ? hexColor(n.borderColor) || b.color : null,
@@ -640,7 +640,7 @@ function drawNode(b) {
     const rx = { pill: b.h / 2, rect: 2, rounded: 8 }[shape];
     el('rect', { x: b.x, y: b.y, width: b.w, height: b.h, rx, fill, ...line }, g);
   } else {
-    // área clicável invisível
+    // invisible clickable area
     el('rect', { x: b.x, y: b.y, width: b.w, height: b.h, fill: 'transparent' }, g);
   }
   if (shape === 'underline') {
@@ -652,8 +652,8 @@ function drawNode(b) {
   }
   const img = imageSize(n.image, n.width);
   if (img) el('image', { href: fileUrl(n.image.id), x: b.x + (b.w - img.w) / 2, y: b.y + 8, width: img.w, height: img.h }, g);
-  const top = img ? img.h + 8 : 0, cy = b.y + top + (b.h - top) / 2;  // centro da área do texto
-  const icon = inlineIcons(n) * ICON_W, tx = b.x + (b.w - icon) / 2;  // texto centrado no espaço sem os ícones
+  const top = img ? img.h + 8 : 0, cy = b.y + top + (b.h - top) / 2;  // centre of the text area
+  const icon = inlineIcons(n) * ICON_W, tx = b.x + (b.w - icon) / 2;  // text centred in the space without the icons
   if (icon) drawInlineIcons(b, cy, g, n);
   const t = el('text', {
     x: tx, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central',
@@ -672,15 +672,15 @@ function drawNode(b) {
   if (n.attachments?.length) drawAttachBadge(b, n);
 }
 
-// bolinha de recolher/expandir na borda externa do nó
+// collapse/expand dot on the node's outer edge
 function drawToggle(b, n, g) {
   let cx = b.x + b.w + 12, cy = b.y + b.h / 2;
   const lay = b.kind ?? map.layout;
   if (lay === 'map' && b.side === 'left') cx = b.x - 12;
   if (lay === 'org') { cx = b.x + b.w / 2; cy = b.y + b.h + 12; }
-  // expandido: círculo vazado pequeno; recolhido: círculo com o número de filhos escondidos
+  // expanded: small hollow circle; collapsed: circle with the number of hidden children
   const tg = el('g', { class: 'toggle' }, g);
-  el('circle', { class: 'hit', cx, cy, r: 12 }, tg);  // área de clique
+  el('circle', { class: 'hit', cx, cy, r: 12 }, tg);  // click area
   if (n.collapsed) {
     el('circle', { cx, cy, r: 9, stroke: b.color }, tg);
     el('text', { x: cx, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: b.color }, tg).textContent = n.children.length;
@@ -693,7 +693,7 @@ function drawToggle(b, n, g) {
   });
 }
 
-// a barra flutuante só aparece quando o nó foi clicado (não ao abrir nem ao navegar pelo teclado)
+// the floating bar only appears when the node was clicked (not on open or keyboard navigation)
 function select(id, byClick = false) {
   selected = id;
   toolbarOn = byClick;
@@ -702,14 +702,14 @@ function select(id, byClick = false) {
   render();
 }
 
-// ---------- Mutações + histórico ----------
+// ---------- Mutations + history ----------
 const snapshot = () => JSON.stringify({ root: map.root, layout: map.layout, links: map.links ?? [] });
 
 function mutate(fn) {
   const before = snapshot();
   history.push(before);
   try { fn(); render(); } catch (err) {
-    // a mudança quebrou o desenho: volta ao estado anterior (nada é salvo) e deixa o erro aparecer
+    // the change broke the drawing: roll back to the previous state (nothing is saved) and let the error surface
     history.past.pop();
     load(before);
     render();
@@ -747,7 +747,7 @@ function load(state) {
   if (selected !== null && !findNode(map.root, selected)) selected = map.root.id;
 }
 
-// ---------- Edição de texto ----------
+// ---------- Text editing ----------
 function startEdit(id, isNew, initial) {
   editing = { id, isNew, prev: selected };
   selected = id;
@@ -778,11 +778,11 @@ function finishEdit(commit) {
   if (node) {
     const text = commit ? input.value : '';
     if (isNew) {
-      // nó novo já entrou no histórico ao ser criado
+      // a new node already entered the history when it was created
       selected = commitText(map, id, text, true);
       if (findNode(map.root, id)) scheduleSave();
       else {
-        // nó novo descartado: nada mudou — tira o passo do desfazer e volta para onde estava
+        // a discarded new node: nothing changed — remove the undo step and return to where it was
         history.past.pop();
         if (findNode(map.root, prev)) selected = prev;
       }
@@ -814,11 +814,11 @@ function addAndEdit(create) {
   startEdit(n.id, true, '');
 }
 
-// ---------- Teclado ----------
+// ---------- Keyboard ----------
 document.addEventListener('keydown', (ev) => {
   if (!map || editing || document.body.dataset.view !== 'editor') return;
-  if (presenting) { presentKey(ev); return; }  // na apresentação só as teclas de navegação valem
-  if (ev.target.closest?.('input, textarea, select')) return;  // digitando num campo (ex.: comentário)
+  if (presenting) { presentKey(ev); return; }  // during the presentation only the navigation keys apply
+  if (ev.target.closest?.('input, textarea, select')) return;  // typing in a field (e.g. a comment)
   const ctrl = ev.ctrlKey || ev.metaKey;
   const key = ev.key;
   if (ctrl && key.toLowerCase() === 'z') {
@@ -828,7 +828,7 @@ document.addEventListener('keydown', (ev) => {
     ev.preventDefault();
     redo();
   } else if (!selected && !ctrl) {
-    // nada selecionado: setas/Tab/Enter voltam a selecionar a raiz; o resto é ignorado
+    // nothing selected: arrows/Tab/Enter select the root again; the rest is ignored
     if (key.startsWith('Arrow') || key === 'Tab' || key === 'Enter') { ev.preventDefault(); select(map.root.id); }
   } else if (!selected) {
     return;
@@ -844,9 +844,9 @@ document.addEventListener('keydown', (ev) => {
   } else if (ctrl && key.toLowerCase() === 'c') {
     actions.copy();
   } else if (ctrl && key.toLowerCase() === 'x') {
-    pendingMapCut = setTimeout(actions.cut, 0);  // o evento "cut" (sistema) vem antes; sem ele, recorta só na cópia interna
+    pendingMapCut = setTimeout(actions.cut, 0);  // the (system) "cut" event comes first; without it, cut only in the internal copy
   } else if (ctrl && key.toLowerCase() === 'v') {
-    // sem preventDefault: o evento "paste" (área de transferência do sistema) vem antes; sem nada nele, cola a cópia interna
+    // no preventDefault: the "paste" event (system clipboard) comes first; if it carries nothing, paste the internal copy
     pendingMapPaste = setTimeout(actions.paste, 0);
   } else if (ev.altKey && ev.shiftKey && ev.code === 'KeyC') {
     ev.preventDefault();
@@ -862,7 +862,7 @@ document.addEventListener('keydown', (ev) => {
     ev.preventDefault();
     actions.sibling();
   } else if (key === 'Escape') {
-    // Esc fecha o que estiver aberto; sem nada aberto, sai do modo foco
+    // Esc closes whatever is open; with nothing open, it leaves focus mode
     const busy = linking || selectedLink || nodePops.some(p => !p.hidden) || [...document.querySelectorAll('.link-pop')].some(p => !p.hidden);
     if (!busy && focusId) setFocus(null);
     linking = null;
@@ -883,10 +883,10 @@ document.addEventListener('keydown', (ev) => {
     ev.preventDefault();
     actions.collapse();
   } else if (key === 'Dead' || key === 'Process') {
-    // acento (tecla morta) ou IME: abre a edição vazia sem bloquear; o caractere composto cai no campo
+    // accent (dead key) or IME: opens an empty edit without blocking; the composed character lands in the field
     startEdit(selected, false, '');
   } else if (key.length === 1) {
-    // digitar sobre um nó começa a editar substituindo o texto
+    // typing over a node starts editing, replacing the text
     ev.preventDefault();
     startEdit(selected, false, key);
   }
@@ -900,7 +900,7 @@ function setStatus(text, error = false) {
 }
 
 function scheduleSave(doc = map) {
-  // após um 409 não grava mais, mas marca pendência para o aviso ao fechar a aba
+  // after a 409 it no longer saves, but marks the change as pending for the close-tab warning
   if (conflict) { dirty = true; return; }
   dirty = true;
   pending = doc;
@@ -921,7 +921,7 @@ async function save() {
     try {
       const r = await api('PUT', `/${m.id}`, m);
       if (r.status === 409 || r.status === 410) {
-        // alterado (409) ou movido para a lixeira (410) em outra aba: não tenta de novo, mas mantém a pendência
+        // changed (409) or moved to the trash (410) in another tab: does not retry, but keeps the pending flag
         conflict = true;
         dirty = true;
         setStatus(r.status === 409 ? t('status.conflict') : t('status.trashed'), true);
@@ -939,7 +939,7 @@ async function save() {
   })();
   await saving;
   saving = null;
-  // mudanças feitas durante o PUT: salva de novo (sem esperar novo erro)
+  // changes made during the PUT: save again (without waiting for a new error)
   if (dirty && !conflict && !retryTimer) save();
 }
 
@@ -953,10 +953,10 @@ window.addEventListener('beforeunload', (ev) => {
 });
 window.addEventListener('resize', render);
 
-// ---------- Controles flutuantes: barra, estilo, "+" ----------
+// ---------- Floating controls: bar, style, "+" ----------
 const toolbar = $('#toolbar'), stylePop = $('#style-pop'), nodeMenu = $('#node-menu'), imagePop = $('#image-pop'), attachPop = $('#attach-pop'), hints = $('#hints');
 const commentPop = $('#comment-pop'), textPop = $('#text-pop'), urlPop = $('#url-pop');
-// painéis presos ao nó selecionado: só um aberto por vez
+// panels attached to the selected node: only one open at a time
 const nodePops = [stylePop, nodeMenu, imagePop, attachPop, commentPop, textPop, urlPop];
 function closeNodePops() { for (const p of nodePops) p.hidden = true; }
 function openNodePop(pop) {
@@ -968,8 +968,8 @@ function openNodePop(pop) {
 }
 const addChildBtn = $('#add-child'), addSiblingBtn = $('#add-sibling');
 
-// ---------- Painel de estilo: abas Forma / Borda / Linha ----------
-const EXTRA_COLORS = ['#ffffff', '#c2410c', '#3f4448'];  // branco, terracota, grafite
+// ---------- Style panel: Shape / Border / Line tabs ----------
+const EXTRA_COLORS = ['#ffffff', '#c2410c', '#3f4448'];  // white, terracotta, graphite
 const customInput = $('#custom-color');
 let styleTab = 'shape', customProp = 'color';
 
@@ -985,7 +985,7 @@ for (const row of document.querySelectorAll('#style-pop .swatches[data-extra], #
   row.append(...[...extra, ...PALETTE, ...EXTRA_COLORS].map(swatch));
 }
 
-// cores fora da paleta já usadas no mapa viram amostras "personalizadas"
+// colours outside the palette already used in the map become "custom" swatches
 function fillCustomRows() {
   const known = new Set([...PALETTE, ...EXTRA_COLORS]), used = new Set();
   const walk = (n) => {
@@ -1022,7 +1022,7 @@ stylePop.addEventListener('click', (e) => {
     if (v === 'none') setStyle({ fillNone: true });
     else applyColor(prop, v);
   } else {
-    setStyle({ [prop]: n[prop] === v ? null : v });  // clicar na opção ativa volta ao padrão
+    setStyle({ [prop]: n[prop] === v ? null : v });  // clicking the active option returns to the default
   }
 });
 customInput.addEventListener('change', () => applyColor(customProp, customInput.value));
@@ -1045,7 +1045,7 @@ function placeOverlays() {
   const pos = (el, x, y) => { el.style.left = `${x}px`; el.style.top = `${y}px`; };
 
   pos(toolbar, sx(b.x + b.w / 2), sy(b.y));
-  // popovers abaixo do nó, mas sem passar da borda de baixo da tela
+  // popovers below the node, but never past the bottom edge of the screen
   const below = (pop, x) => pos(pop, x, Math.max(8, Math.min(sy(b.y + b.h) + 14, svg.clientHeight - pop.offsetHeight - 8)));
   below(stylePop, sx(b.x + b.w / 2) - 140);
   below(nodeMenu, sx(b.x + b.w / 2) - 125);
@@ -1078,7 +1078,7 @@ function placeOverlays() {
   }
   $('#boundary').checked = !!n.boundary;
 
-  // "+ filho" do lado de fora do nó; afasta da bolinha de recolher quando existe
+  // "+ child" on the outside of the node; moves away from the collapse dot when there is one
   const gap = n.children.length && b.depth > 0 ? 40 : 20;
   const lay = b.kind ?? map.layout;
   const left = lay === 'map' && b.side === 'left';
@@ -1093,9 +1093,9 @@ function placeOverlays() {
   pos(addChildBtn, ...child);
   pos(addSiblingBtn, ...sibling);
   addSiblingBtn.hidden ||= b.depth === 0;
-  // com painel/menu aberto, os "+" e as dicas sairiam por cima dele
+  // with a panel/menu open, the "+" buttons and hints would end up on top of it
   if (nodePops.some(p => !p.hidden)) addChildBtn.hidden = addSiblingBtn.hidden = hints.hidden = true;
-  // dicas só em nó sem filhos visíveis, como num mapa recém-criado
+  // hints only on a node with no visible children, as in a freshly created map
   hints.hidden ||= left || map.layout === 'org' || (n.children.length > 0 && !n.collapsed);
   pos(hints, child[0] + 22, child[1]);
 
@@ -1103,12 +1103,12 @@ function placeOverlays() {
   $('#zoom-reset').textContent = `${Math.round(view.k * 100)}%`;
 }
 
-// botões não roubam o foco (o teclado continua indo para o mapa)
+// buttons do not steal focus (the keyboard keeps going to the map)
 for (const b of document.querySelectorAll('#editor-view button, .history-btns button')) {
   b.addEventListener('mousedown', (e) => e.preventDefault());
 }
 
-// ---------- Layout, zoom e pan ----------
+// ---------- Layout, zoom and pan ----------
 $('#layout-select').onchange = (e) => {
   const v = e.target.value;
   e.target.blur();
@@ -1131,7 +1131,7 @@ function fitView(maxK = 1) {
   const minX = Math.min(...boxes.map(b => b.x)), maxX = Math.max(...boxes.map(b => b.x + b.w));
   const minY = Math.min(...boxes.map(b => b.y)), maxY = Math.max(...boxes.map(b => b.y + b.h));
   const W = svg.clientWidth, H = svg.clientHeight;
-  // margem vertical maior: a barra flutuante fica acima do nó
+  // larger vertical margin: the floating bar sits above the node
   view.k = clamp(Math.min((W - 80) / (maxX - minX), (H - 180) / (maxY - minY)), 0.2, maxK);
   view.x = W / 2 - ((minX + maxX) / 2) * view.k;
   view.y = H / 2 - ((minY + maxY) / 2) * view.k;
@@ -1151,7 +1151,7 @@ svg.addEventListener('wheel', (e) => {
 
 let pan = null;
 svg.addEventListener('pointerdown', (e) => {
-  if (e.target !== svg) return;  // só o fundo arrasta
+  if (e.target !== svg) return;  // only the background drags
   pan = { x: e.clientX - view.x, y: e.clientY - view.y, moved: false };
   svg.setPointerCapture(e.pointerId);
   svg.classList.add('panning');
@@ -1173,7 +1173,7 @@ svg.addEventListener('pointerup', () => {
   svg.classList.remove('panning');
 });
 
-// ---------- Arrastar ramos ----------
+// ---------- Dragging branches ----------
 let drag = null;  // {id, ids, sx, sy, active, x, y, target}
 
 viewport.addEventListener('pointerdown', (e) => {
@@ -1187,7 +1187,7 @@ viewport.addEventListener('pointerdown', (e) => {
 
 window.addEventListener('pointermove', (e) => {
   if (!drag) return;
-  // só vira arrasto depois de 5 px: clique simples continua selecionando
+  // only becomes a drag after 5 px: a simple click still selects
   if (!drag.active && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 5) return;
   drag.active = true;
   svg.classList.add('panning');
@@ -1210,14 +1210,14 @@ window.addEventListener('pointerup', () => {
       selected = id;
       scheduleSave();
     } else {
-      history.undo(snapshot());  // movimento recusado: descarta o passo de histórico
+      history.undo(snapshot());  // move refused: discard the history step
       history.future = [];
     }
   }
   render();
 });
 
-// caixa cinza onde o ramo vai cair + nó "fantasma" seguindo o ponteiro
+// grey box where the branch will land + "ghost" node following the pointer
 function drawDrop() {
   const W = 64, H = 24, t = drag.target;
   if (t) {
@@ -1233,11 +1233,11 @@ function drawDrop() {
 }
 
 function placeholderBox(t, p, W, H) {
-  const lay = p.kind ?? map.layout;  // ramo com sub-layout: regras do tipo dele
+  const lay = p.kind ?? map.layout;  // branch with a sub-layout: rules of its own type
   const box = (x, y) => ({ x, y, w: W, h: H, depth: p.depth + 1, shape: 'box' });
   const parent = findNode(map.root, t.parentId).node;
   const left = lay === 'map' && (t.side === 'left' || (!t.side && p.side === 'left'));
-  // irmãos visíveis do mesmo lado: encosta acima do que será empurrado ou abaixo do último
+  // visible siblings on the same side: sits just above the one that will be pushed, or below the last
   const kids = parent.collapsed ? [] : parent.children
     .filter(c => c.id !== drag.id && (lay !== 'map' || parent !== map.root || (c.side === 'left') === left));
   const all = parent.children.filter(c => c.id !== drag.id);
@@ -1256,9 +1256,9 @@ function placeholderBox(t, p, W, H) {
   return box(left ? p.x - 36 - W : p.x + p.w + 36, p.y + p.h / 2 - H / 2);
 }
 
-// ---------- Ligações entre nós ----------
-let selectedLink = null;  // id da ligação selecionada
-let linking = null;       // {from, x, y, target, byClick} enquanto cria uma ligação
+// ---------- Links between nodes ----------
+let selectedLink = null;  // id of the selected link
+let linking = null;       // {from, x, y, target, byClick} while creating a link
 
 const toWorld = (e) => {
   const r = svg.getBoundingClientRect();
@@ -1267,7 +1267,7 @@ const toWorld = (e) => {
 
 function drawLink(k) {
   const a = boxes.find(b => b.id === k.from), b = boxes.find(b => b.id === k.to);
-  if (!a || !b) return;  // ponta escondida num ramo recolhido
+  if (!a || !b) return;  // end hidden in a collapsed branch
   if (retarget?.link === k) { drawRetarget(k, a, b); return; }
   const d = linkPath(a, b, k.bend, k.fromSide, k.toSide), sel = k.id === selectedLink, color = hexColor(k.color) || LINK_GREEN;
   el('path', {
@@ -1283,8 +1283,8 @@ function drawLink(k) {
 function drawLinks() {
   for (const k of map.links ?? []) {
     try { drawLink(k); } catch (err) {
-      // uma ligação inválida no arquivo não derruba o mapa
-      if (!warned.has(k.id)) { warned.add(k.id); console.warn('Ligação inválida ignorada no desenho:', k.id, err); }
+      // an invalid link in the file does not bring the map down
+      if (!warned.has(k.id)) { warned.add(k.id); console.warn('Invalid link skipped while drawing:', k.id, err); }
     }
   }
   const from = boxes.find(b => b.id === (linking ? linking.from : selected));
@@ -1293,7 +1293,7 @@ function drawLinks() {
     const t = linking.fromSide && boxes.find(b => b.id === linking.target);
     if (t) {
       el('rect', { class: 'link-target', x: t.x - 5, y: t.y - 5, width: t.w + 10, height: t.h + 10, rx: 10, fill: '#22a55914', stroke: '#22a559', 'stroke-width': 2 }, viewport);
-      // 4 pontos possíveis de chegada; o mais perto do ponteiro fica maior
+      // 4 possible landing points; the one closest to the pointer gets larger
       const near = sideToward(t, [linking.x, linking.y]);
       const pts = { top: [t.x + t.w / 2, t.y], right: [t.x + t.w, t.y + t.h / 2], bottom: [t.x + t.w / 2, t.y + t.h], left: [t.x, t.y + t.h / 2] };
       for (const [side, [cx, cy]] of Object.entries(pts)) el('circle', { class: 'anchor-dot', cx, cy, r: side === near ? 6 : 3.5, fill: '#22a559' }, viewport);
@@ -1306,14 +1306,14 @@ function drawLinks() {
     return;
   }
   svg.classList.remove('linking');
-  // bolinha no canto de fora do nó selecionado: arrastar muda a largura; duplo clique volta ao automático
+  // dot at the outer corner of the selected node: dragging changes the width; double click returns to automatic
   if (from && toolbarOn && !editing && !drag?.active && !selectedLink) {
     const n = findNode(map.root, from.id).node;
     const left = map.layout === 'map' && from.side === 'left';
     const h = el('circle', { class: 'resize-handle', cx: left ? from.x - 4 : from.x + from.w + 4, cy: from.y + from.h + 4, r: 6 }, viewport);
     h.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
-      // nó centralizado (raiz, organograma) cresce para os dois lados: dobra o deslocamento
+      // a centred node (root, org chart) grows to both sides: double the offset
       const factor = from.depth === 0 || map.layout === 'org' ? 2 : 1;
       resizing = { node: n, sx: toWorld(e)[0], w0: from.w, sign: left ? -1 : 1, factor, pushed: false };
     });
@@ -1326,8 +1326,8 @@ function drawLinks() {
 
 $('#link-btn').onclick = () => { linking = { from: selected, target: null, byClick: true }; render(); };
 
-// atualiza ponteiro e nó de destino (caixa sob o ponteiro, exceto a origem)
-// nó sob o ponteiro: o elemento resolve formas que passam da caixa (nuvem); senão, caixa com folga
+// updates the pointer and target node (box under the pointer, except the origin)
+// node under the pointer: the element resolves shapes that exceed the box (cloud); otherwise, box with slack
 function nodeUnder(e, x, y, exclude) {
   const g = e.target.closest?.('.node'), pad = 8;
   const hit = g ? boxes.find(b => b.id === g.dataset.id)
@@ -1341,16 +1341,16 @@ function trackLink(e) {
 }
 
 window.addEventListener('pointermove', (e) => {
-  if (!linking?.fromSide) return;  // só depois de escolher o lado de saída num dos 4 "+"
+  if (!linking?.fromSide) return;  // only after choosing the exit side on one of the 4 "+"
   trackLink(e);
   render();
 });
 
 window.addEventListener('pointerup', (e) => {
   if (!linking) return;
-  if (e.target.closest?.('.link-anchor')) return;  // escolheu o lado de saída; espera o destino
+  if (e.target.closest?.('.link-anchor')) return;  // exit side chosen; waiting for the target
   if (!linking.fromSide) {
-    // ainda escolhendo o lado: clique no fundo cancela; em nós, ignora
+    // still choosing the side: a click on the background cancels; on nodes, ignored
     if (e.target === svg) { linking = null; render(); }
     return;
   }
@@ -1368,10 +1368,10 @@ window.addEventListener('pointerup', (e) => {
   }
 });
 
-// ---------- Pontos de conexão (modo "Ligar") ----------
+// ---------- Connection points ("Link" mode) ----------
 const anchorBtns = [...document.querySelectorAll('.link-anchor')], linkRing = $('#link-ring');
 
-// no modo ligar, o nó de origem mostra contorno verde e um "+" em cada lado
+// in link mode, the origin node shows a green outline and a "+" on each side
 function placeAnchors() {
   for (const btn of anchorBtns) btn.hidden = true;
   linkRing.hidden = true;
@@ -1399,12 +1399,12 @@ for (const btn of anchorBtns) {
   });
 }
 
-// ---------- Menu "⋯" do nó + copiar/colar ----------
-let clipboard = null;  // JSON do ramo copiado (vale entre mapas na mesma aba)
+// ---------- Node "⋯" menu + copy/paste ----------
+let clipboard = null;  // JSON of the copied branch (works across maps in the same tab)
 
 const actions = {
   child: () => addAndEdit(() => addChild(map, selected)),
-  // no foco, o centro não ganha irmão (ficaria fora da tela): vira filho
+  // in focus, the centre gets no sibling (it would be off-screen): it becomes a child
   sibling: () => addAndEdit(() => (selected === focusId ? addChild : addSibling)(map, selected)),
   focus: () => setFocus(focusId === selected ? null : selected),
   collapse: () => {
@@ -1412,7 +1412,7 @@ const actions = {
     if (n.children.length && n !== map.root) mutate(() => { n.collapsed = !n.collapsed; });
   },
   link: () => { linking = { from: selected, target: null, byClick: true }; render(); },
-  // src: mapa de origem (imagens e anexos são copiados ao colar em outro mapa); sistema: ver "Área de transferência do mapa"
+  // src: source map (images and attachments are copied when pasting into another map); system: see "Map clipboard"
   copy: () => { clipboard = JSON.stringify({ ...findNode(map.root, selected).node, src: map.id }); },
   cut: () => { if (selected === map.root.id) return; actions.copy(); deleteSelected(); },
   paste: () => { if (clipboard) pasteBranches([JSON.parse(clipboard)]); },
@@ -1425,7 +1425,7 @@ $('#more-btn').onclick = () => {
   item('collapse').disabled = !n.children.length || n === map.root;
   item('delete').disabled = item('cut').disabled = n === map.root;
   item('paste').disabled = !clipboard;
-  // "mostrar ramo como": só para ramos (não a raiz) e quando o mapa está no layout mapa
+  // "show branch as": only for branches (not the root) and when the map is in map layout
   const row = $('#branch-layout-row');
   row.hidden = n === map.root || map.layout !== 'map';
   for (const b of row.querySelectorAll('[data-value]')) b.classList.toggle('active', b.dataset.value === (n.branchLayout ?? ''));
@@ -1440,8 +1440,8 @@ nodeMenu.onclick = (e) => {
   actions[b.dataset.action]();
 };
 
-// clicar fora dos controles (cabeçalho, lista...) fecha qualquer menu aberto
-// (vale também nos quadros; os botões do topo cuidam dos próprios menus)
+// clicking outside the controls (header, list...) closes any open menu
+// (also applies on boards; the top buttons handle their own menus)
 document.addEventListener('pointerdown', (e) => {
   if (e.target.closest('.card, .adder, .link-anchor, .node, .link-hit, .resize-handle, #editor, .topbar-toggle')) return;
   const pops = [...nodePops, ...document.querySelectorAll('.link-pop'), ...topPops(), $('#board-help')];
@@ -1450,7 +1450,7 @@ document.addEventListener('pointerdown', (e) => {
   if (map) render();
 }, true);
 
-// menus do topo: um aberto por vez; clicar de novo no botão fecha
+// top menus: one open at a time; clicking the button again closes it
 const topPops = () => [$('#export-menu'), $('#history-panel'), $('#map-menu'), $('#maps-menu'), $('#boards-menu'), $('#skills-menu'), $('#settings-menu')];
 function toggleTop(pop) {
   const show = pop.hidden;
@@ -1458,7 +1458,7 @@ function toggleTop(pop) {
   pop.hidden = !show;
 }
 
-// menus Mapas / Quadros: listar todos daquele tipo ou criar um novo (escolher um item fecha o menu)
+// Maps / Boards menus: list all of that kind or create a new one (choosing an item closes the menu)
 $('#maps-menu-btn').onclick = () => toggleTop($('#maps-menu'));
 $('#boards-menu-btn').onclick = () => toggleTop($('#boards-menu'));
 $('#list-maps').onclick = () => { location.hash = '#/maps'; };
@@ -1470,13 +1470,13 @@ $('#settings-llm-btn').onclick = () => { location.hash = '#/settings/llm'; };
 $('#settings-backup-btn').onclick = () => { location.hash = '#/settings/backup'; };
 for (const m of [$('#maps-menu'), $('#boards-menu'), $('#skills-menu'), $('#settings-menu')]) m.addEventListener('click', (e) => { if (e.target.closest('button')) m.hidden = true; });
 
-// ---------- Curvar ligações ----------
-let bending = null;  // {link, a, b, pushed} enquanto arrasta o ponto de controle
+// ---------- Bending links ----------
+let bending = null;  // {link, a, b, pushed} while dragging the control point
 
-// pontas da seta selecionada + ponto de controle arrastável (duplo clique volta ao automático)
+// ends of the selected arrow + draggable control point (double click returns to automatic)
 function drawBendHandle(k, a, b, d) {
   const [p1, p2] = [d.match(/^M([-\d.e]+),([-\d.e]+)/), d.match(/([-\d.e]+),([-\d.e]+)$/)];
-  // pontas arrastáveis: soltar sobre outro nó troca a origem/destino da ligação
+  // draggable ends: dropping on another node changes the link's origin/target
   for (const [m, which] of [[p1, 'from'], [p2, 'to']]) {
     const c = el('circle', { class: 'link-end', 'data-which': which, cx: m[1], cy: m[2], r: 6, fill: '#fff', stroke: '#2f5bea', 'stroke-width': 2 }, viewport);
     c.addEventListener('pointerdown', (e) => {
@@ -1512,8 +1512,8 @@ window.addEventListener('pointerup', () => {
 });
 
 
-// ---------- Mover origem/destino de uma ligação ----------
-let retarget = null;  // {link, which: 'from'|'to', x, y, target} enquanto arrasta uma ponta
+// ---------- Moving a link's origin/target ----------
+let retarget = null;  // {link, which: 'from'|'to', x, y, target} while dragging an end
 
 const targetDots = (t, x, y) => {
   el('rect', { class: 'link-target', x: t.x - 5, y: t.y - 5, width: t.w + 10, height: t.h + 10, rx: 10, fill: '#22a55914', stroke: '#22a559', 'stroke-width': 2 }, viewport);
@@ -1554,11 +1554,11 @@ window.addEventListener('pointerup', (e) => {
   }
 });
 
-// ---------- Barra da ligação: cor, pontas, inverter, rótulo, excluir ----------
+// ---------- Link bar: colour, ends, reverse, label, delete ----------
 const LINK_GREEN = '#22a559';
-// <marker> por (tipo, cor), criado sob demanda; auto-start-reverse serve para as duas pontas
+// <marker> per (type, colour), created on demand; auto-start-reverse serves both ends
 function markerUrl(type, color) {
-  const shape = markerShape(type, color);  // valida tipo e cor (vêm do arquivo do mapa)
+  const shape = markerShape(type, color);  // validates type and colour (they come from the map file)
   if (!shape) return null;
   const id = `m-${type}-${safeColor(color).slice(1)}`;
   if (!document.getElementById(id)) {
@@ -1576,7 +1576,7 @@ const markerIcon = (type, flip) => {
     + (shape ? `<g transform="translate(13,1)">${shape}</g>` : '') + '</svg>';
 };
 
-// rótulo um pouco acima do ponto de controle, com halo da cor do fundo
+// label slightly above the control point, with a halo in the background colour
 function drawLinkLabel(k, a, b, color) {
   const [x, y] = linkHandle(a, b, k.bend, k.fromSide, k.toSide);
   const t = el('text', {
@@ -1589,7 +1589,7 @@ function drawLinkLabel(k, a, b, color) {
 }
 
 const linkBar = $('#link-toolbar'), linkColors = $('#link-colors'), linkMarkers = $('#link-markers'), linkMenu = $('#link-menu');
-let markerEnd = 'end';  // qual ponta o seletor de marcadores está editando
+let markerEnd = 'end';  // which end the marker selector is editing
 const currentLink = () => (map?.links ?? []).find(k => k.id === selectedLink);
 const closeLinkPops = () => { linkColors.hidden = linkMarkers.hidden = linkMenu.hidden = true; };
 
@@ -1662,8 +1662,8 @@ linkMenu.onclick = (e) => {
   if (a === 'delete') deleteSelected();
 };
 
-// ---------- Redimensionar nó ----------
-let resizing = null;  // {node, sx, w0, sign, factor, pushed} enquanto arrasta a bolinha
+// ---------- Resizing a node ----------
+let resizing = null;  // {node, sx, w0, sign, factor, pushed} while dragging the dot
 
 window.addEventListener('pointermove', (e) => {
   if (!resizing) return;
@@ -1680,7 +1680,7 @@ window.addEventListener('pointerup', () => {
   render();
 });
 
-// ---------- Arquivos: envio ao servidor ----------
+// ---------- Files: upload to the server ----------
 async function uploadFile(file) {
   const r = await fetch(`/api/maps/${map.id}/files`, {
     method: 'POST', headers: { 'X-Filename': encodeURIComponent(file.name) }, body: file,
@@ -1689,7 +1689,7 @@ async function uploadFile(file) {
   return r.json();
 }
 
-// ---------- Imagem no nó ----------
+// ---------- Node image ----------
 const naturalSize = (file) => new Promise((resolve, reject) => {
   const url = URL.createObjectURL(file), im = new Image();
   im.onload = () => { resolve({ w: im.naturalWidth, h: im.naturalHeight }); URL.revokeObjectURL(url); };
@@ -1723,8 +1723,8 @@ $('#image-remove').onclick = () => {
   mutate(() => { delete n.image; });
 };
 
-// ---------- Anexos ----------
-// selo no canto do nó: clipe + quantidade; clicar abre a lista
+// ---------- Attachments ----------
+// badge in the node's corner: paperclip + count; clicking opens the list
 function drawAttachBadge(b, n) {
   const x = b.x + b.w - 14, y = b.y - 6;
   const g = el('g', { class: 'attach-badge', 'data-id': b.id }, viewport);
@@ -1789,9 +1789,9 @@ $('#attach-list').addEventListener('click', (e) => {
   mutate(() => { n.attachments = n.attachments.filter((_, k) => k !== +i); if (!n.attachments.length) delete n.attachments; });
 });
 
-// ---------- Recarga automática ----------
-// o servidor avisa (SSE) quando static/ muda ou quando ele reinicia; a página recarrega
-// só num momento seguro: sem edição/arrasto em andamento e com tudo salvo
+// ---------- Automatic reload ----------
+// the server notifies (SSE) when static/ changes or when it restarts; the page reloads
+// only at a safe moment: no edit/drag in progress and everything saved
 let liveStamp = null, reloadWanted = false;
 new EventSource('/api/events').onmessage = (e) => {
   if (liveStamp === null) liveStamp = e.data;
@@ -1801,11 +1801,11 @@ new EventSource('/api/events').onmessage = (e) => {
 setInterval(async () => {
   if (!reloadWanted || editing || drag?.active || linking || bending || retarget || resizing) return;
   await flushSave();
-  if (!dirty && !saving) location.reload();  // com conflito/erro de gravação não recarrega (não perde edições)
+  if (!dirty && !saving) location.reload();  // with a conflict/write error it does not reload (so no edits are lost)
 }, 1000);
 
-// ---------- Comentários ----------
-// ícones dentro do nó, da direita para a esquerda: comentários, link
+// ---------- Comments ----------
+// icons inside the node, right to left: comments, link
 function drawInlineIcons(b, cy, g, n) {
   let x = b.x + b.w - 4;
   const icon = (cls, symbol, onClick) => {
@@ -1817,7 +1817,7 @@ function drawInlineIcons(b, cy, g, n) {
   };
   if (n.comments?.length) icon('comment-icon', '#i-message', () => { select(b.id, true); closeNodePops(); openNodePop(commentPop); });
   if (n.url) {
-    // revalida ao abrir: o mapa vem de arquivo e pode ter sido editado à mão
+    // revalidates on open: the map comes from a file and may have been edited by hand
     icon('url-icon', '#i-link', () => { const u = safeUrl(n.url); if (u) window.open(u, '_blank', 'noopener,noreferrer'); });
   }
 }
@@ -1848,7 +1848,7 @@ $('#comment-form').addEventListener('submit', (e) => {
   mutate(() => { n.comments = [...(n.comments ?? []), { id: uid(), text, at: new Date().toISOString() }]; });
   input.focus();
 });
-// Enter envia (o atalho do mapa não roda dentro do campo); Esc fecha o painel
+// Enter sends (the map shortcut does not run inside the field); Esc closes the panel
 $('#comment-input').addEventListener('keydown', (e) => {
   e.stopPropagation();
   if (e.key === 'Enter') { e.preventDefault(); $('#comment-form').requestSubmit(); }
@@ -1861,8 +1861,8 @@ $('#comment-list').addEventListener('click', (e) => {
   mutate(() => { n.comments = n.comments.filter((_, k) => k !== +i); if (!n.comments.length) delete n.comments; });
 });
 
-// ---------- Estilo do texto ----------
-// alterna negrito/itálico; voltar ao padrão do nível grava null
+// ---------- Text style ----------
+// toggles bold/italic; going back to the level default stores null
 function toggleText(prop) {
   const hit = findNode(map.root, selected);
   const cur = prop === 'textBold' ? isBold(hit.node, hit.depth) : !!hit.node.textItalic;
@@ -1879,7 +1879,7 @@ textPop.addEventListener('click', (e) => {
   if (btn && group) setStyle({ [group.dataset.prop]: btn.dataset.value || null });
 });
 
-// ---------- Link (URL) no nó ----------
+// ---------- Link (URL) on a node ----------
 $('#url-btn').onclick = () => {
   $('#url-input').value = findNode(map.root, selected).node.url ?? '';
   $('#url-error').hidden = true;
@@ -1905,7 +1905,7 @@ $('#url-remove').onclick = () => {
   mutate(() => { delete n.url; });
 };
 
-// ---------- Modo foco ----------
+// ---------- Focus mode ----------
 function setFocus(id) {
   focusId = id && id !== map.root.id ? id : null;
   selected = id ?? selected;
@@ -1915,7 +1915,7 @@ function setFocus(id) {
 }
 $('#focus-exit').onclick = () => setFocus(null);
 
-// ---------- Modo outline ----------
+// ---------- Outline mode ----------
 const outlineList = $('#outline-view .outline');
 const rowInput = (id) => $(`#outline-view li[data-id="${CSS.escape(id)}"] > .row input`);
 const allInputs = () => [...outlineList.querySelectorAll('input')];
@@ -1941,7 +1941,7 @@ function focusRow(id, pos) {
   selected = id;
 }
 
-// remonta a lista a partir do mapa, devolvendo o foco/cursor à linha em edição
+// rebuilds the list from the map, returning focus/cursor to the line being edited
 function renderOutline() {
   const act = document.activeElement;
   const keep = act?.closest?.('#outline-view') ? { id: act.dataset.id, pos: act.selectionStart } : null;
@@ -1972,7 +1972,7 @@ function renderOutline() {
   if (keep) focusRow(keep.id, keep.pos);
 }
 
-// grava o texto da linha; vazio volta ao texto anterior
+// stores the line's text; empty goes back to the previous text
 function commitRow(input) {
   const n = findNode(map.root, input.dataset.id)?.node, text = input.value.trim();
   if (!n) return;
@@ -1980,7 +1980,7 @@ function commitRow(input) {
   if (text !== n.text) mutate(() => { n.text = text; });
 }
 
-// muda o mapa só se fn() devolver true (não deixa passo vazio no desfazer)
+// changes the map only if fn() returns true (leaves no empty undo step)
 function tryMutate(fn) {
   history.push(snapshot());
   if (fn()) { render(); scheduleSave(); return true; }
@@ -1999,7 +1999,7 @@ outlineList.addEventListener('keydown', (e) => {
     e.preventDefault();
     commitRow(input);
     let created;
-    // nó novo começa vazio no outline (o mapa mostra vazio até ser digitado)
+    // a new node starts empty in the outline (the map shows it empty until typed)
     tryMutate(() => (created = id === map.root.id ? addChild(map, id) : addSibling(map, id)));
     focusRow(created.id);
   } else if (e.key === 'Tab') {
@@ -2030,7 +2030,7 @@ outlineList.addEventListener('click', (e) => {
 });
 $('#outline-btn').onclick = () => setOutline(!outlineOn);
 
-// ---------- Exportar: PNG, PDF (impressão) e Markdown ----------
+// ---------- Export: PNG, PDF (print) and Markdown ----------
 const exportMenu = $('#export-menu');
 const fileBase = () => ((map ? map.root.text : currentBoard().title).replace(/[^\p{L}\p{N} _-]/gu, '').trim() || t('export.fileFallback')).slice(0, 60);
 
@@ -2047,7 +2047,7 @@ const toDataUrl = async (url) => {
   return new Promise((resolve) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(blob); });
 };
 
-// SVG do mapa como arquivo solto: sem elementos de seleção, com CSS, ícones e imagens embutidos
+// the map's SVG as a standalone file: no selection elements, with CSS, icons and images embedded
 async function standaloneSvg() {
   const bb = viewport.getBBox(), pad = 40;
   const clone = svg.cloneNode(true);
@@ -2101,7 +2101,7 @@ const EXPORTS = {
     closeNodePops();
     selectedLink = null;
     fitView();
-    window.print();  // o navegador oferece "Salvar como PDF"
+    window.print();  // the browser offers "Save as PDF"
   },
 };
 
@@ -2114,7 +2114,7 @@ exportMenu.addEventListener('click', async (e) => {
   try { await EXPORTS[kind](); } catch (err) { alert(t('export.error', { error: err.message })); }
 });
 
-// ---------- Histórico de versões ----------
+// ---------- Version history ----------
 const historyPanel = $('#history-panel');
 
 async function loadHistory() {
@@ -2155,11 +2155,11 @@ $('#history-list').addEventListener('click', async (e) => {
   if (!r.ok) { alert(t('history.loadError')); return; }
   const old = await r.json();
   historyPanel.hidden = true;
-  // restaurar é uma mudança como outra qualquer: entra no desfazer e é salva por cima da atual
+  // restoring is a change like any other: it goes into undo and is saved over the current one
   mutate(() => { map.root = old.root; map.layout = old.layout ?? 'map'; map.links = old.links ?? []; });
 });
 
-// ---------- Menu do mapa (título): duplicar / mover para a lixeira ----------
+// ---------- Map menu (title): duplicate / move to trash ----------
 const mapMenu = $('#map-menu');
 $('#map-menu-btn').onclick = () => toggleTop(mapMenu);
 mapMenu.addEventListener('mousedown', (e) => e.preventDefault());
@@ -2175,14 +2175,14 @@ mapMenu.addEventListener('click', async (e) => {
     else alert(t('doc.duplicateError'));
   } else if (action === 'trash') {
     if (!confirmTrash(kind, kind === 'map' ? doc.root.text : doc.title)) return;
-    dirty = false;  // o mapa vai inteiro para a lixeira; nada pendente a perguntar
+    dirty = false;  // the whole map goes to the trash; nothing pending to ask about
     pending = null;
     await api('DELETE', `/${id}`);
     location.hash = '#/';
   }
 });
 
-// ---------- Apresentação ----------
+// ---------- Presentation ----------
 let presenting = null;  // {list, i}
 
 function showSlide(i) {
@@ -2201,8 +2201,8 @@ function startPresentation() {
   presenting = { list: slides(map), i: 0 };
   document.body.classList.add('presenting');
   $('#present-bar').hidden = false;
-  document.documentElement.requestFullscreen?.().catch(() => {});  // sem tela cheia, segue na janela
-  setTimeout(() => showSlide(0), 50);  // espera o layout sem o topo para ajustar o zoom
+  document.documentElement.requestFullscreen?.().catch(() => {});  // no fullscreen, stay in the window
+  setTimeout(() => showSlide(0), 50);  // wait for the layout without the top bar to adjust the zoom
 }
 
 function stopPresentation() {
@@ -2226,10 +2226,10 @@ $('#present-btn').onclick = startPresentation;
 $('#present-prev').onclick = () => showSlide(presenting.i - 1);
 $('#present-next').onclick = () => showSlide(presenting.i + 1);
 $('#present-exit').onclick = stopPresentation;
-// saiu da tela cheia pelo navegador (Esc do próprio navegador): encerra a apresentação também
+// left fullscreen via the browser (the browser's own Esc): ends the presentation too
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && presenting) stopPresentation(); });
 
-// ---------- Mostrar este ramo como (menu ⋯) ----------
+// ---------- Show this branch as (⋯ menu) ----------
 $('#branch-layout-row').addEventListener('click', (e) => {
   const v = e.target.closest('[data-value]')?.dataset.value;
   if (v === undefined) return;
@@ -2240,7 +2240,7 @@ $('#branch-layout-row').addEventListener('click', (e) => {
 // ---------- Skills (Markdown) ----------
 initSkill({ api, setStatus, scheduleSave, flushSave, isDirty: () => dirty, loadPlace, resetSave: () => { if (conflict) dirty = false; conflict = false; } });
 
-// ---------- Quadros (lousa) ----------
+// ---------- Boards (whiteboard) ----------
 initBoard({
   api,
   setStatus,

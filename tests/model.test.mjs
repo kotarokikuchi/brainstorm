@@ -129,7 +129,7 @@ test('map layout: siblings do not overlap vertically', () => {
   const { m, r1, r2, g1, g2 } = sample('map');
   const b = byId(layout(m, measure));
   assert.ok(b[g1.id].y + b[g1.id].h <= b[g2.id].y);
-  // a subárvore de r1 (com netos) não invade r2
+  // r1's subtree (with grandchildren) does not invade r2
   assert.ok(b[g2.id].y + b[g2.id].h <= b[r2.id].y);
 });
 
@@ -177,22 +177,22 @@ test('navigate picks nearest node in direction, else stays', () => {
   assert.equal(navigate(res.nodes, l1.id, 'left'), l1.id);
 });
 
-// ---- Mover ramos ----
+// ---- Moving branches ----
 import { moveNode, dropTarget } from '../static/model.js';
 
 test('moveNode reparents and reorders', () => {
   const { m, r1, l1, r2, g1, g2 } = sample('map');
   assert.equal(moveNode(m, g2.id, r1.id, 0), true);
   assert.deepEqual(r1.children.map(n => n.id), [g2.id, g1.id]);
-  // mover para depois de si mesmo no mesmo pai ajusta o índice
+  // moving to after itself under the same parent adjusts the index
   assert.equal(moveNode(m, g2.id, r1.id, 2), true);
   assert.deepEqual(r1.children.map(n => n.id), [g1.id, g2.id]);
-  // 1º nível → mais fundo: perde lado e cor própria (herda o novo ramo)
+  // 1st level → deeper: loses its side and own colour (inherits the new branch)
   assert.equal(moveNode(m, r2.id, l1.id, 0), true);
   assert.equal(r2.side, null);
   assert.equal(r2.color, null);
   assert.equal(findNode(m.root, r2.id).parent, l1);
-  // mais fundo → 1º nível: ganha lado e cor
+  // deeper → 1st level: gains a side and colour
   assert.equal(moveNode(m, g1.id, m.root.id, 0, 'left'), true);
   assert.equal(g1.side, 'left');
   assert.ok(PALETTE.includes(g1.color));
@@ -218,14 +218,14 @@ test('dropTarget: outer side of a node makes a child, inner part a sibling', () 
   const res = layout(m, measure);
   const b = byId(res);
   const center = (x) => [x.x + x.w / 2, x.y + x.h / 2];
-  // à direita de r1 (lado de fora) → filho de r1 no fim
+  // to the right of r1 (outer side) → last child of r1
   const [, ry] = center(b[r1.id]);
   assert.deepEqual(dropTarget(m, res.nodes, l1.id, b[r1.id].x + b[r1.id].w + 5, ry),
     { parentId: r1.id, index: 2, side: null });
-  // metade de cima de g2, lado de dentro → irmão antes de g2
+  // upper half of g2, inner side → sibling before g2
   assert.deepEqual(dropTarget(m, res.nodes, l1.id, b[g2.id].x + 2, b[g2.id].y + 2),
     { parentId: r1.id, index: 1, side: null });
-  // perto da raiz, à esquerda → filho da raiz no lado esquerdo
+  // near the root, on the left → child of the root on the left side
   const root = b[m.root.id];
   const t = dropTarget(m, res.nodes, g1.id, root.x - 5, root.y + root.h / 2);
   assert.equal(t.parentId, m.root.id);
@@ -241,7 +241,7 @@ test('dropTarget ignores the dragged branch itself', () => {
   assert.notEqual(t?.parentId, r1.id);
 });
 
-// ---- Ligações entre nós ----
+// ---- Links between nodes ----
 import { addLink, removeLink, linkPath } from '../static/model.js';
 
 test('newMap starts with no links', () => {
@@ -256,7 +256,7 @@ test('addLink connects two nodes and refuses self, duplicates and unknown ids', 
   assert.equal(addLink(m, r1.id, l1.id), null);
   assert.equal(addLink(m, r1.id, r1.id), null);
   assert.equal(addLink(m, r1.id, 'nope'), null);
-  // mapa antigo sem a lista de links também funciona
+  // an old map without the links list also works
   delete m.links;
   assert.ok(addLink(m, l1.id, r1.id));
 });
@@ -268,22 +268,22 @@ test('removeLink and removeNode clean up links', () => {
   assert.equal(removeLink(m, a.id), true);
   assert.equal(removeLink(m, a.id), false);
   addLink(m, g1.id, r2.id);
-  removeNode(m, r1.id);  // leva g1 junto: ligação g1→r2 some
+  removeNode(m, r1.id);  // takes g1 along: the g1→r2 link disappears
   assert.deepEqual(m.links.map(k => [k.from, k.to]), [[r2.id, l1.id]]);
 });
 
 test('linkPath draws a curve between the nearest sides', () => {
   const a = { x: 0, y: 0, w: 40, h: 20 }, b = { x: 200, y: 10, w: 40, h: 20 };
-  assert.match(linkPath(a, b), /^M40,10 C/);           // sai pela direita de a
-  assert.match(linkPath(a, b), / 200,20$/);            // chega pela esquerda de b
-  // empilhados: arco pelo lado de fora (longe da raiz em x=0), sem cruzar os nós do meio
+  assert.match(linkPath(a, b), /^M40,10 C/);           // leaves from the right of a
+  assert.match(linkPath(a, b), / 200,20$/);            // arrives at the left of b
+  // stacked: arc around the outside (away from the root at x=0), without crossing the middle nodes
   const c = { x: 0, y: 200, w: 40, h: 20 };
   assert.match(linkPath(a, c), /^M40,10 C.* 40,210$/);
   const l1 = { x: -80, y: 0, w: 40, h: 20 }, l2 = { x: -80, y: 200, w: 40, h: 20 };
   assert.match(linkPath(l1, l2), /^M-80,10 C.* -80,210$/);
 });
 
-// ---- Copiar/colar ramo ----
+// ---- Copy/paste branch ----
 import { pasteBranch } from '../static/model.js';
 
 test('pasteBranch inserts a deep copy with fresh ids', () => {
@@ -295,10 +295,10 @@ test('pasteBranch inserts a deep copy with fresh ids', () => {
   assert.equal(n.children.length, 2);
   assert.notEqual(n.id, r1.id);
   assert.notEqual(n.children[0].id, g1.id);
-  // 1º nível colado mais fundo: sem lado, herda a cor do novo ramo
+  // 1st level pasted deeper: no side, inherits the new branch's colour
   assert.equal(n.side, null);
   assert.equal(n.color, null);
-  // colar de novo não compartilha objetos com a cópia anterior
+  // pasting again does not share objects with the previous copy
   const n2 = pasteBranch(m, l1.id, copy);
   assert.notEqual(n2.children[0].id, n.children[0].id);
 });
@@ -310,7 +310,7 @@ test('pasteBranch under root gets side and color', () => {
   assert.ok(PALETTE.includes(n.color));
 });
 
-// ---- Curvar ligações ----
+// ---- Bending links ----
 import { linkHandle } from '../static/model.js';
 
 test('linkHandle: no bend → curve midpoint; with bend → centers midpoint + offset', () => {
@@ -322,21 +322,21 @@ test('linkHandle: no bend → curve midpoint; with bend → centers midpoint + o
 test('linkPath with bend passes through the handle and leaves by the nearest sides', () => {
   const a = { x: 0, y: 0, w: 40, h: 20 }, b = { x: 200, y: 0, w: 40, h: 20 };
   const d = linkPath(a, b, [0, 300]);
-  // ponto de controle abaixo: sai pela base de a e chega pela base de b
+  // control point below: leaves from the bottom of a and arrives at the bottom of b
   assert.match(d, /^M20,20 Q/);
   assert.match(d, / 220,20$/);
-  // quadrática passa pelo handle em t=0.5: controle = 2H - (p1+p2)/2
+  // the quadratic passes through the handle at t=0.5: control = 2H - (p1+p2)/2
   assert.match(d, /Q120,600 /);
 });
 
-// ---- Estilo do nó: nuvem e contorno do ramo ----
+// ---- Node style: cloud and branch outline ----
 import { cloudPath, branchBounds } from '../static/model.js';
 
 test('cloudPath is a closed bumpy outline around the box', () => {
   const d = cloudPath({ x: 0, y: 0, w: 120, h: 40 });
   assert.match(d, /^M/);
   assert.match(d, /Z$/);
-  assert.ok((d.match(/A/g) || []).length >= 8, 'várias ondulações');
+  assert.ok((d.match(/A/g) || []).length >= 8, 'several ripples');
 });
 
 test('branchBounds covers the node and its visible descendants only', () => {
@@ -349,14 +349,14 @@ test('branchBounds covers the node and its visible descendants only', () => {
     assert.ok(x.x >= r.x + 10 && x.y >= r.y + 10 && x.x + x.w <= r.x + r.w - 10 && x.y + x.h <= r.y + r.h - 10, id);
   }
   const o = b[r2.id];
-  assert.ok(o.y >= r.y + r.h || o.y + o.h <= r.y, 'irmão fica de fora');
+  assert.ok(o.y >= r.y + r.h || o.y + o.h <= r.y, 'sibling stays outside');
   r1.collapsed = true;
   const res2 = layout(m, measure);
   const small = branchBounds(m, res2.nodes, r1.id, 10);
   assert.equal(small.w, byId(res2)[r1.id].w + 20);
 });
 
-// ---- Lados escolhidos na ligação ----
+// ---- Chosen sides on a link ----
 import { sideToward } from '../static/model.js';
 
 test('sideToward picks the box side nearest to a point', () => {
@@ -370,15 +370,15 @@ test('sideToward picks the box side nearest to a point', () => {
 test('linkPath and linkHandle honor chosen sides', () => {
   const a = { x: 0, y: 0, w: 40, h: 20 }, b = { x: 200, y: 0, w: 40, h: 20 };
   const d = linkPath(a, b, null, 'top', 'bottom');
-  assert.match(d, /^M20,0 C20,-\d+/);   // sai pelo topo de a, subindo
-  assert.match(d, /,\d+ 220,20$/);       // chega pela base de b
+  assert.match(d, /^M20,0 C20,-\d+/);   // leaves from the top of a, going up
+  assert.match(d, /,\d+ 220,20$/);       // arrives at the bottom of b
   const [, hy] = linkHandle(a, b, null, 'top', 'top');
-  assert.ok(hy < 0, 'topo → topo: meio da curva fica acima dos nós');
-  // com curva manual, o lado escolhido continua valendo
+  assert.ok(hy < 0, 'top → top: the middle of the curve sits above the nodes');
+  // with a manual curve, the chosen side still applies
   assert.match(linkPath(a, b, [0, 300], 'top', 'top'), /^M20,0 Q.* 220,0$/);
 });
 
-// ---- Forma efetiva: estilo em qualquer nó vira caixa ----
+// ---- Effective shape: a style on any node turns it into a box ----
 import { effectiveShape } from '../static/model.js';
 
 test('effectiveShape: defaults per depth, box when styled, explicit shape wins', () => {
@@ -403,7 +403,7 @@ test('layout boxes carry the effective shape', () => {
   assert.equal(b[m.root.id].shape, 'none');
 });
 
-// ---- Segurança: marcadores só com tipo conhecido e cor hexadecimal ----
+// ---- Safety: markers only with a known type and a hexadecimal colour ----
 import { markerShape } from '../static/model.js';
 
 test('markerShape rejects unknown types and sanitizes colors', () => {
@@ -411,11 +411,11 @@ test('markerShape rejects unknown types and sanitizes colors', () => {
   assert.equal(markerShape('evil', '#e5383b'), null);
   assert.equal(markerShape('none', '#e5383b'), null);
   const bad = markerShape('dot', 'x"/><circle id="pwn"/><path d="');
-  assert.ok(!bad.includes('pwn'), 'cor maliciosa não entra na marcação');
+  assert.ok(!bad.includes('pwn'), 'a malicious colour does not get into the markup');
   assert.match(bad, /fill="#22a559"/);
 });
 
-// ---- Redimensionar nó: largura fixa e quebra de linha ----
+// ---- Resizing a node: fixed width and line wrapping ----
 import { wrapLines } from '../static/model.js';
 
 test('wrapLines breaks words to fit the width and keeps long words whole', () => {
@@ -436,7 +436,7 @@ test('layout passes the node width to measure', () => {
   assert.ok(seen.includes(150));
 });
 
-// ---- Imagem no nó ----
+// ---- Node image ----
 test('layout passes the node image to measure', () => {
   const { m, g1 } = sample('map');
   g1.image = { id: 'a'.repeat(32) + '.png', w: 400, h: 200 };
@@ -445,7 +445,7 @@ test('layout passes the node image to measure', () => {
   assert.deepEqual([b.w, b.h], [216, 136]);
 });
 
-// ---- Comentários: ícone dentro do nó ocupa espaço ----
+// ---- Comments: the icon inside the node takes up space ----
 test('layout tells measure how many inline icons the node shows', () => {
   const { m, g1, g2 } = sample('map');
   g1.comments = [{ id: 'c1', text: 'oi', at: '2026-11-16T00:00:00Z' }];
@@ -455,7 +455,7 @@ test('layout tells measure how many inline icons the node shows', () => {
   assert.equal(b[g2.id].w, 50);
 });
 
-// ---- Link (URL) no nó ----
+// ---- Link (URL) on a node ----
 import { safeUrl } from '../static/model.js';
 
 test('safeUrl accepts only http(s) and adds https:// when missing', () => {
@@ -469,7 +469,7 @@ test('safeUrl accepts only http(s) and adds https:// when missing', () => {
   assert.equal(safeUrl('não é url'), null);
 });
 
-// ---- Modo foco: layout a partir de um ramo ----
+// ---- Focus mode: layout from a branch ----
 test('layout with a focus id draws only that branch, centered, keeping its color', () => {
   const { m, r1, l1, g1, g2 } = sample('map');
   for (const name of ['map', 'org', 'list']) {
@@ -478,19 +478,19 @@ test('layout with a focus id draws only that branch, centered, keeping its color
     assert.deepEqual(res.nodes.map(n => n.id).sort(), [r1.id, g1.id, g2.id].sort(), name);
     const b = byId(res);
     assert.equal(b[r1.id].depth, 0);
-    assert.equal(b[r1.id].x + b[r1.id].w / 2, 0, `${name}: centrado`);
-    assert.equal(b[r1.id].color, r1.color, `${name}: cor do ramo`);
-    assert.equal(b[g1.id].color, r1.color, `${name}: filhos herdam`);
+    assert.equal(b[r1.id].x + b[r1.id].w / 2, 0, `${name}: centred`);
+    assert.equal(b[r1.id].color, r1.color, `${name}: branch colour`);
+    assert.equal(b[g1.id].color, r1.color, `${name}: children inherit`);
     assert.equal(b[l1.id], undefined);
   }
 });
 
-// ---- Outline: recuar / desrecuar ----
+// ---- Outline: indent / outdent ----
 import { indentNode, outdentNode } from '../static/model.js';
 
 test('indentNode moves a node under its previous sibling', () => {
   const { m, r1, g1, g2 } = sample('map');
-  assert.equal(indentNode(m, g1.id), false, 'primeiro filho não recua');
+  assert.equal(indentNode(m, g1.id), false, 'the first child does not indent');
   assert.equal(indentNode(m, g2.id), true);
   assert.deepEqual(r1.children.map(n => n.id), [g1.id]);
   assert.deepEqual(g1.children.map(n => n.id), [g2.id]);
@@ -498,15 +498,15 @@ test('indentNode moves a node under its previous sibling', () => {
 
 test('outdentNode moves a node after its parent, one level up', () => {
   const { m, r1, l1, g1, g2 } = sample('map');
-  assert.equal(outdentNode(m, r1.id), false, '1º nível não desrecua');
+  assert.equal(outdentNode(m, r1.id), false, '1st level does not outdent');
   assert.equal(outdentNode(m, g1.id), true);
   const kids = m.root.children.map(n => n.id);
-  assert.equal(kids[kids.indexOf(r1.id) + 1], g1.id, 'logo depois do antigo pai');
-  assert.ok(g1.side && PALETTE.includes(g1.color), 'virou 1º nível: lado e cor');
+  assert.equal(kids[kids.indexOf(r1.id) + 1], g1.id, 'right after the old parent');
+  assert.ok(g1.side && PALETTE.includes(g1.color), 'became 1st level: side and colour');
   assert.deepEqual(r1.children.map(n => n.id), [g2.id]);
 });
 
-// ---- Exportar: Markdown ----
+// ---- Export: Markdown ----
 import { toMarkdown } from '../static/model.js';
 
 test('toMarkdown writes the root as title and branches as nested lists', () => {
@@ -514,7 +514,7 @@ test('toMarkdown writes the root as title and branches as nested lists', () => {
   m.root.text = 'Plano';
   g1.url = 'https://exemplo.com/';
   g1.text = 'Neto [um]';
-  r1.collapsed = true;  // exporta tudo, mesmo recolhido
+  r1.collapsed = true;  // exports everything, even collapsed
   const md = toMarkdown(m);
   assert.equal(md, [
     '# Plano',
@@ -528,7 +528,7 @@ test('toMarkdown writes the root as title and branches as nested lists', () => {
   ].join('\n'));
 });
 
-// ---- Apresentação ----
+// ---- Presentation ----
 import { slides } from '../static/model.js';
 
 test('slides: overview first, then one per main branch in order', () => {
@@ -537,22 +537,22 @@ test('slides: overview first, then one per main branch in order', () => {
   assert.deepEqual(slides(newMap('x')), [null]);
 });
 
-// ---- Mostrar este ramo como (sub-layout dentro do mapa) ----
+// ---- Show this branch as (sub-layout inside the map) ----
 test('branchLayout org draws a branch as an org chart inside the map', () => {
   const { m, r1, r2, g1, g2 } = sample('map');
   r1.branchLayout = 'org';
   const res = layout(m, measure);
   const b = byId(res);
   const root = b[m.root.id];
-  assert.ok(b[r1.id].x >= root.x + root.w, 'continua à direita da raiz');
-  assert.ok(b[g1.id].y >= b[r1.id].y + b[r1.id].h, 'filhos abaixo');
-  assert.ok(b[g1.id].x + b[g1.id].w <= b[g2.id].x, 'filhos lado a lado');
-  assert.equal(b[g1.id].depth, 2, 'profundidade real');
+  assert.ok(b[r1.id].x >= root.x + root.w, 'still to the right of the root');
+  assert.ok(b[g1.id].y >= b[r1.id].y + b[r1.id].h, 'children below');
+  assert.ok(b[g1.id].x + b[g1.id].w <= b[g2.id].x, 'children side by side');
+  assert.equal(b[g1.id].depth, 2, 'real depth');
   assert.equal(b[g1.id].kind, 'org');
   const inner = res.edges.find(e => e.to.id === g1.id), outer = res.edges.find(e => e.to.id === r1.id);
-  assert.equal(inner.kind, 'org', 'linha interna no estilo organograma');
+  assert.equal(inner.kind, 'org', 'inner line in the org-chart style');
   assert.equal(outer.kind ?? 'map', 'map');
-  // o bloco do organograma não invade o irmão de baixo
+  // the org-chart block does not invade the sibling below
   assert.ok(Math.max(b[g1.id].y + b[g1.id].h, b[g2.id].y + b[g2.id].h) <= b[r2.id].y);
 });
 
@@ -563,7 +563,7 @@ test('branchLayout list on the left side stays left of the root', () => {
   l1.branchLayout = 'list';
   const b = byId(layout(m, measure));
   assert.ok(Math.max(b[l1.id].x + b[l1.id].w, b[a.id].x + b[a.id].w, b[c.id].x + b[c.id].w) <= b[m.root.id].x);
-  assert.equal(b[a.id].x - b[l1.id].x, 32, 'recuo da lista');
+  assert.equal(b[a.id].x - b[l1.id].x, 32, 'list indent');
   assert.ok(b[c.id].y > b[a.id].y);
 });
 
@@ -574,7 +574,7 @@ test('branchLayout is ignored when the whole map is not in map layout', () => {
   assert.deepEqual(layout(m, measure).nodes.map(n => [n.id, n.x, n.y]), plain);
 });
 
-// ---- Área de transferência ----
+// ---- Clipboard ----
 import { branchToText, textToBranches } from '../static/model.js';
 
 test('branchToText and textToBranches round-trip an indented outline', () => {
@@ -583,8 +583,8 @@ test('branchToText and textToBranches round-trip an indented outline', () => {
   const back = textToBranches(branchToText(b));
   const shape = (n) => [n.text, n.children.map(shape)];
   assert.deepEqual(back.map(shape), [shape(b)]);
-  assert.deepEqual(textToBranches('- um\n\t* dois\n3. três\n\n').map(shape), [['um', [['dois', []]]], ['três', []]], 'marcadores, tab, linhas vazias');
-  assert.ok(back[0].id && back[0].children[0].id !== back[0].id, 'tópicos novos com id');
+  assert.deepEqual(textToBranches('- um\n\t* dois\n3. três\n\n').map(shape), [['um', [['dois', []]]], ['três', []]], 'bullets, tab, empty lines');
+  assert.ok(back[0].id && back[0].children[0].id !== back[0].id, 'new topics with ids');
 });
 
 import { sanitizeBranch, isHex, hexColor, safeColor } from '../static/model.js';

@@ -1,20 +1,20 @@
-// E2E no Chrome headless via DevTools Protocol (WebSocket nativo do Node, sem dependências).
-// Uso: node tests/e2e.mjs   (precisa de google-chrome no PATH; sobe o próprio servidor)
+// E2E in headless Chrome via the DevTools Protocol (Node's native WebSocket, no dependencies).
+// Usage: node tests/e2e.mjs   (needs google-chrome on PATH; starts its own server)
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
-// portas configuráveis: vários e2e (ex.: agentes em worktrees) podem rodar ao mesmo tempo
+// configurable ports: several e2e runs (e.g. agents in worktrees) can run at the same time
 const PORT = Number(process.env.E2E_PORT ?? 8765), CDP = Number(process.env.E2E_CDP_PORT ?? 9333), BASE = `http://127.0.0.1:${PORT}`;
 const tmp = mkdtempSync(join(tmpdir(), 'brainstorm-e2e-'));
 const server = spawn('python3', ['-c',
   'import sys; from pathlib import Path; from app import make_server; make_server(Path(sys.argv[1]), int(sys.argv[2]), auth=("e2e", "senha-e2e")).serve_forever()',
   join(tmp, 'data'), String(PORT)], { cwd: new URL('..', import.meta.url).pathname, stdio: 'ignore' });
-// o teste confere textos em português: o navegador roda em pt-BR, seja qual for o idioma da máquina
+// the test checks Portuguese texts: the browser runs in pt-BR, whatever the machine's language
 const chrome = spawn('google-chrome', ['--headless=new', '--disable-gpu', '--remote-debugging-port=' + CDP, '--lang=pt-BR', '--accept-lang=pt-BR',
   '--window-size=1400,800', '--user-data-dir=' + join(tmp, 'chrome'), 'about:blank'], { stdio: 'ignore', env: { ...process.env, LANGUAGE: 'pt_BR' } });
-// maxRetries: o Chrome ainda pode estar gravando o perfil quando o processo sai
+// maxRetries: Chrome may still be writing the profile when the process exits
 process.on('exit', () => { chrome.kill(); server.kill(); rmSync(tmp, { recursive: true, force: true, maxRetries: 5 }); });
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(1));
 setTimeout(() => { console.error('E2E timeout'); process.exit(1); }, 300000).unref();
@@ -47,9 +47,9 @@ const status = () => ev(`document.querySelector('#status').textContent`);
 
 const n = (text, kids = [], side = null, color = null) => ({ id: 'n' + Math.random().toString(36).slice(2), text, color, shape: null, collapsed: false, side, children: kids });
 for (let i = 0; i < 50; i++) { try { await fetch(BASE + '/api/maps'); break; } catch { await sleep(100); } }
-// o servidor do e2e exige login: os fetch do Node usam uma sessão própria (a do navegador é feita pela página)
+// the e2e server requires login: Node's fetch calls use their own session (the browser's is made by the page)
 const apiLogin = await fetch(BASE + '/api/login', { method: 'POST', body: JSON.stringify({ user: 'e2e', password: 'senha-e2e' }) });
-assert.equal(apiLogin.status, 200, 'login pela API');
+assert.equal(apiLogin.status, 200, 'login via the API');
 const sessionCookie = apiLogin.headers.get('set-cookie').split(';')[0];
 const nodeFetch = globalThis.fetch;
 globalThis.fetch = (url, opts = {}) => nodeFetch(url, String(url).startsWith(BASE) ? { ...opts, headers: { ...(opts.headers ?? {}), Cookie: sessionCookie } } : opts);
@@ -59,45 +59,45 @@ await fetch(BASE + '/api/maps/demo', { method: 'PUT', body: JSON.stringify({ ver
 ]) }) });
 await cmd('Runtime.enable');
 await cmd('Page.enable');
-// página de login: sem sessão o app manda para ela; senha errada avisa; a certa entra
+// login page: without a session the app sends you there; a wrong password warns; the right one gets in
 await cmd('Page.navigate', { url: BASE + '/' }); await sleep(1200);
-assert.equal(await ev(`location.pathname`), '/login.html', 'sem login, vai para a página de login');
-// se as opções do Chrome não bastarem nesta máquina, a escolha guardada garante o pt-BR
+assert.equal(await ev(`location.pathname`), '/login.html', 'without a login, goes to the login page');
+// if Chrome's options are not enough on this machine, the stored choice guarantees pt-BR
 if (await ev(`navigator.language`) !== 'pt-BR') { await ev(`localStorage.setItem('brainstorm:lang', 'pt-BR')`); await cmd('Page.navigate', { url: BASE + '/login.html' }); await sleep(1200); }
 assert.deepEqual(await ev(`[document.documentElement.lang, document.querySelector('#lang').value, document.querySelector('#lang').options.length, document.title]`),
-  ['pt-BR', 'pt-BR', 4, 'Entrar · Brainstorm'], 'página de login carrega os textos e o seletor de idioma sem sessão');
+  ['pt-BR', 'pt-BR', 4, 'Entrar · Brainstorm'], 'login page loads the texts and the language selector without a session');
 const submitLogin = (u, p) => ev(`(() => { document.querySelector('#login-user').value = '${u}'; document.querySelector('#login-password').value = '${p}'; document.querySelector('#login-form').requestSubmit(); })()`);
 await submitLogin('e2e', 'errada'); await sleep(1600);
-assert.equal(await ev(`document.querySelector('#login-error').hidden ? '' : document.querySelector('#login-error').textContent`), 'Usuário ou senha incorretos.', 'senha errada avisa');
+assert.equal(await ev(`document.querySelector('#login-error').hidden ? '' : document.querySelector('#login-error').textContent`), 'Usuário ou senha incorretos.', 'wrong password warns');
 await submitLogin('e2e', 'senha-e2e'); await sleep(1200);
-assert.equal(await ev(`location.pathname`), '/', 'senha certa entra no app');
+assert.equal(await ev(`location.pathname`), '/', 'right password gets into the app');
 await cmd('Page.navigate', { url: BASE + '/#/map/demo' });
 await sleep(1500);
 const v0 = (await getMap()).version;
-assert.equal(await ev(`document.querySelector('#toolbar').hidden`), true, 'barra só aparece depois de clicar no nó');
+assert.equal(await ev(`document.querySelector('#toolbar').hidden`), true, 'bar only appears after clicking the node');
 
-// Tab cria filho da raiz e abre o input; texto + Enter confirma
+// Tab creates a child of the root and opens the input; text + Enter confirms
 await key('Tab');
-assert.equal(await ev(`!document.querySelector('#editor').hidden`), true, 'input aberto');
+assert.equal(await ev(`!document.querySelector('#editor').hidden`), true, 'input open');
 await typeText('Nova ideia');
-await key('Delete');  // Review Focus 5: Delete dentro do input não apaga nó
+await key('Delete');  // Review Focus 5: Delete inside the input does not delete the node
 await key('Enter');
 assert.ok((await texts()).includes('Nova ideia'), 'nó criado: ' + (await texts()));
 await sleep(900);
 let s = await getMap();
-assert.ok(JSON.stringify(s).includes('Nova ideia'), 'autosave gravou');
+assert.ok(JSON.stringify(s).includes('Nova ideia'), 'autosave saved');
 assert.equal(s.version, v0 + 1);
 assert.equal(await status(), 'Salvo');
 
-// Enter cria irmão; Esc no nó novo descarta
+// Enter creates a sibling; Esc on the new node discards it
 await key('Enter'); await typeText('descartar'); await key('Escape');
-assert.ok(!(await texts()).includes('descartar'), 'Esc descarta nó novo');
+assert.ok(!(await texts()).includes('descartar'), 'Esc discards the new node');
 
-// digitar sobre o nó edita substituindo
+// typing over the node edits, replacing the text
 await key('x'); await typeText('yz'); await key('Enter');
 assert.ok((await texts()).includes('xyz'), 'edição por digitação: ' + (await texts()));
 
-// Delete apaga e Ctrl+Z desfaz, Ctrl+Shift+Z refaz
+// Delete removes and Ctrl+Z undoes, Ctrl+Shift+Z redoes
 await key('Delete');
 assert.ok(!(await texts()).includes('xyz'), 'delete: ' + (await texts()) + ' sel=' + (await ev(`document.querySelector('.selected-ring')?.parentNode.textContent`)));
 await key('z', 2);
@@ -106,21 +106,21 @@ await key('z', 2 | 8);
 assert.ok(!(await texts()).includes('xyz'), 'redo');
 await key('z', 2);
 
-// setas: da raiz para a direita, Espaço recolhe
+// arrows: from the root to the right, Space collapses
 await sleep(900); await cmd('Page.reload'); await sleep(1500);
 await key('ArrowRight');
 const sel = await ev(`document.querySelector('.selected-ring').parentNode.dataset.id`);
-assert.notEqual(sel, (await getMap()).root.id, 'seta moveu seleção');
+assert.notEqual(sel, (await getMap()).root.id, 'arrow moved the selection');
 const before = (await texts()).length;
 await ev(`(() => { const g=[...document.querySelectorAll('.node')].find(g=>g.textContent.startsWith('Cronograma')); g.dispatchEvent(new MouseEvent('click',{bubbles:true})); })()`);
 await key(' ');
-assert.ok((await texts()).length < before, 'Espaço recolheu');
+assert.ok((await texts()).length < before, 'Space collapsed');
 await key(' ');
 
-// barra flutuante: cor e forma no nó selecionado
+// floating bar: colour and shape on the selected node
 const clickNode = (prefix) => ev(`[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('${prefix}')).dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
 await clickNode('Recursos');
-assert.equal(await ev(`!document.querySelector('#toolbar').hidden`), true, 'toolbar visível');
+assert.equal(await ev(`!document.querySelector('#toolbar').hidden`), true, 'toolbar visible');
 await ev(`document.querySelector('#style-btn').click()`);
 await ev(`document.querySelector('#style-pop [data-prop="color"] [data-value="#14b8a6"]').click()`);
 await ev(`document.querySelector('#style-pop [data-prop="shape"] [data-value="rect"]').click()`);
@@ -128,31 +128,31 @@ await sleep(900);
 const rec = (await getMap()).root.children.find(c => c.text === 'Recursos');
 assert.equal(rec.color, '#14b8a6');
 assert.equal(rec.shape, 'rect');
-assert.equal(await ev(`[...document.querySelectorAll('#viewport path')].filter(p => p.getAttribute('stroke') === '#14b8a6').length`), 3, 'descendentes herdam a cor');
+assert.equal(await ev(`[...document.querySelectorAll('#viewport path')].filter(p => p.getAttribute('stroke') === '#14b8a6').length`), 3, 'descendants inherit the colour');
 
-// painel de estilo: abas Forma/Borda/Linha, sem preenchimento, cor personalizada, nuvem, contorno do ramo
+// style panel: Shape/Border/Line tabs, no fill, custom colour, cloud, branch outline
 const recNode = async () => (await getMap()).root.children.find(c => c.text === 'Recursos');
 const pick = (panel, prop, value) => ev(`document.querySelector('#style-pop [data-panel="${panel}"] [data-prop="${prop}"] [data-value="${value}"]').click()`);
 const tab = (name) => ev(`document.querySelector('#style-pop [data-tab="${name}"]').click()`);
 const recG = `[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('Recursos'))`;
 const shown = (sel) => ev(`!document.querySelector('${sel}').hidden`);
 await pick('shape', 'shape', 'cloud');
-assert.equal(await ev(`!!${recG}.querySelector('path.cloud')`), true, 'forma nuvem');
+assert.equal(await ev(`!!${recG}.querySelector('path.cloud')`), true, 'cloud shape');
 await pick('shape', 'color', 'none');
 await sleep(900);
-assert.equal((await recNode()).fillNone, true, 'sem preenchimento');
-// (o '+' abre o seletor nativo de cor, que não roda no headless: aplica a cor direto pelo input)
+assert.equal((await recNode()).fillNone, true, 'no fill');
+// (the '+' opens the native colour picker, which does not run in headless: applies the colour directly through the input)
 await ev(`(() => { const i = document.querySelector('#custom-color'); i.value = '#123456'; i.dispatchEvent(new Event('change')); })()`);
 await sleep(900);
-assert.equal((await recNode()).color, '#123456', 'cor personalizada');
-assert.equal((await recNode()).fillNone, false, 'cor volta a preencher');
-assert.equal(await ev(`!!document.querySelector('#style-pop [data-panel="shape"] [data-prop="color"] [data-value="#123456"]')`), true, 'cor personalizada vira amostra');
+assert.equal((await recNode()).color, '#123456', 'custom colour');
+assert.equal((await recNode()).fillNone, false, 'colour fills again');
+assert.equal(await ev(`!!document.querySelector('#style-pop [data-panel="shape"] [data-prop="color"] [data-value="#123456"]')`), true, 'custom colour becomes a swatch');
 await ev(`document.querySelector('#boundary').click()`);
 await sleep(900);
 assert.equal((await recNode()).boundary, true);
-assert.equal(await ev(`!!document.querySelector('#viewport .boundary')`), true, 'contorno do ramo');
+assert.equal(await ev(`!!document.querySelector('#viewport .boundary')`), true, 'branch outline');
 await tab('border');
-assert.equal(await shown('#style-pop [data-panel="border"]'), true, 'aba borda');
+assert.equal(await shown('#style-pop [data-panel="border"]'), true, 'border tab');
 assert.equal(await shown('#style-pop [data-panel="shape"]'), false);
 await pick('border', 'borderColor', '#e5383b');
 await pick('border', 'borderWidth', 'thick');
@@ -160,25 +160,25 @@ await pick('border', 'borderStyle', 'dashed');
 await sleep(900);
 let rn = await recNode();
 assert.deepEqual([rn.borderColor, rn.borderWidth, rn.borderStyle], ['#e5383b', 'thick', 'dashed']);
-assert.equal(await ev(`(() => { const p = ${recG}.querySelector('path.cloud'); return p.getAttribute('stroke') + ' ' + !!p.getAttribute('stroke-dasharray'); })()`), '#e5383b true', 'borda desenhada');
+assert.equal(await ev(`(() => { const p = ${recG}.querySelector('path.cloud'); return p.getAttribute('stroke') + ' ' + !!p.getAttribute('stroke-dasharray'); })()`), '#e5383b true', 'border drawn');
 await tab('line');
 await pick('line', 'lineColor', '#2f5bea');
 await pick('line', 'lineStyle', 'dashed');
 await sleep(900);
-assert.equal(await ev(`[...document.querySelectorAll('#viewport path.edge')].filter(p => p.getAttribute('stroke') === '#2f5bea' && p.getAttribute('stroke-dasharray')).length`), 1, 'linha do pai estilizada');
-await pick('line', 'lineStyle', 'dashed');  // clicar no ativo volta ao padrão
+assert.equal(await ev(`[...document.querySelectorAll('#viewport path.edge')].filter(p => p.getAttribute('stroke') === '#2f5bea' && p.getAttribute('stroke-dasharray')).length`), 1, 'parent line styled');
+await pick('line', 'lineStyle', 'dashed');  // clicking the active one returns to the default
 await sleep(900);
 assert.equal((await recNode()).lineStyle, null);
 await tab('shape');
 
-// botões "+" criam filho e irmão
+// "+" buttons create a child and a sibling
 await ev(`document.querySelector('#add-child').click()`);
-assert.equal(await ev(`!document.querySelector('#editor').hidden`), true, '+ filho abre edição');
+assert.equal(await ev(`!document.querySelector('#editor').hidden`), true, '+ child opens editing');
 await typeText('Pelo mais'); await key('Enter');
 assert.equal((await getMap()).root.children.length >= 2, true);
 assert.ok((await texts()).includes('Pelo mais'));
 
-// layout e zoom
+// layout and zoom
 await ev(`(() => { const s = document.querySelector('#layout-select'); s.value = 'org'; s.dispatchEvent(new Event('change')); })()`);
 await sleep(900);
 assert.equal((await getMap()).layout, 'org');
@@ -187,39 +187,39 @@ assert.notEqual(await ev(`document.querySelector('#zoom-reset').textContent`), '
 await ev(`document.querySelector('#zoom-reset').click()`);
 assert.equal(await ev(`document.querySelector('#zoom-reset').textContent`), '100%');
 await ev(`document.querySelector('#undo').click()`);
-assert.equal(await ev(`document.querySelector('#layout-select').value`), 'map', 'desfazer pelo botão');
+assert.equal(await ev(`document.querySelector('#layout-select').value`), 'map', 'undo via the button');
 await sleep(900);
 
-// revisão I2: recolher o avô leva a seleção para o nó recolhido
+// review I2: collapsing the grandparent moves the selection to the collapsed node
 await clickNode('Time');
 const recBox = `[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('Recursos'))`;
 await ev(`${recBox}.querySelector('.toggle').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
-assert.match(await ev(`document.querySelector('.selected-ring').parentNode.textContent`), /^Recursos/, 'seleção sobe ao recolher');
-assert.equal(await ev(`${recBox}.querySelector('.toggle text')?.textContent`), String((await getMap()).root.children.find(c => c.text.startsWith('Recursos')).children.length), 'recolhido mostra o número de filhos');
+assert.match(await ev(`document.querySelector('.selected-ring').parentNode.textContent`), /^Recursos/, 'selection moves up on collapse');
+assert.equal(await ev(`${recBox}.querySelector('.toggle text')?.textContent`), String((await getMap()).root.children.find(c => c.text.startsWith('Recursos')).children.length), 'collapsed shows the number of children');
 await ev(`${recBox}.querySelector('.toggle').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
 await sleep(900);
-assert.equal(await ev(`${recBox}.querySelector('.toggle text')`), null, 'expandido: só o círculo, sem texto');
+assert.equal(await ev(`${recBox}.querySelector('.toggle text')`), null, 'expanded: just the circle, no text');
 
-// revisão M1: entrar e sair da edição sem mudar nada não grava
+// review M1: entering and leaving edit mode without changing anything does not save
 const vBefore = (await getMap()).version;
 await key('F2'); await key('Enter');
 await sleep(900);
-assert.equal((await getMap()).version, vBefore, 'edição sem mudança não grava');
+assert.equal((await getMap()).version, vBefore, 'an edit with no change does not save');
 
-// revisão M5: texto em digitação protege o fechamento e a navegação encerra a edição
+// review M5: text being typed protects closing and navigation ends the edit
 const unloadBlocked = () => ev(`(() => { const e = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; })()`);
 await key('F2'); await ev(`document.querySelector('#editor').setSelectionRange(999, 999)`); await typeText(' rascunho');
-assert.equal(await unloadBlocked(), true, 'beforeunload avisa durante edição');
+assert.equal(await unloadBlocked(), true, 'beforeunload warns during editing');
 await ev(`location.hash = '#/'`); await sleep(600);
 await ev(`location.hash = '#/map/demo'`); await sleep(1200);
-assert.equal(await ev(`document.querySelector('#editor').hidden`), true, 'edição encerrada ao navegar');
-assert.ok((await texts()).some(t => t.endsWith('rascunho')), 'texto digitado foi confirmado');
+assert.equal(await ev(`document.querySelector('#editor').hidden`), true, 'editing ended on navigation');
+assert.ok((await texts()).some(t => t.endsWith('rascunho')), 'typed text was confirmed');
 await key('Tab');
-assert.equal(await ev(`!document.querySelector('#editor').hidden`), true, 'teclado funciona após voltar');
+assert.equal(await ev(`!document.querySelector('#editor').hidden`), true, 'keyboard works after going back');
 await key('Escape');
 await sleep(900);
 
-// arrastar ramo: Q1 vira filho de Recursos (lado esquerdo → soltar à esquerda), placeholder aparece, Ctrl+Z desfaz
+// dragging a branch: Q1 becomes a child of Recursos (left side → drop on the left), placeholder appears, Ctrl+Z undoes
 const rect = (prefix) => ev(`(() => { const r = [...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('${prefix}')).getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
 const mouse = (type, x, y) => cmd('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 });
 
@@ -229,17 +229,17 @@ for (let i = 1; i <= 5; i++) {
   await mouse('mouseMoved', q1.x + q1.w / 2 + (recR.x - 10 - q1.x - q1.w / 2) * i / 5, q1.y + q1.h / 2 + (recR.y + recR.h / 2 - q1.y - q1.h / 2) * i / 5);
   await sleep(30);
 }
-assert.equal(await ev(`!!document.querySelector('#viewport .drop-placeholder')`), true, 'placeholder visível');
+assert.equal(await ev(`!!document.querySelector('#viewport .drop-placeholder')`), true, 'placeholder visible');
 await mouse('mouseReleased', recR.x - 10, recR.y + recR.h / 2);
 await sleep(900);
 const recursos = () => getMap().then(m => m.root.children.find(c => c.text.startsWith('Recursos')));
-assert.ok((await recursos()).children.some(c => c.text === 'Q1'), 'Q1 movido para Recursos');
-assert.equal(await ev(`!!document.querySelector('#viewport .drop-placeholder')`), false, 'placeholder some ao soltar');
+assert.ok((await recursos()).children.some(c => c.text === 'Q1'), 'Q1 moved to Recursos');
+assert.equal(await ev(`!!document.querySelector('#viewport .drop-placeholder')`), false, 'placeholder disappears on drop');
 await key('z', 2);
 await sleep(900);
-assert.ok(!(await recursos()).children.some(c => c.text === 'Q1'), 'desfazer move de volta');
+assert.ok(!(await recursos()).children.some(c => c.text === 'Q1'), 'undo moves it back');
 
-// ligar nós: botão "Ligar" em Q2, mover até Time mostra a prévia, clicar cria a seta; clicar nela + Del apaga; Ctrl+Z volta
+// linking nodes: "Ligar" button on Q2, move to Time shows the preview, clicking creates the arrow; clicking it + Del deletes; Ctrl+Z restores
 const center = (r) => [r.x + r.w / 2, r.y + r.h / 2];
 const clickAnchor = async (side) => {
   const [x, y] = await ev(`(() => { const r = document.querySelector('.link-anchor[data-side="${side}"]').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
@@ -248,56 +248,56 @@ const clickAnchor = async (side) => {
 await clickNode('Q2');
 await ev(`document.querySelector('#link-btn').click()`);
 const [tx, ty] = center(await rect('Time'));
-// sem escolher o lado: nenhum lado ativo, sem prévia, e clicar no destino não liga
-assert.equal(await ev(`document.querySelectorAll('.link-anchor.active').length`), 0, 'nenhum lado pré-selecionado');
+// without choosing a side: no active side, no preview, and clicking the target does not link
+assert.equal(await ev(`document.querySelectorAll('.link-anchor.active').length`), 0, 'no side preselected');
 await mouse('mouseMoved', tx, ty);
-assert.equal(await ev(`!!document.querySelector('#viewport .link-preview')`), false, 'sem prévia antes de escolher o lado');
+assert.equal(await ev(`!!document.querySelector('#viewport .link-preview')`), false, 'no preview before choosing the side');
 await mouse('mousePressed', tx, ty); await mouse('mouseReleased', tx, ty);
 await sleep(300);
-assert.equal((await getMap()).links?.length ?? 0, 0, 'clicar no destino sem lado não liga');
-assert.equal(await ev(`document.querySelectorAll('.link-anchor:not([hidden])').length`), 4, 'continua no modo ligar');
+assert.equal((await getMap()).links?.length ?? 0, 0, 'clicking the target without a side does not link');
+assert.equal(await ev(`document.querySelectorAll('.link-anchor:not([hidden])').length`), 4, 'stays in link mode');
 await clickAnchor('left');
 await mouse('mouseMoved', tx, ty);
-assert.equal(await ev(`!!document.querySelector('#viewport .link-preview')`), true, 'prévia depois de escolher o lado');
+assert.equal(await ev(`!!document.querySelector('#viewport .link-preview')`), true, 'preview after choosing the side');
 await mouse('mousePressed', tx, ty);
 await mouse('mouseReleased', tx, ty);
 await sleep(900);
-assert.equal((await getMap()).links.length, 1, 'ligação gravada');
-assert.equal(await ev(`document.querySelectorAll('#viewport .link').length`), 1, 'seta desenhada');
+assert.equal((await getMap()).links.length, 1, 'link saved');
+assert.equal(await ev(`document.querySelectorAll('#viewport .link').length`), 1, 'arrow drawn');
 await ev(`document.querySelector('#viewport .link-hit').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
 await key('Delete');
 await sleep(900);
-assert.equal((await getMap()).links.length, 0, 'Del apaga a ligação selecionada');
-assert.ok((await texts()).includes('Q2'), 'Del não apagou o nó');
+assert.equal((await getMap()).links.length, 0, 'Del deletes the selected link');
+assert.ok((await texts()).includes('Q2'), 'Del did not delete the node');
 await key('z', 2);
 await sleep(900);
-assert.equal((await getMap()).links.length, 1, 'desfazer restaura a ligação');
-// botão "Ligar" na barra: depois clicar no nó de destino
+assert.equal((await getMap()).links.length, 1, 'undo restores the link');
+// "Ligar" button on the bar: then click the target node
 await clickNode('Q2');
 await ev(`document.querySelector('#link-btn').click()`);
 await clickAnchor('left');
-const [qx, qy] = center(await rect('Recursos'));  // longe dos "+" de Q2
-await mouse('mousePressed', qx, qy);  // sem mover antes: clique direto no destino
+const [qx, qy] = center(await rect('Recursos'));  // far from Q2's "+"
+await mouse('mousePressed', qx, qy);  // without moving first: direct click on the target
 await mouse('mouseReleased', qx, qy);
 await sleep(900);
-assert.equal((await getMap()).links.length, 2, 'botão Ligar cria ligação');
+assert.equal((await getMap()).links.length, 2, 'Ligar button creates a link');
 
-// menu "⋯" do nó: itens, copiar/colar pelo menu e por Ctrl+C/Ctrl+V, novo filho, Esc fecha
+// node "⋯" menu: items, copy/paste through the menu and Ctrl+C/Ctrl+V, new child, Esc closes
 const menuOpen = () => ev(`!document.querySelector('#node-menu').hidden`);
 const menu = (action) => ev(`document.querySelector('#node-menu [data-action="${action}"]').click()`);
 await clickNode('Q2');
 await ev(`document.querySelector('#more-btn').click()`);
-assert.equal(await menuOpen(), true, 'menu abre');
+assert.equal(await menuOpen(), true, 'menu opens');
 assert.deepEqual(await ev(`[...document.querySelectorAll('#node-menu [data-action]')].map(b => b.dataset.action)`),
   ['child', 'sibling', 'collapse', 'focus', 'link', 'copy', 'cut', 'paste', 'delete']);
 await menu('copy');
-assert.equal(await menuOpen(), false, 'menu fecha após ação');
+assert.equal(await menuOpen(), false, 'menu closes after an action');
 await clickNode('Time');
 await ev(`document.querySelector('#more-btn').click()`);
 await menu('paste');
 await sleep(900);
 const timeKids = async () => (await recursos()).children.find(c => c.text === 'Time').children.map(c => c.text);
-assert.deepEqual(await timeKids(), ['Q2'], 'colar pelo menu');
+assert.deepEqual(await timeKids(), ['Q2'], 'paste via the menu');
 await clickNode('Q1');
 await key('c', 2);
 await clickNode('Time');
@@ -306,38 +306,38 @@ await sleep(900);
 assert.deepEqual(await timeKids(), ['Q2', 'Q1'], 'Ctrl+C / Ctrl+V');
 await ev(`document.querySelector('#more-btn').click()`);
 await menu('child');
-assert.equal(await ev(`!document.querySelector('#editor').hidden`), true, 'novo filho pelo menu');
+assert.equal(await ev(`!document.querySelector('#editor').hidden`), true, 'new child via the menu');
 await key('Escape');
 await ev(`document.querySelector('#more-btn').click()`);
 await key('Escape');
-assert.equal(await menuOpen(), false, 'Esc fecha o menu');
+assert.equal(await menuOpen(), false, 'Esc closes the menu');
 await sleep(900);
 
-// clicar fora: fundo do mapa fecha menus e tira a seleção; cabeçalho só fecha menus; setas voltam a selecionar
+// clicking outside: the map background closes menus and clears the selection; the header only closes menus; arrows select again
 const emptyPoint = () => ev(`(() => { for (let y = 120; y < 700; y += 20) for (let x = 20; x < 1300; x += 20) if (document.elementFromPoint(x, y)?.id === 'canvas') return [x, y]; })()`);
 const visible = (sel) => ev(`!document.querySelector('${sel}').hidden`);
-// ponto vazio do cabeçalho (não cai em botão nem no nome, que mudam de largura)
+// empty spot in the header (hits neither a button nor the name, which change width)
 const headerPoint = () => ev(`(() => { for (let x = 400; x < 1300; x += 10) if (document.elementFromPoint(x, 25)?.classList.contains('topbar')) return [x, 25]; })()`);
 await clickNode('Q2');
 await ev(`document.querySelector('#more-btn').click()`);
 assert.equal(await visible('#node-menu'), true);
-const [hx, hy] = await headerPoint(); await mouse('mousePressed', hx, hy); await mouse('mouseReleased', hx, hy);  // cabeçalho (espaço vazio)
-assert.equal(await visible('#node-menu'), false, 'clicar no cabeçalho fecha o menu');
-assert.equal(await visible('#toolbar'), true, 'cabeçalho mantém a seleção');
+const [hx, hy] = await headerPoint(); await mouse('mousePressed', hx, hy); await mouse('mouseReleased', hx, hy);  // header (empty space)
+assert.equal(await visible('#node-menu'), false, 'clicking the header closes the menu');
+assert.equal(await visible('#toolbar'), true, 'header keeps the selection');
 await ev(`document.querySelector('#style-btn').click()`);
 const [ex, ey] = await emptyPoint();
 await mouse('mousePressed', ex, ey); await mouse('mouseReleased', ex, ey);
-assert.equal(await visible('#style-pop'), false, 'fundo fecha o estilo');
-assert.equal(await visible('#toolbar'), false, 'fundo esconde a barra');
-assert.equal(await visible('#add-child'), false, 'fundo esconde o +');
-assert.equal(await ev(`!!document.querySelector('.selected-ring')`), false, 'nada selecionado');
-await key('Delete');  // sem seleção: não faz nada nem quebra
+assert.equal(await visible('#style-pop'), false, 'background closes the style panel');
+assert.equal(await visible('#toolbar'), false, 'background hides the bar');
+assert.equal(await visible('#add-child'), false, 'background hides the +');
+assert.equal(await ev(`!!document.querySelector('.selected-ring')`), false, 'nothing selected');
+await key('Delete');  // no selection: does nothing and does not break
 await key('ArrowRight');
-assert.equal(await ev(`!!document.querySelector('.selected-ring')`), true, 'seta seleciona de novo');
-assert.equal(await ev(`document.querySelector('#toolbar').hidden`), true, 'navegar pelo teclado não abre a barra');
+assert.equal(await ev(`!!document.querySelector('.selected-ring')`), true, 'arrow selects again');
+assert.equal(await ev(`document.querySelector('#toolbar').hidden`), true, 'keyboard navigation does not open the bar');
 await sleep(900);
 
-// curvar ligação: seta selecionada mostra o ponto de controle; arrastar curva; desfazer/refazer; duplo clique volta ao automático
+// bending a link: the selected arrow shows the control point; dragging bends; undo/redo; double click returns to automatic
 await ev(`document.querySelector('#viewport .link-hit').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
 const bh = await ev(`(() => { const r = document.querySelector('#viewport .link-bend').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
 const [bx0, by0] = center(bh);
@@ -346,68 +346,68 @@ for (let i = 1; i <= 5; i++) { await mouse('mouseMoved', bx0 + 18 * i, by0 + 14 
 await mouse('mouseReleased', bx0 + 90, by0 + 70);
 await sleep(900);
 const bend = async () => (await getMap()).links[0].bend;
-assert.ok(Array.isArray(await bend()), 'curva gravada');
-assert.match(await ev(`document.querySelector('#viewport .link').getAttribute('d')`), / Q/, 'seta passa pelo ponto');
+assert.ok(Array.isArray(await bend()), 'curve saved');
+assert.match(await ev(`document.querySelector('#viewport .link').getAttribute('d')`), / Q/, 'arrow passes through the point');
 await key('z', 2);
 await sleep(900);
-assert.equal(await bend(), undefined, 'desfazer a curva');
+assert.equal(await bend(), undefined, 'undo the curve');
 await key('z', 2 | 8);
 await sleep(900);
-assert.ok(await bend(), 'refazer a curva');
+assert.ok(await bend(), 'redo the curve');
 await ev(`document.querySelector('#viewport .link-bend').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
 await sleep(900);
-assert.equal(await bend(), undefined, 'duplo clique volta à curva automática');
+assert.equal(await bend(), undefined, 'double click returns to the automatic curve');
 
-// pontos de conexão: só no modo "Ligar" aparecem os 4 "+" no nó de origem; escolhe o lado e clica no destino
+// connection points: the 4 "+" on the origin node appear only in "Ligar" mode; choose the side and click the target
 const hoverOn = async (prefix) => { const [x, y] = center(await rect(prefix)); await mouse('mouseMoved', x, y); await sleep(50); };
 const anchorsShown = () => ev(`[...document.querySelectorAll('.link-anchor')].filter(b => !b.hidden).map(b => b.dataset.side).sort()`);
 await clickNode('Cronograma');
-assert.deepEqual(await anchorsShown(), [], 'sem "+" fora do modo ligar');
+assert.deepEqual(await anchorsShown(), [], 'no "+" outside link mode');
 await hoverOn('Cronograma');
-assert.deepEqual(await anchorsShown(), [], 'hover não mostra "+"');
+assert.deepEqual(await anchorsShown(), [], 'hover does not show "+"');
 await ev(`document.querySelector('#more-btn').click()`);
 await menu('link');
-assert.deepEqual(await anchorsShown(), ['bottom', 'left', 'right', 'top'], '4 possibilidades de conexão');
+assert.deepEqual(await anchorsShown(), ['bottom', 'left', 'right', 'top'], '4 connection options');
 const anchorTop = await ev(`(() => { const r = document.querySelector('.link-anchor[data-side="top"]').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
 const [ax, ay] = center(anchorTop);
-await mouse('mousePressed', ax, ay); await mouse('mouseReleased', ax, ay);  // escolhe o lado de cima
+await mouse('mousePressed', ax, ay); await mouse('mouseReleased', ax, ay);  // chooses the top side
 assert.equal(await ev(`document.querySelector('.link-anchor[data-side="top"]').classList.contains('active')`), true);
 const recTop = await rect('Recursos');
-const [rx, ry] = [recTop.x + recTop.w / 2, recTop.y + 2];  // perto do topo de Recursos
+const [rx, ry] = [recTop.x + recTop.w / 2, recTop.y + 2];  // near the top of Recursos
 await mouse('mouseMoved', rx, ry);
-assert.equal(await ev(`document.querySelectorAll('#viewport .anchor-dot').length`), 4, 'destino mostra os 4 pontos');
+assert.equal(await ev(`document.querySelectorAll('#viewport .anchor-dot').length`), 4, 'target shows the 4 points');
 await mouse('mousePressed', rx, ry); await mouse('mouseReleased', rx, ry);
 await sleep(900);
 const newLink = (await getMap()).links.at(-1);
 const cron = (await getMap()).root.children.find(c => c.text === 'Cronograma');
 assert.equal(newLink.from, cron.id);
-assert.deepEqual([newLink.fromSide, newLink.toSide], ['top', 'top'], 'lados gravados');
-assert.deepEqual(await anchorsShown(), [], '"+" somem ao terminar');
+assert.deepEqual([newLink.fromSide, newLink.toSide], ['top', 'top'], 'sides saved');
+assert.deepEqual(await anchorsShown(), [], '"+" disappear when finished');
 
-// mover o destino da ligação: arrastar a ponta da seta selecionada para outro nó; Ctrl+Z desfaz
+// moving the link's target: drag the end of the selected arrow to another node; Ctrl+Z undoes
 await ev(`document.querySelector('#viewport .link-hit').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
 const endTo = await ev(`(() => { const r = document.querySelector('#viewport .link-end[data-which="to"]').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
 const [ex0, ey0] = center(endTo), [ox, oy] = center(await rect('Orçamento'));
 await mouse('mousePressed', ex0, ey0);
 for (let i = 1; i <= 5; i++) { await mouse('mouseMoved', ex0 + (ox - ex0) * i / 5, ey0 + (oy - ey0) * i / 5); await sleep(30); }
-assert.equal(await ev(`!!document.querySelector('#viewport .link-target')`), true, 'novo destino destacado');
+assert.equal(await ev(`!!document.querySelector('#viewport .link-target')`), true, 'new target highlighted');
 await mouse('mouseReleased', ox, oy);
 await sleep(900);
 const orc = (await recursos()).children.find(c => c.text === 'Orçamento');
 const first = (await getMap()).links[0];
-assert.equal(first.to, orc.id, 'destino movido');
-assert.ok(first.toSide, 'lado de chegada gravado');
+assert.equal(first.to, orc.id, 'target moved');
+assert.ok(first.toSide, 'arrival side saved');
 await key('z', 2);
 await sleep(900);
-assert.notEqual((await getMap()).links[0].to, orc.id, 'desfazer volta ao destino antigo');
+assert.notEqual((await getMap()).links[0].to, orc.id, 'undo goes back to the old target');
 
-// barra da ligação: cor, pontas inicial/final, inverter, rótulo e excluir
+// link bar: colour, start/end ends, reverse, label and delete
 const linkBar = (sel) => ev(`!document.querySelector('${sel}').hidden`);
 const clickSel = (sel) => ev(`document.querySelector('${sel}').click()`);
 const link0 = async () => (await getMap()).links[0];
 await ev(`document.querySelector('#viewport .link-hit').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
-assert.equal(await linkBar('#link-toolbar'), true, 'barra da ligação aparece');
-assert.equal(await visible('#toolbar'), false, 'barra do nó some');
+assert.equal(await linkBar('#link-toolbar'), true, 'link bar appears');
+assert.equal(await visible('#toolbar'), false, 'node bar disappears');
 await clickSel('#link-color-btn');
 assert.equal(await linkBar('#link-colors'), true);
 await clickSel('#link-colors [data-value="#e5383b"]');
@@ -419,39 +419,39 @@ await clickSel('#link-markers [data-value="dot-open"]');
 await sleep(900);
 let l0 = await link0();
 assert.deepEqual([l0.color, l0.startMarker, l0.endMarker], ['#e5383b', 'dot-open', 'diamond']);
-assert.equal(await ev(`document.querySelector('#viewport path.link').getAttribute('stroke')`), '#e5383b', 'cor aplicada');
-assert.match(await ev(`document.querySelector('#viewport path.link').getAttribute('marker-start')`), /dot-open/, 'ponta inicial desenhada');
+assert.equal(await ev(`document.querySelector('#viewport path.link').getAttribute('stroke')`), '#e5383b', 'colour applied');
+assert.match(await ev(`document.querySelector('#viewport path.link').getAttribute('marker-start')`), /dot-open/, 'start end drawn');
 await clickSel('#link-swap');
 await sleep(900);
 l0 = await link0();
-assert.deepEqual([l0.startMarker, l0.endMarker], ['diamond', 'dot-open'], 'inverter troca as pontas');
+assert.deepEqual([l0.startMarker, l0.endMarker], ['diamond', 'dot-open'], 'reverse swaps the ends');
 promptAnswer = 'depende de';
 await clickSel('#link-more');
 await clickSel('#link-menu [data-action="label"]');
 await sleep(900);
-assert.equal((await link0()).label, 'depende de', 'rótulo gravado');
-assert.equal(await ev(`document.querySelector('#viewport .link-label')?.textContent`), 'depende de', 'rótulo desenhado');
+assert.equal((await link0()).label, 'depende de', 'label saved');
+assert.equal(await ev(`document.querySelector('#viewport .link-label')?.textContent`), 'depende de', 'label drawn');
 const nLinks = (await getMap()).links.length;
 await clickSel('#link-more');
 await clickSel('#link-menu [data-action="delete"]');
 await sleep(900);
-assert.equal((await getMap()).links.length, nLinks - 1, 'excluir ligação pelo menu');
-assert.equal(await linkBar('#link-toolbar'), false, 'barra some ao excluir');
+assert.equal((await getMap()).links.length, nLinks - 1, 'delete the link via the menu');
+assert.equal(await linkBar('#link-toolbar'), false, 'bar disappears on delete');
 
-// estilo em qualquer nó: borda num nó sublinhado vira caixa vazada; cor vira caixa preenchida
+// style on any node: a border on an underlined node becomes an open box; a colour becomes a filled box
 const timeG = `[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('Time'))`;
 await clickNode('Time');
 await ev(`document.querySelector('#style-btn').click()`);
 await tab('border');
 await pick('border', 'borderColor', '#8b3fd9');
-assert.equal(await ev(`(() => { const r = ${timeG}.querySelector('rect[stroke]'); return r && r.getAttribute('stroke') + ' ' + r.getAttribute('fill'); })()`), '#8b3fd9 transparent', 'borda em nó comum vira caixa');
+assert.equal(await ev(`(() => { const r = ${timeG}.querySelector('rect[stroke]'); return r && r.getAttribute('stroke') + ' ' + r.getAttribute('fill'); })()`), '#8b3fd9 transparent', 'border on a plain node becomes a box');
 await tab('shape');
 await pick('shape', 'color', '#2f5bea');
-assert.equal(await ev(`${timeG}.querySelector('rect[stroke]').getAttribute('fill')`), '#2f5bea', 'cor em nó comum preenche');
+assert.equal(await ev(`${timeG}.querySelector('rect[stroke]').getAttribute('fill')`), '#2f5bea', 'colour on a plain node fills it');
 await key('Escape');
 await sleep(900);
 
-// redimensionar: bolinha no canto do nó selecionado muda a largura; texto quebra; duplo clique volta ao automático
+// resizing: the dot at the selected node's corner changes the width; text wraps; double click returns to automatic
 const timeNode = async () => (await recursos()).children.find(c => c.text.startsWith('Equipe') || c.text === 'Time');
 await clickNode('Time');
 await key('F2'); await typeText('Equipe do projeto e responsabilidades'); await key('Enter');
@@ -460,27 +460,27 @@ await clickNode('Equipe');
 const rh = await ev(`(() => { const r = document.querySelector('#viewport .resize-handle').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
 const [rx0, ry0] = center(rh);
 const wBefore = (await rect('Equipe')).w;
-// Time fica no lado esquerdo: a bolinha está no canto de fora (esquerda) e arrastar para a direita estreita
+// Time is on the left side: the dot is at the outer corner (left) and dragging right narrows it
 await mouse('mousePressed', rx0, ry0);
 for (let i = 1; i <= 5; i++) { await mouse('mouseMoved', rx0 + 20 * i, ry0); await sleep(30); }
 await mouse('mouseReleased', rx0 + 100, ry0);
 await sleep(900);
 const tn = await timeNode();
-assert.ok(tn.width && tn.width < wBefore, `largura gravada menor (${tn.width} < ${wBefore})`);
-assert.ok(await ev(`[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('Equipe')).querySelectorAll('tspan').length`) > 1, 'texto quebra em linhas');
+assert.ok(tn.width && tn.width < wBefore, `saved width is smaller (${tn.width} < ${wBefore})`);
+assert.ok(await ev(`[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('Equipe')).querySelectorAll('tspan').length`) > 1, 'text wraps into lines');
 await ev(`document.querySelector('#viewport .resize-handle').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
 await sleep(900);
-assert.equal((await timeNode()).width, undefined, 'duplo clique volta ao automático');
+assert.equal((await timeNode()).width, undefined, 'double click returns to automatic');
 await key('z', 2);
 await sleep(900);
-assert.ok((await timeNode()).width, 'desfazer restaura a largura');
-assert.equal(await ev(`!!document.querySelector('#viewport .link-handle')`), false, 'bolinha não cria mais ligação');
+assert.ok((await timeNode()).width, 'undo restores the width');
+assert.equal(await ev(`!!document.querySelector('#viewport .link-handle')`), false, 'dot no longer creates a link');
 
-// imagem no nó: botão da barra abre o painel; escolher arquivo envia ao servidor e mostra no nó; remover tira
+// node image: the bar button opens the panel; choosing a file uploads it to the server and shows it on the node; remove takes it off
 const orcNode = async () => (await recursos()).children.find(c => c.text === 'Orçamento');
 await clickNode('Orçamento');
 await ev(`document.querySelector('#image-btn').click()`);
-assert.equal(await ev(`!document.querySelector('#image-pop').hidden`), true, 'painel de imagem abre');
+assert.equal(await ev(`!document.querySelector('#image-pop').hidden`), true, 'image panel opens');
 await ev(`(async () => {
   const c = document.createElement('canvas'); c.width = 40; c.height = 30;
   c.getContext('2d').fillRect(0, 0, 40, 30);
@@ -490,23 +490,23 @@ await ev(`(async () => {
 })()`);
 await sleep(1500);
 const img = (await orcNode()).image;
-assert.ok(img && /^[a-f0-9]{32}\.png$/.test(img.id), 'imagem gravada no nó');
-assert.deepEqual([img.w, img.h], [40, 30], 'tamanho natural guardado');
+assert.ok(img && /^[a-f0-9]{32}\.png$/.test(img.id), 'image saved on the node');
+assert.deepEqual([img.w, img.h], [40, 30], 'natural size stored');
 const href = await ev(`[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('Orçamento')).querySelector('image')?.getAttribute('href')`);
-assert.ok(href?.endsWith(img.id), 'imagem desenhada no nó');
-assert.equal(await ev(`fetch('${href}').then(r => r.status)`), 200, 'servidor entrega a imagem');
+assert.ok(href?.endsWith(img.id), 'image drawn on the node');
+assert.equal(await ev(`fetch('${href}').then(r => r.status)`), 200, 'server serves the image');
 await ev(`document.querySelector('#image-btn').click()`);
 await ev(`document.querySelector('#image-remove').click()`);
 await sleep(900);
-assert.equal((await orcNode()).image, undefined, 'remover imagem');
+assert.equal((await orcNode()).image, undefined, 'remove the image');
 await key('z', 2);
 await sleep(900);
-assert.ok((await orcNode()).image, 'desfazer volta a imagem');
+assert.ok((await orcNode()).image, 'undo brings the image back');
 
-// anexos: botão 📎 abre a lista; adicionar vários; selo com contagem no nó; baixar; remover; desfazer
+// attachments: the 📎 button opens the list; add several; badge with a count on the node; download; remove; undo
 await clickNode('Orçamento');
 await ev(`document.querySelector('#attach-btn').click()`);
-assert.equal(await ev(`!document.querySelector('#attach-pop').hidden`), true, 'painel de anexos abre');
+assert.equal(await ev(`!document.querySelector('#attach-pop').hidden`), true, 'attachments panel opens');
 await ev(`(() => {
   const dt = new DataTransfer();
   dt.items.add(new File(['ata da reunião'], 'ata.txt', { type: 'text/plain' }));
@@ -515,69 +515,69 @@ await ev(`(() => {
 })()`);
 await sleep(1500);
 let atts = (await orcNode()).attachments;
-assert.deepEqual(atts?.map(a => a.name), ['ata.txt', 'plano.pdf'], 'anexos gravados');
+assert.deepEqual(atts?.map(a => a.name), ['ata.txt', 'plano.pdf'], 'attachments saved');
 const orcG = `[...document.querySelectorAll('.node')].find(g => g.textContent.startsWith('Orçamento'))`;
-assert.equal(await ev(`document.querySelector('#viewport .attach-badge[data-id="' + ${orcG}.dataset.id + '"]')?.textContent`), '2', 'selo com o número de anexos');
+assert.equal(await ev(`document.querySelector('#viewport .attach-badge[data-id="' + ${orcG}.dataset.id + '"]')?.textContent`), '2', 'badge with the number of attachments');
 const links = await ev(`[...document.querySelectorAll('#attach-list a[download]')].map(a => [a.getAttribute('download'), a.getAttribute('href')])`);
-assert.equal(links.length, 2, 'lista com links de download');
+assert.equal(links.length, 2, 'list with download links');
 assert.equal(links[0][0], 'ata.txt');
-assert.equal(await ev(`fetch('${links[0][1]}').then(r => r.headers.get('content-disposition'))`), 'attachment', 'anexo baixa como arquivo');
+assert.equal(await ev(`fetch('${links[0][1]}').then(r => r.headers.get('content-disposition'))`), 'attachment', 'attachment downloads as a file');
 await ev(`document.querySelector('#attach-list [data-remove]').click()`);
 await sleep(900);
-assert.deepEqual((await orcNode()).attachments.map(a => a.name), ['plano.pdf'], 'remover anexo');
+assert.deepEqual((await orcNode()).attachments.map(a => a.name), ['plano.pdf'], 'remove the attachment');
 await key('z', 2);
 await sleep(900);
-assert.equal((await orcNode()).attachments.length, 2, 'desfazer volta o anexo');
+assert.equal((await orcNode()).attachments.length, 2, 'undo brings the attachment back');
 await key('Escape');
 await clickNode('Q2');
 await ev(`document.querySelector('#viewport .attach-badge').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
-assert.equal(await ev(`!document.querySelector('#attach-pop').hidden`), true, 'clicar no selo abre os anexos');
+assert.equal(await ev(`!document.querySelector('#attach-pop').hidden`), true, 'clicking the badge opens the attachments');
 assert.equal(await ev(`document.querySelectorAll('#attach-list li').length`), 2);
 await key('Escape');
 
-// comentários: botão 💬 abre o painel; Enter envia; ícone no nó; digitar no campo não dispara atalhos; apagar; desfazer; Alt+Shift+C
+// comments: the 💬 button opens the panel; Enter sends; icon on the node; typing in the field does not fire shortcuts; delete; undo; Alt+Shift+C
 await clickNode('Orçamento');
 await ev(`document.querySelector('#comment-btn').click()`);
-assert.equal(await ev(`!document.querySelector('#comment-pop').hidden`), true, 'painel de comentários abre');
-assert.equal(await ev(`document.activeElement?.id`), 'comment-input', 'campo recebe o foco');
-await key('x');  // letra no campo não pode começar a editar o nó
-assert.equal(await ev(`document.querySelector('#editor').hidden`), true, 'atalhos do mapa não disparam no campo');
+assert.equal(await ev(`!document.querySelector('#comment-pop').hidden`), true, 'comments panel opens');
+assert.equal(await ev(`document.activeElement?.id`), 'comment-input', 'field gets focus');
+await key('x');  // a letter in the field must not start editing the node
+assert.equal(await ev(`document.querySelector('#editor').hidden`), true, 'map shortcuts do not fire in the field');
 await ev(`document.querySelector('#comment-input').value = ''`);
 await typeText('Revisar valores');
 await key('Enter');
 await sleep(900);
-assert.deepEqual((await orcNode()).comments?.map(c => c.text), ['Revisar valores'], 'comentário gravado');
-assert.ok((await orcNode()).comments[0].at, 'com data/hora');
-assert.equal(await ev(`document.querySelectorAll('#comment-list li').length`), 1, 'lista mostra o comentário');
-assert.equal(await ev(`!!${orcG}.querySelector('.comment-icon')`), true, 'ícone de comentário no nó');
-assert.equal(await ev(`document.querySelector('#comment-input').value`), '', 'campo limpo após enviar');
+assert.deepEqual((await orcNode()).comments?.map(c => c.text), ['Revisar valores'], 'comment saved');
+assert.ok((await orcNode()).comments[0].at, 'with date/time');
+assert.equal(await ev(`document.querySelectorAll('#comment-list li').length`), 1, 'list shows the comment');
+assert.equal(await ev(`!!${orcG}.querySelector('.comment-icon')`), true, 'comment icon on the node');
+assert.equal(await ev(`document.querySelector('#comment-input').value`), '', 'field cleared after sending');
 await ev(`document.querySelector('#comment-list [data-del]').click()`);
 await sleep(900);
-assert.equal((await orcNode()).comments, undefined, 'apagar comentário');
-await ev(`document.activeElement.blur()`);  // Ctrl+Z dentro do campo é o desfazer do próprio campo
+assert.equal((await orcNode()).comments, undefined, 'delete the comment');
+await ev(`document.activeElement.blur()`);  // Ctrl+Z inside the field is the field's own undo
 await key('z', 2);
 await sleep(900);
-assert.equal((await orcNode()).comments.length, 1, 'desfazer volta o comentário');
+assert.equal((await orcNode()).comments.length, 1, 'undo brings the comment back');
 await ev(`document.activeElement.blur()`);
 await key('Escape');
 assert.equal(await ev(`document.querySelector('#comment-pop').hidden`), true);
 await clickNode('Orçamento');
 await key('c', 1 | 8);  // Alt+Shift+C
-assert.equal(await ev(`!document.querySelector('#comment-pop').hidden`), true, 'atalho Alt+Shift+C abre comentários');
+assert.equal(await ev(`!document.querySelector('#comment-pop').hidden`), true, 'Alt+Shift+C shortcut opens the comments');
 await ev(`document.activeElement.blur()`);
 await key('Escape');
 await clickNode('Q2');
 await ev(`${orcG}.querySelector('.comment-icon').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
-assert.equal(await ev(`!document.querySelector('#comment-pop').hidden`), true, 'clicar no ícone abre os comentários');
+assert.equal(await ev(`!document.querySelector('#comment-pop').hidden`), true, 'clicking the icon opens the comments');
 await ev(`document.activeElement.blur()`);
 await key('Escape');
 
-// estilo de texto: negrito, itálico, tamanho, cor; Ctrl+B alterna negrito
+// text style: bold, italic, size, colour; Ctrl+B toggles bold
 const orcFont = () => ev(`${orcG}.querySelector('text').getAttribute('style')`);
 await clickNode('Orçamento');
 const wPlain = (await rect('Orçamento')).w;
 await ev(`document.querySelector('#text-btn').click()`);
-assert.equal(await ev(`!document.querySelector('#text-pop').hidden`), true, 'painel de texto abre');
+assert.equal(await ev(`!document.querySelector('#text-pop').hidden`), true, 'text panel opens');
 await ev(`document.querySelector('#text-pop [data-toggle="textBold"]').click()`);
 await ev(`document.querySelector('#text-pop [data-toggle="textItalic"]').click()`);
 await ev(`document.querySelector('#text-pop [data-prop="textSize"] [data-value="large"]').click()`);
@@ -585,147 +585,147 @@ await ev(`document.querySelector('#text-pop [data-prop="textColor"] [data-value=
 await sleep(900);
 let on = await orcNode();
 assert.deepEqual([on.textBold, on.textItalic, on.textSize, on.textColor], [true, true, 'large', '#e5383b']);
-assert.match(await orcFont(), /italic 700 18px/, 'fonte aplicada');
-assert.equal(await ev(`${orcG}.querySelector('text').getAttribute('fill')`), '#e5383b', 'cor do texto');
-assert.ok((await rect('Orçamento')).w > wPlain, 'texto maior alarga o nó');
+assert.match(await orcFont(), /italic 700 18px/, 'font applied');
+assert.equal(await ev(`${orcG}.querySelector('text').getAttribute('fill')`), '#e5383b', 'text colour');
+assert.ok((await rect('Orçamento')).w > wPlain, 'larger text widens the node');
 await ev(`document.querySelector('#text-pop [data-prop="textSize"] [data-value=""]').click()`);
 await sleep(900);
-assert.equal((await orcNode()).textSize, null, 'Médio volta ao padrão');
+assert.equal((await orcNode()).textSize, null, 'Médio goes back to the default');
 await key('Escape');
 await clickNode('Orçamento');
 await key('b', 2);
 await sleep(900);
-assert.equal((await orcNode()).textBold, null, 'Ctrl+B volta ao padrão (não negrito)');
+assert.equal((await orcNode()).textBold, null, 'Ctrl+B goes back to the default (not bold)');
 
-// link (URL) no nó: só http(s); ícone 🔗 no nó abre em nova aba; remover
+// link (URL) on the node: http(s) only; the 🔗 icon on the node opens in a new tab; remove
 await clickNode('Orçamento');
 await ev(`document.querySelector('#url-btn').click()`);
-assert.equal(await ev(`!document.querySelector('#url-pop').hidden`), true, 'painel de link abre');
-assert.equal(await ev(`document.activeElement?.id`), 'url-input', 'campo recebe o foco');
+assert.equal(await ev(`!document.querySelector('#url-pop').hidden`), true, 'link panel opens');
+assert.equal(await ev(`document.activeElement?.id`), 'url-input', 'field gets focus');
 await typeText('javascript:alert(1)');
 await key('Enter');
 await sleep(300);
-assert.equal((await orcNode()).url, undefined, 'javascript: recusado');
-assert.equal(await ev(`!document.querySelector('#url-error').hidden`), true, 'mostra o erro');
+assert.equal((await orcNode()).url, undefined, 'javascript: refused');
+assert.equal(await ev(`!document.querySelector('#url-error').hidden`), true, 'shows the error');
 await ev(`document.querySelector('#url-input').value = ''`);
 await typeText('exemplo.com/docs');
 await key('Enter');
 await sleep(900);
-assert.equal((await orcNode()).url, 'https://exemplo.com/docs', 'endereço normalizado e gravado');
-assert.equal(await ev(`!!${orcG}.querySelector('.url-icon')`), true, 'ícone de link no nó');
+assert.equal((await orcNode()).url, 'https://exemplo.com/docs', 'address normalised and saved');
+assert.equal(await ev(`!!${orcG}.querySelector('.url-icon')`), true, 'link icon on the node');
 await ev(`window.open = (u, t, f) => { window.__opened = [u, t, f]; }`);
 await ev(`${orcG}.querySelector('.url-icon').dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
-assert.deepEqual(await ev(`window.__opened`), ['https://exemplo.com/docs', '_blank', 'noopener,noreferrer'], 'clicar abre em nova aba');
+assert.deepEqual(await ev(`window.__opened`), ['https://exemplo.com/docs', '_blank', 'noopener,noreferrer'], 'clicking opens in a new tab');
 await clickNode('Orçamento');
 await ev(`document.querySelector('#url-btn').click()`);
 await ev(`document.querySelector('#url-remove').click()`);
 await sleep(900);
-assert.equal((await orcNode()).url, undefined, 'remover link');
+assert.equal((await orcNode()).url, undefined, 'remove the link');
 await ev(`document.activeElement.blur()`);
 await key('Escape');
 
-// modo foco: Ctrl+. mostra só o ramo; Esc sai; menu "Focar neste ramo"; botão "Sair do foco"
+// focus mode: Ctrl+. shows only the branch; Esc leaves; "Focar neste ramo" menu; "Sair do foco" button
 await clickNode('Cronograma');
 await key('.', 2);
 await sleep(300);
-assert.equal(await ev(`!document.querySelector('#focus-bar').hidden`), true, 'barra do foco aparece');
+assert.equal(await ev(`!document.querySelector('#focus-bar').hidden`), true, 'focus bar appears');
 const inFocus = await texts();
-assert.ok(inFocus.some(t => t.startsWith('Cronograma')), 'ramo focado aparece');
-assert.ok(!inFocus.some(t => t.startsWith('Recursos')), 'outros ramos somem');
+assert.ok(inFocus.some(t => t.startsWith('Cronograma')), 'focused branch appears');
+assert.ok(!inFocus.some(t => t.startsWith('Recursos')), 'other branches disappear');
 await key('Escape');
 await sleep(300);
-assert.equal(await ev(`document.querySelector('#focus-bar').hidden`), true, 'Esc sai do foco');
-assert.ok((await texts()).some(t => t.startsWith('Recursos')), 'mapa inteiro de volta');
+assert.equal(await ev(`document.querySelector('#focus-bar').hidden`), true, 'Esc leaves focus');
+assert.ok((await texts()).some(t => t.startsWith('Recursos')), 'whole map is back');
 await clickNode('Cronograma');
 await ev(`document.querySelector('#more-btn').click()`);
 await menu('focus');
 await sleep(300);
-assert.ok(!(await texts()).some(t => t.startsWith('Recursos')), 'menu "Focar neste ramo"');
-await key('Tab'); await typeText('Novo no foco'); await key('Enter');  // edição continua funcionando no foco
+assert.ok(!(await texts()).some(t => t.startsWith('Recursos')), '"Focar neste ramo" menu');
+await key('Tab'); await typeText('Novo no foco'); await key('Enter');  // editing keeps working in focus
 await sleep(900);
 assert.ok((await getMap()).root.children.find(c => c.text.startsWith('Cronograma')).children.some(c => c.text === 'Novo no foco'));
 await ev(`document.querySelector('#focus-exit').click()`);
 await sleep(300);
-assert.equal(await ev(`document.querySelector('#focus-bar').hidden`), true, 'botão sai do foco');
+assert.equal(await ev(`document.querySelector('#focus-bar').hidden`), true, 'button leaves focus');
 
-// modo outline: lista editável; Enter cria item; Tab/Shift+Tab recua; Backspace no vazio apaga; Esc volta ao mapa
+// outline mode: editable list; Enter creates an item; Tab/Shift+Tab indents; Backspace on an empty item deletes; Esc returns to the map
 const cronNode = async () => (await getMap()).root.children.find(c => c.text.startsWith('Cronograma'));
 await ev(`document.querySelector('#outline-btn').click()`);
-assert.equal(await ev(`!document.querySelector('#outline-view').hidden`), true, 'outline aparece');
-assert.equal(await ev(`getComputedStyle(document.querySelector('#canvas')).display`), 'none', 'mapa some');
+assert.equal(await ev(`!document.querySelector('#outline-view').hidden`), true, 'outline appears');
+assert.equal(await ev(`getComputedStyle(document.querySelector('#canvas')).display`), 'none', 'map disappears');
 const countVisible = (n) => 1 + (n.collapsed ? 0 : n.children.reduce((a, c) => a + countVisible(c), 0));
-assert.equal(await ev(`document.querySelectorAll('#outline-view input').length`), countVisible((await getMap()).root), 'uma linha por nó visível');
+assert.equal(await ev(`document.querySelectorAll('#outline-view input').length`), countVisible((await getMap()).root), 'one line per visible node');
 const q2 = (await cronNode()).children.find(c => c.text === 'Q2');
 await ev(`(() => { const i = document.querySelector('#outline-view [data-id="${q2.id}"] > .row input'); i.focus(); i.setSelectionRange(99, 99); })()`);
 await key('Enter');
-assert.equal(await ev(`document.activeElement.value`), '', 'Enter cria item vazio com foco');
+assert.equal(await ev(`document.activeElement.value`), '', 'Enter creates an empty item with focus');
 await typeText('Q3');
 await key('Enter');
-await key('Backspace');  // item vazio: apaga e volta para o anterior
+await key('Backspace');  // empty item: deletes and goes back to the previous one
 await sleep(900);
-assert.deepEqual((await cronNode()).children.map(c => c.text).filter(t => /^Q\d$/.test(t)), ['Q1', 'Q2', 'Q3'], 'Q3 criado, vazio apagado');
-assert.equal(await ev(`document.activeElement.value`), 'Q3', 'foco volta para o item anterior');
+assert.deepEqual((await cronNode()).children.map(c => c.text).filter(t => /^Q\d$/.test(t)), ['Q1', 'Q2', 'Q3'], 'Q3 created, empty one deleted');
+assert.equal(await ev(`document.activeElement.value`), 'Q3', 'focus goes back to the previous item');
 await key('Tab');
 await sleep(900);
-assert.deepEqual((await cronNode()).children.find(c => c.text === 'Q2').children.map(c => c.text), ['Q3'], 'Tab recua para dentro de Q2');
+assert.deepEqual((await cronNode()).children.find(c => c.text === 'Q2').children.map(c => c.text), ['Q3'], 'Tab indents into Q2');
 await key('Tab', 8);
 await sleep(900);
-assert.ok((await cronNode()).children.some(c => c.text === 'Q3'), 'Shift+Tab desrecua');
+assert.ok((await cronNode()).children.some(c => c.text === 'Q3'), 'Shift+Tab outdents');
 await ev(`(() => { const i = document.activeElement; i.value = 'Q3 revisado'; })()`);
-await key('ArrowUp');  // sair da linha confirma o texto
+await key('ArrowUp');  // leaving the line confirms the text
 await sleep(900);
-assert.ok((await cronNode()).children.some(c => c.text === 'Q3 revisado'), 'edição de texto no outline');
+assert.ok((await cronNode()).children.some(c => c.text === 'Q3 revisado'), 'text editing in the outline');
 await key('Escape');
-assert.equal(await ev(`document.querySelector('#outline-view').hidden`), true, 'Esc volta ao mapa');
-assert.ok((await texts()).includes('Q3 revisado'), 'mapa mostra o item novo');
+assert.equal(await ev(`document.querySelector('#outline-view').hidden`), true, 'Esc returns to the map');
+assert.ok((await texts()).includes('Q3 revisado'), 'map shows the new item');
 
-// exportar: Markdown, PNG (imagem de verdade) e PDF (impressão do navegador)
+// export: Markdown, PNG (a real image) and PDF (browser print)
 await ev(`(() => {
   window.__downloads = [];
   HTMLAnchorElement.prototype.click = function () { if (this.download) window.__downloads.push([this.download, this.href]); };
   window.print = () => { window.__printed = true; };
 })()`);
 await ev(`document.querySelector('#export-btn').click()`);
-assert.equal(await ev(`!document.querySelector('#export-menu').hidden`), true, 'menu exportar abre');
+assert.equal(await ev(`!document.querySelector('#export-menu').hidden`), true, 'export menu opens');
 await ev(`document.querySelector('#export-menu [data-export="md"]').click()`);
 await sleep(300);
 let dl = await ev(`window.__downloads.at(-1)`);
-assert.match(dl[0], /\.md$/, 'arquivo .md');
+assert.match(dl[0], /\.md$/, '.md file');
 const md = await ev(`fetch('${dl[1]}').then(r => r.text())`);
-assert.match(md, /^# Planejamento/, 'título no Markdown');
-assert.match(md, /\n- Recursos/, 'ramos no Markdown');
+assert.match(md, /^# Planejamento/, 'title in the Markdown');
+assert.match(md, /\n- Recursos/, 'branches in the Markdown');
 await ev(`document.querySelector('#export-btn').click()`);
 await ev(`document.querySelector('#export-menu [data-export="png"]').click()`);
 await sleep(2500);
 dl = await ev(`window.__downloads.at(-1)`);
-assert.match(dl[0], /\.png$/, 'arquivo .png');
+assert.match(dl[0], /\.png$/, '.png file');
 const png = await ev(`fetch('${dl[1]}').then(r => r.arrayBuffer()).then(b => [b.byteLength, [...new Uint8Array(b.slice(0, 4))]])`);
-assert.ok(png[0] > 5000, `PNG com conteúdo (${png[0]} bytes)`);
-assert.deepEqual(png[1], [137, 80, 78, 71], 'assinatura PNG');
+assert.ok(png[0] > 5000, `PNG has content (${png[0]} bytes)`);
+assert.deepEqual(png[1], [137, 80, 78, 71], 'PNG signature');
 await ev(`document.querySelector('#export-btn').click()`);
 await ev(`document.querySelector('#export-menu [data-export="pdf"]').click()`);
 await sleep(300);
-assert.equal(await ev(`window.__printed`), true, 'PDF abre a impressão');
-assert.equal(await ev(`document.querySelector('#export-menu').hidden`), true, 'menu fecha');
+assert.equal(await ev(`window.__printed`), true, 'PDF opens the print dialog');
+assert.equal(await ev(`document.querySelector('#export-menu').hidden`), true, 'menu closes');
 
-// revisão M4: Esc num nó recém-criado não deixa passo vazio no desfazer
+// review M4: Esc on a freshly created node leaves no empty undo step
 const q1Text = async () => (await getMap()).root.children.find(c => c.text.startsWith('Cronograma')).children[0].text;
 await clickNode('Q1');
 await key('F2'); await typeText('Q1 editado'); await key('Enter');
-await key('Tab'); await key('Escape');  // cria e descarta um filho
+await key('Tab'); await key('Escape');  // creates and discards a child
 await key('z', 2);
 await sleep(900);
-assert.equal(await q1Text(), 'Q1', 'primeiro Ctrl+Z desfaz a última mudança real');
+assert.equal(await q1Text(), 'Q1', 'the first Ctrl+Z undoes the last real change');
 
-// revisão M6: começar a editar com tecla morta (acento) não perde o acento
+// review M6: starting an edit with a dead key (accent) does not lose the accent
 await clickNode('Q1');
 await cmd('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Dead', code: 'Quote', windowsVirtualKeyCode: 222 });
 await cmd('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Dead', code: 'Quote', windowsVirtualKeyCode: 222 });
 await typeText('á');
-assert.equal(await ev(`document.querySelector('#editor').value`), 'á', 'acento vai para a edição');
+assert.equal(await ev(`document.querySelector('#editor').value`), 'á', 'accent goes into the edit');
 await key('Escape');
 
-// revisão M2: com erro ao salvar, sair do mapa pergunta; cancelar mantém no mapa com a alteração pendente
+// review M2: with a save error, leaving the map asks; cancelling stays on the map with the change pending
 await ev(`(() => { window.__realFetch = window.fetch; window.fetch = (u, o) => (o?.method === 'PUT' ? Promise.reject(new Error('offline')) : window.__realFetch(u, o)); })()`);
 await clickNode('Q1');
 await key('F2'); await typeText('Q1 offline'); await key('Enter');
@@ -735,147 +735,147 @@ dialogAccept = false;
 await ev(`location.hash = '#/'`);
 await sleep(500);
 dialogAccept = true;
-assert.equal(await ev(`document.body.dataset.view`), 'editor', 'cancelar mantém no mapa');
-assert.match(await ev(`location.hash`), /^#\/map\//, 'endereço volta para o mapa');
-assert.ok((await texts()).includes('Q1 offline'), 'alteração continua na tela');
+assert.equal(await ev(`document.body.dataset.view`), 'editor', 'cancel stays on the map');
+assert.match(await ev(`location.hash`), /^#\/map\//, 'address goes back to the map');
+assert.ok((await texts()).includes('Q1 offline'), 'change stays on screen');
 await ev(`window.fetch = window.__realFetch`);
-await sleep(6000);  // nova tentativa a cada 5 s
-assert.equal(await q1Text(), 'Q1 offline', 'alteração salva quando a rede volta');
+await sleep(6000);  // retry every 5 s
+assert.equal(await q1Text(), 'Q1 offline', 'change saved when the network returns');
 
-// histórico de versões: painel lista versões; restaurar a mais antiga traz o mapa inicial; Ctrl+Z volta
+// version history: the panel lists versions; restoring the oldest brings back the initial map; Ctrl+Z returns
 const recKids = async () => (await recursos()).children.map(c => c.text);
 const recBefore = await recKids();
 await ev(`document.querySelector('#history-btn').click()`);
 await sleep(500);
-assert.equal(await ev(`!document.querySelector('#history-panel').hidden`), true, 'painel de histórico abre');
-assert.ok(await ev(`document.querySelectorAll('#history-list li').length`) >= 1, 'lista versões');
+assert.equal(await ev(`!document.querySelector('#history-panel').hidden`), true, 'history panel opens');
+assert.ok(await ev(`document.querySelectorAll('#history-list li').length`) >= 1, 'lists versions');
 dialogAccept = true;
-await ev(`[...document.querySelectorAll('#history-list [data-restore]')].at(-1).click()`);  // a mais antiga
+await ev(`[...document.querySelectorAll('#history-list [data-restore]')].at(-1).click()`);  // the oldest
 await sleep(1200);
-assert.deepEqual(await recKids(), ['Time', 'Orçamento'], 'versão antiga restaurada');
-assert.equal(await ev(`document.querySelector('#history-panel').hidden`), true, 'painel fecha');
+assert.deepEqual(await recKids(), ['Time', 'Orçamento'], 'old version restored');
+assert.equal(await ev(`document.querySelector('#history-panel').hidden`), true, 'panel closes');
 await key('z', 2);
 await sleep(900);
-assert.deepEqual(await recKids(), recBefore, 'Ctrl+Z desfaz a restauração');
+assert.deepEqual(await recKids(), recBefore, 'Ctrl+Z undoes the restore');
 
-// mostrar este ramo como: organograma / lista / mapa pelo menu ⋯ do nó
+// show this branch as: org chart / list / map via the node's ⋯ menu
 const recNow = async () => (await getMap()).root.children.find(c => c.text.startsWith('Recursos'));
 const branchAs = async (v) => {
   await clickNode('Recursos');
   await ev(`document.querySelector('#more-btn').click()`);
-  assert.equal(await ev(`!document.querySelector('#branch-layout-row').hidden`), true, 'opção no menu');
+  assert.equal(await ev(`!document.querySelector('#branch-layout-row').hidden`), true, 'option in the menu');
   await ev(`document.querySelector('#branch-layout-row [data-value="${v}"]').click()`);
   await sleep(900);
 };
 await branchAs('org');
 assert.equal((await recNow()).branchLayout, 'org');
 const recR2 = await rect('Recursos'), orcR2 = await rect('Orçamento');
-assert.ok(orcR2.y > recR2.y + recR2.h - 4, 'filhos abaixo do ramo (organograma)');
+assert.ok(orcR2.y > recR2.y + recR2.h - 4, 'children below the branch (org chart)');
 assert.ok(await ev(`[...document.querySelectorAll('#viewport path.edge')].some(p => / C/.test(p.getAttribute('d')) && p.getAttribute('d').split(' ').length > 2)`));
 await branchAs('list');
 assert.equal((await recNow()).branchLayout, 'list');
 await branchAs('');
-assert.equal((await recNow()).branchLayout, null, 'Mapa volta ao padrão');
+assert.equal((await recNow()).branchLayout, null, 'Mapa goes back to the default');
 await clickNode('Planejamento');
 await ev(`document.querySelector('#more-btn').click()`);
-assert.equal(await ev(`document.querySelector('#branch-layout-row').hidden`), true, 'raiz não tem a opção');
+assert.equal(await ev(`document.querySelector('#branch-layout-row').hidden`), true, 'root does not have the option');
 await key('Escape');
 
-// conflito: outra "aba" grava antes
+// conflict: another "tab" saves first
 await sleep(900);
 const cur = await getMap();
 await fetch(BASE + '/api/maps/demo', { method: 'PUT', body: JSON.stringify(cur) });
 await key('F2'); await typeText('Cronograma 2026'); await key('Enter');
 await sleep(900);
-assert.match(await status(), /outra aba/, 'conflito detectado');
+assert.match(await status(), /outra aba/, 'conflict detected');
 
-// revisão I1: editar após o conflito mantém o aviso ao fechar
+// review I1: editing after the conflict keeps the close-tab warning
 await key('F2'); await typeText(' depois'); await key('Enter');
-assert.equal(await unloadBlocked(), true, 'beforeunload avisa após conflito');
+assert.equal(await unloadBlocked(), true, 'beforeunload warns after the conflict');
 
-// apresentação: ▶ entra; → avança para o ramo; ← volta; Esc sai
+// presentation: ▶ enters; → advances to the branch; ← goes back; Esc leaves
 const nSlides = (await getMap()).root.children.length + 1;
 await ev(`document.querySelector('#present-btn').click()`);
 await sleep(400);
-assert.equal(await ev(`document.body.classList.contains('presenting')`), true, 'entra na apresentação');
+assert.equal(await ev(`document.body.classList.contains('presenting')`), true, 'enters the presentation');
 assert.equal(await ev(`document.querySelector('#present-count').textContent`), `1 / ${nSlides}`);
 await key('ArrowRight');
 await sleep(300);
-assert.equal(await ev(`document.querySelector('#present-count').textContent`), `2 / ${nSlides}`, '→ avança');
+assert.equal(await ev(`document.querySelector('#present-count').textContent`), `2 / ${nSlides}`, '→ advances');
 const firstBranch = (await getMap()).root.children[0].text;
 const onSlide = await texts();
-assert.ok(onSlide.includes(firstBranch) && !onSlide.includes((await getMap()).root.text), 'slide mostra só o ramo');
-assert.equal(await ev(`!!document.querySelector('.selected-ring')`), false, 'sem seleção na apresentação');
+assert.ok(onSlide.includes(firstBranch) && !onSlide.includes((await getMap()).root.text), 'slide shows only the branch');
+assert.equal(await ev(`!!document.querySelector('.selected-ring')`), false, 'no selection in the presentation');
 await key('ArrowLeft');
 await sleep(300);
-assert.equal(await ev(`document.querySelector('#present-count').textContent`), `1 / ${nSlides}`, '← volta');
+assert.equal(await ev(`document.querySelector('#present-count').textContent`), `1 / ${nSlides}`, '← goes back');
 await key('Escape');
 await sleep(300);
-assert.equal(await ev(`document.body.classList.contains('presenting')`), false, 'Esc sai');
+assert.equal(await ev(`document.body.classList.contains('presenting')`), false, 'Esc leaves');
 
-// duplicar e lixeira: menu do mapa duplica e abre a cópia; mover para a lixeira; restaurar; duplicar/apagar pela lista; apagar de vez
+// duplicate and trash: the map menu duplicates and opens the copy; move to trash; restore; duplicate/delete from the list; delete permanently
 dialogAccept = true;
 const mapIds = async () => (await (await fetch(BASE + '/api/maps')).json()).map(m => m.id);
 const trashIds = async () => (await (await fetch(BASE + '/api/trash')).json()).map(m => m.id);
 await ev(`document.querySelector('#map-menu-btn').click()`);
-assert.equal(await ev(`!document.querySelector('#map-menu').hidden`), true, 'menu do mapa abre');
+assert.equal(await ev(`!document.querySelector('#map-menu').hidden`), true, 'map menu opens');
 await ev(`document.querySelector('#map-menu [data-map-action="duplicate"]').click()`);
 await sleep(1500);
 const copyId = await ev(`location.hash.split('/').pop()`);
-assert.notEqual(copyId, 'demo', 'abre a cópia');
+assert.notEqual(copyId, 'demo', 'opens the copy');
 assert.match(await ev(`document.querySelector('#title').textContent`), /\(cópia\)$/);
 await ev(`document.querySelector('#map-menu-btn').click()`);
 await ev(`document.querySelector('#map-menu [data-map-action="trash"]').click()`);
 await sleep(1200);
-assert.equal(await ev(`document.body.dataset.view`), 'list', 'volta para a lista');
-assert.ok(!(await mapIds()).includes(copyId) && (await trashIds()).includes(copyId), 'cópia na lixeira');
+assert.equal(await ev(`document.body.dataset.view`), 'list', 'goes back to the list');
+assert.ok(!(await mapIds()).includes(copyId) && (await trashIds()).includes(copyId), 'copy in the trash');
 assert.match(await ev(`document.querySelector('#trash summary').textContent`), /Lixeira \(1\)/);
 await ev(`document.querySelector('#trash').open = true`);
 await ev(`document.querySelector('#trash-list [data-restore="${copyId}"]').click()`);
 await sleep(800);
-assert.ok((await mapIds()).includes(copyId), 'restaurado');
+assert.ok((await mapIds()).includes(copyId), 'restored');
 await ev(`document.querySelector('#maps [data-duplicate="demo"]').click()`);
 await sleep(800);
 const extra = (await mapIds()).filter(id => id !== 'demo' && id !== copyId);
-assert.equal(extra.length, 1, 'duplicar pela lista');
+assert.equal(extra.length, 1, 'duplicate via the list');
 await ev(`document.querySelector('#maps [data-delete="${extra[0]}"]').click()`);
 await sleep(800);
-assert.ok((await trashIds()).includes(extra[0]), 'apagar pela lista vai para a lixeira');
+assert.ok((await trashIds()).includes(extra[0]), 'delete via the list goes to the trash');
 await ev(`document.querySelector('#trash').open = true`);
 await ev(`document.querySelector('#trash-list [data-purge="${extra[0]}"]').click()`);
 await sleep(800);
-assert.ok(!(await trashIds()).includes(extra[0]), 'apagar de vez');
+assert.ok(!(await trashIds()).includes(extra[0]), 'delete permanently');
 
-// quadros (lousa): novo quadro pela lista; renomear pelo título; aparece na lista como quadro; reabre
+// boards (whiteboard): new board from the list; rename via the title; shows in the list as a board; reopens
 await ev(`location.hash = '#/'`);
 await sleep(800);
 await ev(`document.querySelector('#new-board').click()`);
 await sleep(1200);
-assert.equal(await ev(`document.body.dataset.view`), 'board', 'abre a lousa');
+assert.equal(await ev(`document.body.dataset.view`), 'board', 'opens the whiteboard');
 const boardId = await ev(`location.hash.match(/^#\\/board\\/(.+)$/)?.[1]`);
-assert.ok(boardId, 'endereço do quadro');
-assert.equal(await ev(`getComputedStyle(document.querySelector('#board-canvas')).display`), 'block', 'lousa visível');
+assert.ok(boardId, 'board address');
+assert.equal(await ev(`getComputedStyle(document.querySelector('#board-canvas')).display`), 'block', 'whiteboard visible');
 await ev(`document.querySelector('#title').click()`);
-assert.equal(await ev(`document.activeElement?.className`), 'inline-input', 'nome do quadro vira campo no topo');
+assert.equal(await ev(`document.activeElement?.className`), 'inline-input', 'board name becomes a field at the top');
 await typeText('Nome descartado');
 await key('Escape');
-assert.equal(await ev(`document.querySelector('#title').textContent`), 'Quadro sem título', 'Esc desiste');
+assert.equal(await ev(`document.querySelector('#title').textContent`), 'Quadro sem título', 'Esc cancels');
 await ev(`document.querySelector('#title').click()`);
 await typeText('Rascunho de ideias');
 await key('Enter');
 await sleep(900);
 const boardDoc = await (await fetch(BASE + `/api/maps/${boardId}`)).json();
-assert.deepEqual([boardDoc.type, boardDoc.title, boardDoc.elements], ['board', 'Rascunho de ideias', []], 'renomeado e salvo');
+assert.deepEqual([boardDoc.type, boardDoc.title, boardDoc.elements], ['board', 'Rascunho de ideias', []], 'renamed and saved');
 assert.equal(await ev(`document.querySelector('#title').textContent`), 'Rascunho de ideias');
 await ev(`location.hash = '#/'`);
 await sleep(800);
-assert.equal(await ev(`document.querySelector('#maps a[href="#/board/${boardId}"]')?.textContent`), 'Rascunho de ideias', 'quadro na lista');
+assert.equal(await ev(`document.querySelector('#maps a[href="#/board/${boardId}"]')?.textContent`), 'Rascunho de ideias', 'board in the list');
 assert.equal(await ev(`document.querySelector('#maps a[href="#/board/${boardId}"]').closest('li').classList.contains('board')`), true);
 await ev(`location.hash = '#/board/${boardId}'`);
 await sleep(800);
-assert.equal(await ev(`document.body.dataset.view`), 'board', 'reabre o quadro');
+assert.equal(await ev(`document.body.dataset.view`), 'board', 'reopens the board');
 
-// lousa: desenhar com as ferramentas (teclas 2–7), volta para seleção, desfazer/refazer, zoom e mover a tela
+// whiteboard: draw with the tools (keys 2–7), back to selection, undo/redo, zoom and panning
 const boardEls = async () => (await (await fetch(BASE + `/api/maps/${boardId}`)).json()).elements;
 const cv = await ev(`(() => { const r = document.querySelector('#board-canvas').getBoundingClientRect(); return { x: r.x, y: r.y }; })()`);
 const dragOn = async (x1, y1, x2, y2, steps = 5) => {
@@ -884,14 +884,14 @@ const dragOn = async (x1, y1, x2, y2, steps = 5) => {
   await mouse('mouseReleased', cv.x + x2, cv.y + y2);
 };
 await key('2');
-assert.equal(await ev(`document.querySelector('#board-tools [data-tool="rectangle"]').classList.contains('active')`), true, 'tecla 2 = retângulo');
+assert.equal(await ev(`document.querySelector('#board-tools [data-tool="rectangle"]').classList.contains('active')`), true, 'key 2 = rectangle');
 await dragOn(350, 100, 510, 200);
 await sleep(900);
 let els = await boardEls();
 assert.equal(els.length, 1);
 assert.equal(els[0].type, 'rectangle');
-assert.ok(Math.abs(els[0].w - 160) < 2 && Math.abs(els[0].h - 100) < 4, `tamanho do arrasto (${els[0].w}×${els[0].h})`);
-assert.equal(await ev(`document.querySelector('#board-tools [data-tool="select"]').classList.contains('active')`), true, 'volta para seleção');
+assert.ok(Math.abs(els[0].w - 160) < 2 && Math.abs(els[0].h - 100) < 4, `drag size (${els[0].w}×${els[0].h})`);
+assert.equal(await ev(`document.querySelector('#board-tools [data-tool="select"]').classList.contains('active')`), true, 'goes back to selection');
 await key('2');
 await mouse('mousePressed', cv.x + 650, cv.y + 420); await mouse('mouseReleased', cv.x + 650, cv.y + 420);
 await key('4'); await dragOn(550, 100, 670, 180);
@@ -901,24 +901,24 @@ await sleep(700); await key('6'); await dragOn(350, 330, 550, 330);
 await key('7'); await dragOn(600, 260, 750, 320, 10);
 await sleep(900);
 els = await boardEls();
-assert.deepEqual(els.map(e => e.type), ['rectangle', 'ellipse', 'diamond', 'arrow', 'line', 'freedraw'], 'clique sem arrastar não cria; cada ferramenta cria seu tipo');
-assert.ok(els[5].points.length >= 6, 'lápis guarda o traço');
-assert.equal(await ev(`document.querySelectorAll('#board-root .el').length`), 6, 'tudo desenhado');
+assert.deepEqual(els.map(e => e.type), ['rectangle', 'ellipse', 'diamond', 'arrow', 'line', 'freedraw'], 'a click without dragging creates nothing; each tool creates its own type');
+assert.ok(els[5].points.length >= 6, 'pencil keeps the stroke');
+assert.equal(await ev(`document.querySelectorAll('#board-root .el').length`), 6, 'everything drawn');
 await key('z', 2);
 await sleep(900);
-assert.equal((await boardEls()).length, 5, 'Ctrl+Z desfaz');
+assert.equal((await boardEls()).length, 5, 'Ctrl+Z undoes');
 await key('z', 2 | 8);
 await sleep(900);
-assert.equal((await boardEls()).length, 6, 'Ctrl+Shift+Z refaz');
+assert.equal((await boardEls()).length, 6, 'Ctrl+Shift+Z redoes');
 await ev(`document.querySelector('#board-zoom-in').click()`);
 assert.notEqual(await ev(`document.querySelector('#board-zoom').textContent`), '100%', 'zoom');
 const tBefore = await ev(`document.querySelector('#board-root').getAttribute('transform')`);
 await key('h');
 await dragOn(900, 400, 950, 450);
-assert.notEqual(await ev(`document.querySelector('#board-root').getAttribute('transform')`), tBefore, 'mãozinha move a tela');
-assert.equal((await boardEls()).length, 6, 'mover a tela não cria elementos');
+assert.notEqual(await ev(`document.querySelector('#board-root').getAttribute('transform')`), tBefore, 'hand tool pans');
+assert.equal((await boardEls()).length, 6, 'panning creates no elements');
 
-// lousa: selecionar, mover, painel de estilo, redimensionar, duplicar, apagar, seleção por área, camadas
+// whiteboard: select, move, style panel, resize, duplicate, delete, area selection, layers
 const elBox = (id) => ev(`(() => { const r = document.querySelector('#board-root .el[data-id="${id}"]').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
 const selCount = () => ev(`document.querySelectorAll('#board-root .sel-item').length`);
 const click = async (x, y, mods = 0) => { await cmd('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1, modifiers: mods }); await cmd('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1, modifiers: mods }); };
@@ -927,16 +927,16 @@ await key('v');
 els = await boardEls();
 const rectId = els[0].id;
 let rb = await elBox(rectId);
-await click(rb.x + 2, rb.y + rb.h / 2);  // borda esquerda do retângulo
-assert.equal(await selCount(), 1, 'clicar na borda seleciona');
-assert.equal(await ev(`!document.querySelector('#board-props').hidden`), true, 'painel de estilo aparece');
-await click(rb.x + rb.w / 2, rb.y + rb.h / 2);  // miolo vazio: solta a seleção
-assert.equal(await selCount(), 0, 'miolo vazio não seleciona');
+await click(rb.x + 2, rb.y + rb.h / 2);  // left edge of the rectangle
+assert.equal(await selCount(), 1, 'clicking the border selects');
+assert.equal(await ev(`!document.querySelector('#board-props').hidden`), true, 'style panel appears');
+await click(rb.x + rb.w / 2, rb.y + rb.h / 2);  // empty interior: drops the selection
+assert.equal(await selCount(), 0, 'empty interior does not select');
 await click(rb.x + 2, rb.y + rb.h / 2);
 const x0 = (await boardEls())[0].x;
 await dragScreen(rb.x + 2, rb.y + rb.h / 2, rb.x + 42, rb.y + rb.h / 2 + 20);
 await sleep(900);
-assert.ok((await boardEls()).find(e => e.id === rectId).x > x0 + 20, 'arrastar move');
+assert.ok((await boardEls()).find(e => e.id === rectId).x > x0 + 20, 'dragging moves');
 await ev(`document.querySelector('#board-props [data-prop="strokeColor"] [data-value="#e03131"]').click()`);
 await ev(`document.querySelector('#board-props [data-prop="backgroundColor"] [data-value="#a5d8ff"]').click()`);
 await ev(`document.querySelector('#board-props [data-prop="fillStyle"] [data-value="solid"]').click()`);
@@ -944,187 +944,187 @@ await ev(`document.querySelector('#board-props [data-prop="strokeWidth"] [data-v
 await ev(`(() => { const r = document.querySelector('#board-opacity'); r.value = 50; r.dispatchEvent(new Event('change')); })()`);
 await sleep(900);
 let re = (await boardEls()).find(e => e.id === rectId);
-assert.deepEqual([re.strokeColor, re.backgroundColor, re.fillStyle, re.strokeWidth, re.opacity], ['#e03131', '#a5d8ff', 'solid', 4, 50], 'painel aplica o estilo');
+assert.deepEqual([re.strokeColor, re.backgroundColor, re.fillStyle, re.strokeWidth, re.opacity], ['#e03131', '#a5d8ff', 'solid', 4, 50], 'panel applies the style');
 const wBefore2 = re.w;
 const hd = await ev(`(() => { const r = document.querySelector('#board-root .handle[data-handle="se"]').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
 await dragScreen(hd[0], hd[1], hd[0] + 40, hd[1] + 30);
 await sleep(900);
-assert.ok((await boardEls()).find(e => e.id === rectId).w > wBefore2 + 20, 'alça redimensiona');
+assert.ok((await boardEls()).find(e => e.id === rectId).w > wBefore2 + 20, 'handle resizes');
 await key('d', 2);
 await sleep(900);
-assert.equal((await boardEls()).length, 7, 'Ctrl+D duplica');
+assert.equal((await boardEls()).length, 7, 'Ctrl+D duplicates');
 await key('Delete');
 await sleep(900);
-assert.equal((await boardEls()).length, 6, 'Delete apaga a cópia selecionada');
+assert.equal((await boardEls()).length, 6, 'Delete removes the selected copy');
 await key('Escape');
 els = await boardEls();
-const [eb, db] = [await elBox(els[1].id), await elBox(els[2].id)];  // elipse e losango
+const [eb, db] = [await elBox(els[1].id), await elBox(els[2].id)];  // ellipse and diamond
 const pad = 15;
 await dragScreen(Math.min(eb.x, db.x) - pad, Math.min(eb.y, db.y) - pad, Math.max(eb.x + eb.w, db.x + db.w) + pad, Math.max(eb.y + eb.h, db.y + db.h) + pad);
-assert.equal(await selCount(), 2, 'seleção por área');
+assert.equal(await selCount(), 2, 'area selection');
 await key(']', 2 | 8);
 await sleep(900);
-assert.deepEqual((await boardEls()).slice(-2).map(e => e.id), [els[1].id, els[2].id], 'Ctrl+Shift+] traz para frente');
+assert.deepEqual((await boardEls()).slice(-2).map(e => e.id), [els[1].id, els[2].id], 'Ctrl+Shift+] brings to front');
 await key('[', 2);
 await sleep(900);
-assert.deepEqual((await boardEls()).slice(-3, -1).map(e => e.id), [els[1].id, els[2].id], 'Ctrl+[ desce uma camada');
+assert.deepEqual((await boardEls()).slice(-3, -1).map(e => e.id), [els[1].id, els[2].id], 'Ctrl+[ goes down a layer');
 await ev(`document.querySelector('#board-props [data-act="forward"]').click()`);
 await sleep(900);
-assert.deepEqual((await boardEls()).slice(-2).map(e => e.id), [els[1].id, els[2].id], 'botão sobe uma camada');
+assert.deepEqual((await boardEls()).slice(-2).map(e => e.id), [els[1].id, els[2].id], 'button goes up a layer');
 await key('a', 2);
-assert.equal(await selCount(), 6, 'Ctrl+A seleciona tudo');
+assert.equal(await selCount(), 6, 'Ctrl+A selects all');
 await key('Escape');
-assert.equal(await selCount(), 0, 'Esc solta a seleção');
+assert.equal(await selCount(), 0, 'Esc drops the selection');
 
-// lousa: texto, borracha, exportar SVG/PNG, atalhos
+// whiteboard: text, eraser, SVG/PNG export, shortcuts
 const dbl = async (x, y) => { for (const clickCount of [1, 2]) { await cmd('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount }); await cmd('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount }); } };
 const nEls = (await boardEls()).length;
 await key('8');
 await click(cv.x + 900, cv.y + 300);
-assert.equal(await ev(`!document.querySelector('#board-text').hidden`), true, 'tecla 8 + clique abre o texto');
+assert.equal(await ev(`!document.querySelector('#board-text').hidden`), true, 'key 8 + click opens the text');
 assert.equal(await ev(`document.activeElement?.id`), 'board-text');
 await typeText('Olá quadro');
 await key('Escape');
 await sleep(900);
 let txEl = (await boardEls()).at(-1);
-assert.deepEqual([txEl.type, txEl.text], ['text', 'Olá quadro'], 'texto criado');
-assert.ok(txEl.w > 20 && txEl.h > 10, 'texto medido');
-assert.equal(await ev(`[...document.querySelectorAll('#board-root text')].some(t => t.textContent === 'Olá quadro')`), true, 'texto desenhado');
+assert.deepEqual([txEl.type, txEl.text], ['text', 'Olá quadro'], 'text created');
+assert.ok(txEl.w > 20 && txEl.h > 10, 'text measured');
+assert.equal(await ev(`[...document.querySelectorAll('#board-root text')].some(t => t.textContent === 'Olá quadro')`), true, 'text drawn');
 const tb = await elBox(txEl.id);
 await dbl(tb.x + tb.w / 2, tb.y + tb.h / 2);
-assert.equal(await ev(`document.querySelector('#board-text').value`), 'Olá quadro', 'duplo clique edita');
+assert.equal(await ev(`document.querySelector('#board-text').value`), 'Olá quadro', 'double click edits');
 await ev(`document.querySelector('#board-text').setSelectionRange(99, 99)`);
 await typeText('!');
 await key('Escape');
 await sleep(900);
-assert.equal((await boardEls()).at(-1).text, 'Olá quadro!', 'edição salva');
-await dbl(cv.x + 1000, cv.y + 500);  // vazio: novo texto
+assert.equal((await boardEls()).at(-1).text, 'Olá quadro!', 'edit saved');
+await dbl(cv.x + 1000, cv.y + 500);  // empty: new text
 assert.equal(await ev(`!document.querySelector('#board-text').hidden`), true);
-await key('Escape');  // vazio: descarta
+await key('Escape');  // empty: discards
 await sleep(500);
-assert.equal((await boardEls()).length, nEls + 1, 'texto vazio não é criado');
+assert.equal((await boardEls()).length, nEls + 1, 'empty text is not created');
 const lineId = (await boardEls()).find(e => e.type === 'line').id;
 await key('e');
 const lb = await elBox(lineId);
-await dragScreen(lb.x + lb.w / 2, lb.y - 25, lb.x + lb.w / 2, lb.y + lb.h + 25);  // atravessa a linha  // atravessa a linha horizontal em y = 330
+await dragScreen(lb.x + lb.w / 2, lb.y - 25, lb.x + lb.w / 2, lb.y + lb.h + 25);  // crosses the line  // crosses the horizontal line at y = 330
 await sleep(900);
-assert.ok(!(await boardEls()).some(e => e.id === lineId), 'borracha apaga o que atravessa');
-assert.equal((await boardEls()).length, nEls, 'só a linha saiu');
+assert.ok(!(await boardEls()).some(e => e.id === lineId), 'eraser deletes what it crosses');
+assert.equal((await boardEls()).length, nEls, 'only the line went away');
 await ev(`(() => { window.__downloads = []; HTMLAnchorElement.prototype.click = function () { if (this.download) window.__downloads.push([this.download, this.href]); }; })()`);
 await ev(`document.querySelector('#export-btn').click()`);
-assert.equal(await ev(`getComputedStyle(document.querySelector('#export-menu [data-export="md"]')).display`), 'none', 'quadro não exporta Markdown');
+assert.equal(await ev(`getComputedStyle(document.querySelector('#export-menu [data-export="md"]')).display`), 'none', 'board does not export Markdown');
 await ev(`document.querySelector('#export-menu [data-export="svg"]').click()`);
 await sleep(800);
 let bdl = await ev(`window.__downloads.at(-1)`);
 assert.match(bdl[0], /\.svg$/);
 const svgText = await ev(`fetch('${bdl[1]}').then(r => r.text())`);
-assert.match(svgText, /^<svg/, 'SVG válido');
-assert.ok(svgText.includes('Olá quadro!') && !svgText.includes('sel-item'), 'SVG com o texto e sem a seleção');
+assert.match(svgText, /^<svg/, 'valid SVG');
+assert.ok(svgText.includes('Olá quadro!') && !svgText.includes('sel-item'), 'SVG with the text and without the selection');
 await ev(`document.querySelector('#export-btn').click()`);
 await ev(`document.querySelector('#export-menu [data-export="png"]').click()`);
 await sleep(2000);
 bdl = await ev(`window.__downloads.at(-1)`);
 assert.match(bdl[0], /\.png$/);
-assert.deepEqual(await ev(`fetch('${bdl[1]}').then(r => r.arrayBuffer()).then(b => [...new Uint8Array(b.slice(0, 4))])`), [137, 80, 78, 71], 'PNG do quadro');
+assert.deepEqual(await ev(`fetch('${bdl[1]}').then(r => r.arrayBuffer()).then(b => [...new Uint8Array(b.slice(0, 4))])`), [137, 80, 78, 71], 'board PNG');
 await key('?');
-assert.equal(await ev(`!document.querySelector('#board-help').hidden`), true, '? mostra os atalhos');
+assert.equal(await ev(`!document.querySelector('#board-help').hidden`), true, '? shows the shortcuts');
 await key('Escape');
 assert.equal(await ev(`document.querySelector('#board-help').hidden`), true);
 
-// quadro: Enter quebra a linha (como num editor de texto) sem a primeira linha sumir; Esc confirma; sem borda
+// board: Enter breaks the line (as in a text editor) without the first line disappearing; Esc confirms; no border
 await key('8');
 await click(cv.x + 900, cv.y + 420);
-assert.equal(await ev(`getComputedStyle(document.querySelector('#board-text')).outlineStyle`), 'none', 'sem borda tracejada');
+assert.equal(await ev(`getComputedStyle(document.querySelector('#board-text')).outlineStyle`), 'none', 'no dashed border');
 await typeText('Linha um');
 await key('Enter');
-assert.equal(await ev(`document.querySelector('#board-text').hidden`), false, 'Enter não fecha');
+assert.equal(await ev(`document.querySelector('#board-text').hidden`), false, 'Enter does not close');
 await typeText('linha dois');
 await key('Enter');
 await typeText('linha três');
-assert.equal(await ev(`document.querySelector('#board-text').value`), 'Linha um\nlinha dois\nlinha três', 'Enter quebra a linha');
-assert.equal(await ev(`document.querySelector('#board-text').scrollTop`), 0, 'primeira linha continua visível');
+assert.equal(await ev(`document.querySelector('#board-text').value`), 'Linha um\nlinha dois\nlinha três', 'Enter breaks the line');
+assert.equal(await ev(`document.querySelector('#board-text').scrollTop`), 0, 'first line stays visible');
 for (let i = 4; i <= 7; i++) { await key('Enter'); await typeText(String(i)); }
-assert.ok(await ev(`(() => { const t = document.querySelector('#board-text'); return t.scrollHeight <= t.clientHeight + 1; })()`), 'caixa mostra todas as linhas');
+assert.ok(await ev(`(() => { const t = document.querySelector('#board-text'); return t.scrollHeight <= t.clientHeight + 1; })()`), 'box shows all the lines');
 for (let i = 0; i < 4; i++) { await key('Backspace'); await key('Backspace'); }
 await key('Escape');
 await sleep(900);
 let lastTxt = (await boardEls()).at(-1);
-assert.deepEqual([lastTxt.type, lastTxt.text], ['text', 'Linha um\nlinha dois\nlinha três'], 'Esc confirma as três linhas');
-assert.equal(await ev(`[...document.querySelectorAll('#board-root .el[data-id="${lastTxt.id}"] tspan')].length`), 3, 'desenhado em três linhas');
+assert.deepEqual([lastTxt.type, lastTxt.text], ['text', 'Linha um\nlinha dois\nlinha três'], 'Esc confirms the three lines');
+assert.equal(await ev(`[...document.querySelectorAll('#board-root .el[data-id="${lastTxt.id}"] tspan')].length`), 3, 'drawn on three lines');
 const lt = await elBox(lastTxt.id);
 await dbl(lt.x + lt.w / 2, lt.y + 5);
 await ev(`document.querySelector('#board-text').setSelectionRange(99, 99)`);
 await typeText('!');
-await key('Enter', 2);  // Ctrl+Enter também confirma
+await key('Enter', 2);  // Ctrl+Enter also confirms
 await sleep(900);
-assert.equal((await boardEls()).at(-1).text, 'Linha um\nlinha dois\nlinha três!', 'Ctrl+Enter confirma');
-// texto grande: a caixa de edição cabe as letras da Kalam e não rola (antes o texto "pulava" para cima)
+assert.equal((await boardEls()).at(-1).text, 'Linha um\nlinha dois\nlinha três!', 'Ctrl+Enter confirms');
+// large text: the edit box fits Kalam's letters and does not scroll (before, the text "jumped" up)
 await ev(`document.querySelector('#board-props [data-prop="fontSize"] [data-value="36"]').click()`);
 const big = await elBox(lastTxt.id);
-assert.ok(big.x > 0 && big.y + big.h < 700, 'texto continua na tela');
+assert.ok(big.x > 0 && big.y + big.h < 700, 'text stays on screen');
 assert.equal(await ev(`document.querySelector('#board-text').hidden`), true);
 await dbl(big.x + 10, big.y + big.h / 2);
-assert.equal(await ev(`document.querySelector('#board-text').value`), lastTxt.text.replace(/!?$/, '!'), 'editando o texto grande');
-assert.ok(await ev(`(() => { const t = document.querySelector('#board-text'); return t.scrollHeight <= t.clientHeight; })()`), 'caixa cabe o texto grande');
-assert.equal(await ev(`(() => { const t = document.querySelector('#board-text'); t.scrollTop = 30; t.dispatchEvent(new Event('scroll')); return t.scrollTop; })()`), 0, 'caixa não rola');
+assert.equal(await ev(`document.querySelector('#board-text').value`), lastTxt.text.replace(/!?$/, '!'), 'editing the large text');
+assert.ok(await ev(`(() => { const t = document.querySelector('#board-text'); return t.scrollHeight <= t.clientHeight; })()`), 'box fits the large text');
+assert.equal(await ev(`(() => { const t = document.querySelector('#board-text'); t.scrollTop = 30; t.dispatchEvent(new Event('scroll')); return t.scrollTop; })()`), 0, 'box does not scroll');
 await key('Escape');
 await ev(`document.querySelector('#board-props [data-prop="fontSize"] [data-value="20"]').click()`);
 await sleep(900);
 await ev(`document.querySelector('#board-props [data-prop="textAlign"] [data-value="center"]').click()`);
 await sleep(900);
-assert.equal((await boardEls()).at(-1).textAlign, 'center', 'alinhamento salvo');
-assert.equal(await ev(`document.querySelector('#board-root .el[data-id="${lastTxt.id}"] text').getAttribute('text-anchor')`), 'middle', 'texto centralizado');
+assert.equal((await boardEls()).at(-1).textAlign, 'center', 'alignment saved');
+assert.equal(await ev(`document.querySelector('#board-root .el[data-id="${lastTxt.id}"] text').getAttribute('text-anchor')`), 'middle', 'text centred');
 const wHand = (await boardEls()).at(-1).w;
 await ev(`document.querySelector('#board-props [data-prop="fontFamily"] [data-value="code"]').click()`);
 await sleep(900);
 const codeTxt = (await boardEls()).at(-1);
-assert.equal(codeTxt.fontFamily, 'code', 'família da fonte salva');
-assert.notEqual(codeTxt.w, wHand, 'largura medida de novo com a nova fonte');
-assert.match(await ev(`document.querySelector('#board-root .el[data-id="${lastTxt.id}"] text').getAttribute('font-family')`), /monospace/, 'texto em fonte de código');
+assert.equal(codeTxt.fontFamily, 'code', 'font family saved');
+assert.notEqual(codeTxt.w, wHand, 'width measured again with the new font');
+assert.match(await ev(`document.querySelector('#board-root .el[data-id="${lastTxt.id}"] text').getAttribute('font-family')`), /monospace/, 'text in a code font');
 await ev(`document.querySelector('#board-props [data-prop="fontFamily"] [data-value="hand"]').click()`);
 await ev(`(() => { window.prompt = () => 'example.com/doc'; window.__opened = []; window.open = (u) => { window.__opened.push(u); }; })()`);
 await ev(`document.querySelector('#board-props [data-act="link"]').click()`);
 await sleep(900);
-assert.equal((await boardEls()).at(-1).link, 'https://example.com/doc', 'link salvo (com https)');
+assert.equal((await boardEls()).at(-1).link, 'https://example.com/doc', 'link saved (with https)');
 const lbx = await ev(`(() => { const r = document.querySelector('#board-root .link-badge').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
 await click(lbx[0], lbx[1]);
-assert.deepEqual(await ev(`window.__opened`), ['https://example.com/doc'], 'clicar no ícone abre o link');
+assert.deepEqual(await ev(`window.__opened`), ['https://example.com/doc'], 'clicking the icon opens the link');
 await ev(`window.prompt = () => 'javascript:alert(1)'; window.alert = () => {}`);
 await key('k', 2);
 await sleep(900);
-assert.equal((await boardEls()).at(-1).link, 'https://example.com/doc', 'endereço inválido não entra');
+assert.equal((await boardEls()).at(-1).link, 'https://example.com/doc', 'invalid address does not get in');
 
-// quadro: cada ferramenta mostra a letra do atalho no canto do botão
+// board: each tool shows its shortcut letter in the corner of the button
 const hint = (t) => ev(`getComputedStyle(document.querySelector('#board-tools [data-tool="${t}"]'), '::after').content`);
 assert.deepEqual(await Promise.all(['hand', 'select', 'rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw', 'text', 'eraser'].map(hint)),
-  ['"H"', '"V"', '"R"', '"D"', '"O"', '"A"', '"L"', '"P"', '"T"', '"E"'], 'letras de atalho nos botões');
+  ['"H"', '"V"', '"R"', '"D"', '"O"', '"A"', '"L"', '"P"', '"T"', '"E"'], 'shortcut letters on the buttons');
 
-// quadro: menus do topo fecham ao clicar fora e ao clicar de novo no próprio botão
+// board: the top menus close when clicking outside and when clicking their own button again
 const shownSel = (sel) => ev(`!document.querySelector('${sel}').hidden`);
 await ev(`document.querySelector('#map-menu-btn').click()`);
-assert.equal(await shownSel('#map-menu'), true, 'menu do quadro abre');
-await click(cv.x + 1100, cv.y + 560);  // lousa vazia
-assert.equal(await shownSel('#map-menu'), false, 'clicar fora fecha o menu do quadro');
+assert.equal(await shownSel('#map-menu'), true, 'board menu opens');
+await click(cv.x + 1100, cv.y + 560);  // empty whiteboard
+assert.equal(await shownSel('#map-menu'), false, 'clicking outside closes the board menu');
 const mb = await ev(`(() => { const r = document.querySelector('#map-menu-btn').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
 await click(mb[0], mb[1]);
 assert.equal(await shownSel('#map-menu'), true);
 await click(mb[0], mb[1]);
-assert.equal(await shownSel('#map-menu'), false, 'clicar de novo no ⋯ fecha');
+assert.equal(await shownSel('#map-menu'), false, 'clicking ⋯ again closes it');
 await ev(`document.querySelector('#export-btn').click()`);
 await click(mb[0], mb[1]);
-assert.equal(await shownSel('#export-menu'), false, 'abrir um menu do topo fecha o outro');
+assert.equal(await shownSel('#export-menu'), false, 'opening a top menu closes the other');
 assert.equal(await shownSel('#map-menu'), true);
-await click(cv.x + 1300, cv.y + 150);  // outro ponto: dois cliques no mesmo lugar viram duplo clique (texto novo)
+await click(cv.x + 1300, cv.y + 150);  // another spot: two clicks in the same place become a double click (new text)
 await key('?');
 assert.equal(await shownSel('#board-help'), true);
 await click(cv.x + 1100, cv.y + 560);
-assert.equal(await shownSel('#board-help'), false, 'clicar fora fecha os atalhos');
+assert.equal(await shownSel('#board-help'), false, 'clicking outside closes the shortcuts');
 
-// quadro: menu "mais ferramentas" e balde de tinta
+// board: "more tools" menu and paint bucket
 await ev(`document.querySelector('#board-more-btn').click()`);
-assert.equal(await shownSel('#board-more'), true, 'menu mais ferramentas abre');
+assert.equal(await shownSel('#board-more'), true, 'more tools menu opens');
 await click(cv.x + 1300, cv.y + 150);
-assert.equal(await shownSel('#board-more'), false, 'clicar fora fecha o menu mais');
+assert.equal(await shownSel('#board-more'), false, 'clicking outside closes the more menu');
 await key('2');
 await dragScreen(cv.x + 1050, cv.y + 500, cv.x + 1200, cv.y + 600);
 await sleep(900);
@@ -1132,44 +1132,44 @@ const emptyRect = (await boardEls()).at(-1);
 assert.equal(emptyRect.type, 'rectangle');
 await ev(`document.querySelector('#board-more-btn').click()`);
 await ev(`document.querySelector('#board-more [data-tool="bucket"]').click()`);
-assert.equal(await shownSel('#board-more'), false, 'escolher fecha o menu');
-assert.equal(await ev(`document.querySelector('#board-more-btn').classList.contains('active')`), true, 'botão ⋯ ativo com o balde');
-assert.equal(await ev(`document.querySelector('#board-more-btn use').getAttribute('href')`), '#i-bucket-droplet', '⋯ mostra o ícone do balde');
+assert.equal(await shownSel('#board-more'), false, 'choosing closes the menu');
+assert.equal(await ev(`document.querySelector('#board-more-btn').classList.contains('active')`), true, '⋯ button active with the bucket');
+assert.equal(await ev(`document.querySelector('#board-more-btn use').getAttribute('href')`), '#i-bucket-droplet', '⋯ shows the bucket icon');
 await ev(`document.querySelector('#board-props [data-prop="backgroundColor"] [data-value="#ffec99"]').click()`);
-await click(cv.x + 1125, cv.y + 550);  // miolo vazio do retângulo
+await click(cv.x + 1125, cv.y + 550);  // empty interior of the rectangle
 await sleep(900);
-assert.equal((await boardEls()).find(e => e.id === emptyRect.id).backgroundColor, '#ffec99', 'balde pinta o fundo');
+assert.equal((await boardEls()).find(e => e.id === emptyRect.id).backgroundColor, '#ffec99', 'bucket paints the fill');
 await key('v');
 await key('b');
-assert.equal(await ev(`document.querySelector('#board-tools [data-tool="bucket"]').classList.contains('active')`), true, 'tecla B = balde');
+assert.equal(await ev(`document.querySelector('#board-tools [data-tool="bucket"]').classList.contains('active')`), true, 'key B = bucket');
 await key('v');
 
-// quadro: seleção de laço (contorno livre em volta do retângulo pintado)
+// board: lasso selection (free-form outline around the painted rectangle)
 await key('q');
-assert.equal(await ev(`document.querySelector('#board-more-btn use').getAttribute('href')`), '#i-lasso', 'tecla Q = laço');
+assert.equal(await ev(`document.querySelector('#board-more-btn use').getAttribute('href')`), '#i-lasso', 'key Q = lasso');
 const loop = [[1030, 480], [1220, 480], [1220, 620], [1030, 620], [1030, 490]];
 await mouse('mousePressed', cv.x + loop[0][0], cv.y + loop[0][1]);
 for (const [x, y] of loop.slice(1)) await mouse('mouseMoved', cv.x + x, cv.y + y);
-assert.equal(await ev(`document.querySelectorAll('#board-root path.marquee').length`), 1, 'contorno do laço aparece');
+assert.equal(await ev(`document.querySelectorAll('#board-root path.marquee').length`), 1, 'lasso outline appears');
 await mouse('mouseReleased', cv.x + 1030, cv.y + 490);
-assert.equal(await selCount(), 1, 'laço seleciona o que fica dentro');
-assert.equal(await ev(`document.querySelector('#board-canvas').dataset.tool`), 'select', 'depois do laço volta para seleção');
+assert.equal(await selCount(), 1, 'lasso selects what lies inside');
+assert.equal(await ev(`document.querySelector('#board-canvas').dataset.tool`), 'select', 'after the lasso goes back to selection');
 await key('Escape');
 
-// quadro: ponteiro laser deixa um rastro que some e não vira elemento
+// board: the laser pointer leaves a trail that fades and does not become an element
 const nBeforeLaser = (await boardEls()).length;
 await key('k');
-assert.equal(await ev(`document.querySelector('#board-more-btn use').getAttribute('href')`), '#i-laser', 'tecla K = laser');
+assert.equal(await ev(`document.querySelector('#board-more-btn use').getAttribute('href')`), '#i-laser', 'key K = laser');
 await mouse('mousePressed', cv.x + 700, cv.y + 560);
 for (let i = 1; i <= 5; i++) await mouse('mouseMoved', cv.x + 700 + i * 30, cv.y + 560 + (i % 2) * 20);
-assert.equal(await ev(`document.querySelectorAll('#board-root path.laser').length`), 1, 'rastro do laser aparece');
+assert.equal(await ev(`document.querySelectorAll('#board-root path.laser').length`), 1, 'laser trail appears');
 await mouse('mouseReleased', cv.x + 850, cv.y + 560);
 await sleep(1400);
-assert.equal(await ev(`document.querySelectorAll('#board-root path.laser').length`), 0, 'rastro some sozinho');
-assert.equal((await boardEls()).length, nBeforeLaser, 'laser não cria elementos');
+assert.equal(await ev(`document.querySelectorAll('#board-root path.laser').length`), 0, 'trail fades on its own');
+assert.equal((await boardEls()).length, nBeforeLaser, 'laser creates no elements');
 await key('v');
 
-// quadro: inserir imagem (seletor de arquivo e colar), desenhada, salva e embutida no SVG exportado
+// board: insert an image (file picker and paste), drawn, saved and embedded in the exported SVG
 const pngFile = `(async () => { const c = document.createElement('canvas'); c.width = 80; c.height = 40;
   const x = c.getContext('2d'); x.fillStyle = '#e03131'; x.fillRect(0, 0, 80, 40);
   return new File([await new Promise(r => c.toBlob(r, 'image/png'))], 'teste.png', { type: 'image/png' }); })()`;
@@ -1178,111 +1178,111 @@ await ev(`(async () => { const dt = new DataTransfer(); dt.items.add(await ${png
   const i = document.querySelector('#board-image-input'); i.files = dt.files; i.dispatchEvent(new Event('change')); })()`);
 await sleep(1500);
 let imgEl = (await boardEls()).at(-1);
-assert.deepEqual([imgEl.type, imgEl.w, imgEl.h], ['image', 80, 40], 'imagem inserida com o tamanho natural');
-assert.equal((await fetch(BASE + `/api/maps/${boardId}/files/${imgEl.fileId}`)).headers.get('content-type'), 'image/png', 'arquivo salvo no servidor');
-assert.equal(await ev(`document.querySelectorAll('#board-root image').length`), 1, 'imagem desenhada');
-assert.equal(await selCount(), 1, 'imagem nova fica selecionada');
+assert.deepEqual([imgEl.type, imgEl.w, imgEl.h], ['image', 80, 40], 'image inserted at its natural size');
+assert.equal((await fetch(BASE + `/api/maps/${boardId}/files/${imgEl.fileId}`)).headers.get('content-type'), 'image/png', 'file saved on the server');
+assert.equal(await ev(`document.querySelectorAll('#board-root image').length`), 1, 'image drawn');
+assert.equal(await selCount(), 1, 'new image stays selected');
 await ev(`(async () => { const dt = new DataTransfer(); dt.items.add(await ${pngFile}); document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt })); })()`);
 await sleep(1500);
-assert.equal((await boardEls()).length, nBeforeImg + 2, 'Ctrl+V cola imagem');
+assert.equal((await boardEls()).length, nBeforeImg + 2, 'Ctrl+V pastes the image');
 await ev(`document.querySelector('#export-btn').click()`);
 await ev(`document.querySelector('#export-menu [data-export="svg"]').click()`);
 await sleep(800);
 const imgSvg = await ev(`fetch(window.__downloads.at(-1)[1]).then(r => r.text())`);
-assert.ok(imgSvg.includes('href="data:image/png') && !imgSvg.includes('/api/maps/'), 'SVG exportado com a imagem embutida');
+assert.ok(imgSvg.includes('href="data:image/png') && !imgSvg.includes('/api/maps/'), 'exported SVG with the image embedded');
 
-// quadro: nota adesiva (N) — clique cria já editando, texto quebra na largura, duplo clique reedita
+// board: sticky note (N) — a click creates it already editing, text wraps at the width, double click re-edits
 const nBeforeNote = (await boardEls()).length;
 await key('n');
 await click(cv.x + 500, cv.y + 300);
-assert.equal(await ev(`document.activeElement?.id`), 'board-text', 'nota já abre para digitar');
-assert.equal(await ev(`document.querySelectorAll('#board-root .note-bg').length`), 1, 'nota aparece durante a digitação');
+assert.equal(await ev(`document.activeElement?.id`), 'board-text', 'note opens ready to type');
+assert.equal(await ev(`document.querySelectorAll('#board-root .note-bg').length`), 1, 'note appears while typing');
 await typeText('Uma nota adesiva com um texto comprido que precisa quebrar sozinho dentro dela');
-assert.equal(await ev(`getComputedStyle(document.querySelector('#board-text')).whiteSpace`), 'pre-wrap', 'caixa quebra na largura da nota');
+assert.equal(await ev(`getComputedStyle(document.querySelector('#board-text')).whiteSpace`), 'pre-wrap', 'box wraps at the note width');
 await key('Escape');
 await sleep(900);
 const note = (await boardEls()).at(-1);
-assert.deepEqual([note.type, note.w, (await boardEls()).length], ['note', 200, nBeforeNote + 1], 'nota salva');
-assert.ok(await ev(`document.querySelectorAll('#board-root .el[data-id="${note.id}"] tspan').length`) > 1, 'texto quebrado em várias linhas');
+assert.deepEqual([note.type, note.w, (await boardEls()).length], ['note', 200, nBeforeNote + 1], 'note saved');
+assert.ok(await ev(`document.querySelectorAll('#board-root .el[data-id="${note.id}"] tspan').length`) > 1, 'text wrapped onto several lines');
 const nb = await elBox(note.id);
 await dbl(nb.x + nb.w / 2, nb.y + nb.h / 2);
-assert.equal(await ev(`document.querySelector('#board-text').value`), note.text, 'duplo clique reedita a nota');
+assert.equal(await ev(`document.querySelector('#board-text').value`), note.text, 'double click re-edits the note');
 await key('Escape');
 
-// quadro: clicar fora conclui a nota/texto sem perder o que foi digitado (antes: criava outro e sumia)
+// board: clicking outside finishes the note/text without losing what was typed (before: it created another and vanished)
 for (const [tool, x] of [['n', 300], ['t', 800]]) {
   const before = (await boardEls()).length;
   await key(tool);
   await click(cv.x + x, cv.y + 150);
   await typeText('123');
   await sleep(500);
-  await click(cv.x + x + 250, cv.y + 450);  // fora
+  await click(cv.x + x + 250, cv.y + 450);  // outside
   await sleep(900);
   const els = await boardEls();
-  assert.deepEqual([els.length, els.at(-1).text], [before + 1, '123'], `clicar fora salva (${tool})`);
+  assert.deepEqual([els.length, els.at(-1).text], [before + 1, '123'], `clicking outside saves (${tool})`);
   assert.equal(await ev(`document.querySelector('#board-text').hidden`), true);
 }
 
-// recarregar volta onde parou: posição/zoom e seleção (quadro e mapa)
+// reloading returns to where you left off: position/zoom and selection (board and map)
 await key('a', 2);
 await ev(`document.querySelector('#board-zoom-in').click()`);
 const boardT = await ev(`document.querySelector('#board-root').getAttribute('transform')`), boardSel = await selCount();
 await sleep(900); await cmd('Page.reload'); await sleep(1500);
-assert.equal(await ev(`document.querySelector('#board-root').getAttribute('transform')`), boardT, 'quadro volta na mesma posição e zoom');
-assert.equal(await selCount(), boardSel, 'quadro volta com a mesma seleção');
+assert.equal(await ev(`document.querySelector('#board-root').getAttribute('transform')`), boardT, 'board comes back at the same position and zoom');
+assert.equal(await selCount(), boardSel, 'board comes back with the same selection');
 await ev(`location.hash = '#/map/demo'`); await sleep(800);
 await ev(`document.querySelector('#zoom-in').click()`);
 await clickNode('Recursos');
 const mapT = await ev(`document.querySelector('#viewport').getAttribute('transform')`);
 await sleep(900); await cmd('Page.reload'); await sleep(1500);
-assert.equal(await ev(`document.querySelector('#viewport').getAttribute('transform')`), mapT, 'mapa volta na mesma posição e zoom');
-assert.ok((await ev(`document.querySelector('.selected-ring').parentNode.textContent`)).startsWith('Recursos'), 'mapa volta com o mesmo nó selecionado');
+assert.equal(await ev(`document.querySelector('#viewport').getAttribute('transform')`), mapT, 'map comes back at the same position and zoom');
+assert.ok((await ev(`document.querySelector('.selected-ring').parentNode.textContent`)).startsWith('Recursos'), 'map comes back with the same node selected');
 
-// pastas: criar, entrar, subpasta, documento novo nasce na pasta, voltar cai na pasta, renomear, apagar (conteúdo sobe)
+// folders: create, enter, subfolder, a new document is created in the folder, going back lands in the folder, rename, delete (contents move up)
 const tree = async () => (await fetch(BASE + '/api/folders')).json();
 const listNames = () => ev(`[...document.querySelectorAll('#maps li > a')].map(a => a.textContent)`);
 await ev(`location.hash = '#/'`); await sleep(800);
 await ev(`window.prompt = () => 'Trabalho'; document.querySelector('#new-folder').click()`); await sleep(800);
 const work = (await tree()).folders.find(f => f.name === 'Trabalho');
-assert.ok(work && work.parent === null, 'pasta criada no Início');
-assert.ok((await listNames()).includes('Trabalho'), 'pasta aparece na lista');
+assert.ok(work && work.parent === null, 'folder created at Home');
+assert.ok((await listNames()).includes('Trabalho'), 'folder appears in the list');
 await ev(`document.querySelector('#maps li.folder a').click()`); await sleep(800);
-assert.equal(await ev(`location.hash`), `#/folder/${work.id}`, 'entra na pasta');
+assert.equal(await ev(`location.hash`), `#/folder/${work.id}`, 'enters the folder');
 assert.equal(await ev(`document.querySelector('#empty').textContent`), 'Pasta vazia.');
 await ev(`window.prompt = () => 'Clientes'; document.querySelector('#new-folder').click()`); await sleep(800);
 const cli = (await tree()).folders.find(f => f.name === 'Clientes');
-assert.equal(cli.parent, work.id, 'subpasta dentro de Trabalho');
+assert.equal(cli.parent, work.id, 'subfolder inside Trabalho');
 await ev(`location.hash = '#/folder/${cli.id}'`); await sleep(800);
-assert.equal(await ev(`document.querySelector('#list-title').textContent`), 'Meus mapas›Trabalho›Clientes', 'trilha');
+assert.equal(await ev(`document.querySelector('#list-title').textContent`), 'Meus mapas›Trabalho›Clientes', 'breadcrumb');
 await ev(`document.querySelector('#new-map').click()`); await sleep(1200);
 const newMapId = await ev(`location.hash.match(/^#\\/map\\/(.+)$/)?.[1]`);
-assert.equal((await tree()).place[newMapId], cli.id, 'mapa novo nasce na pasta aberta');
-assert.equal(await ev(`document.querySelector('.brand').getAttribute('href')`), `#/folder/${cli.id}`, 'voltar leva para a pasta do mapa');
+assert.equal((await tree()).place[newMapId], cli.id, 'new map is created in the open folder');
+assert.equal(await ev(`document.querySelector('.brand').getAttribute('href')`), `#/folder/${cli.id}`, 'going back leads to the map folder');
 await ev(`document.querySelector('.brand').click()`); await sleep(800);
-assert.equal((await listNames()).length, 1, 'mapa listado dentro da pasta');
+assert.equal((await listNames()).length, 1, 'map listed inside the folder');
 await ev(`location.hash = '#/folder/${work.id}'`); await sleep(800);
 await ev(`window.prompt = () => 'Clientes VIP'; document.querySelector('#maps li.folder [data-rename-folder]').click()`); await sleep(800);
-assert.equal((await tree()).folders.find(f => f.id === cli.id).name, 'Clientes VIP', 'renomeia');
+assert.equal((await tree()).folders.find(f => f.id === cli.id).name, 'Clientes VIP', 'renames');
 await ev(`location.hash = '#/'`); await sleep(800);
 const rootDocs = (await listNames()).length;
 await ev(`window.confirm = () => true; [...document.querySelectorAll('#maps li.folder')].find(li => li.textContent.startsWith('Trabalho')).querySelector('[data-delete-folder]').click()`); await sleep(800);
 const t2 = await tree();
-assert.ok(!t2.folders.some(f => f.id === work.id), 'pasta apagada');
-assert.equal(t2.folders.find(f => f.id === cli.id).parent, null, 'subpasta sobe para o Início');
-assert.equal(t2.place[newMapId], cli.id, 'mapa continua na subpasta');
-assert.equal((await listNames()).length, rootDocs, 'Clientes VIP no lugar de Trabalho');
+assert.ok(!t2.folders.some(f => f.id === work.id), 'folder deleted');
+assert.equal(t2.folders.find(f => f.id === cli.id).parent, null, 'subfolder moves up to Home');
+assert.equal(t2.place[newMapId], cli.id, 'map stays in the subfolder');
+assert.equal((await listNames()).length, rootDocs, 'Clientes VIP in place of Trabalho');
 
-// pastas: mover pelo menu e arrastando; pasta não entra nela mesma
+// folders: move via the menu and by dragging; a folder does not enter itself
 const vip = (await tree()).folders.find(f => f.name === 'Clientes VIP');
 const rootDocId = await ev(`document.querySelector('#maps li:not(.folder)').dataset.drag.split(':')[1]`);
 await ev(`document.querySelector('#maps li:not(.folder) [data-move-doc]').click()`);
-assert.equal(await shownSel('#move-menu'), true, 'menu Mover para abre');
-assert.equal(await ev(`document.querySelector('#move-menu [data-to=""]').disabled`), true, 'pasta atual desabilitada');
+assert.equal(await shownSel('#move-menu'), true, 'Move to menu opens');
+assert.equal(await ev(`document.querySelector('#move-menu [data-to=""]').disabled`), true, 'current folder disabled');
 await ev(`document.querySelector('#move-menu [data-to="${vip.id}"]').click()`); await sleep(800);
-assert.equal((await tree()).place[rootDocId], vip.id, 'menu move o documento');
+assert.equal((await tree()).place[rootDocId], vip.id, 'menu moves the document');
 assert.equal(await shownSel('#move-menu'), false);
 await ev(`document.querySelector('#maps li.folder [data-move-folder]').click()`);
-assert.equal(await ev(`document.querySelector('#move-menu [data-to="${vip.id}"]').disabled`), true, 'pasta não pode ir para dentro dela mesma');
+assert.equal(await ev(`document.querySelector('#move-menu [data-to="${vip.id}"]').disabled`), true, 'a folder cannot go into itself');
 await key('Escape');
 await ev(`window.prompt = () => 'Destino'; document.querySelector('#new-folder').click()`); await sleep(800);
 const dest = (await tree()).folders.find(f => f.name === 'Destino');
@@ -1293,7 +1293,7 @@ await ev(`(() => { const dt = new DataTransfer();
   dst.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
   dst.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); })()`);
 await sleep(800);
-assert.equal((await tree()).folders.find(f => f.id === vip.id).parent, dest.id, 'arrastar pasta sobre pasta move');
+assert.equal((await tree()).folders.find(f => f.id === vip.id).parent, dest.id, 'dragging a folder onto a folder moves it');
 await ev(`location.hash = '#/folder/${vip.id}'`); await sleep(800);
 await ev(`(() => { const dt = new DataTransfer();
   document.querySelector('#maps li:not(.folder)').dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
@@ -1301,30 +1301,30 @@ await ev(`(() => { const dt = new DataTransfer();
   home.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
   home.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); })()`);
 await sleep(800);
-assert.equal(Object.values((await tree()).place).filter(v => v === vip.id).length, 1, 'soltar na trilha leva o documento para o Início');
+assert.equal(Object.values((await tree()).place).filter(v => v === vip.id).length, 1, 'dropping on the breadcrumb takes the document to Home');
 
-// pastas: clicar no nome da pasta aberta (título) edita ali mesmo; Esc desiste, Enter salva
+// folders: clicking the open folder's name (title) edits it in place; Esc cancels, Enter saves
 await ev(`location.hash = '#/folder/${dest.id}'`); await sleep(800);
 await ev(`document.querySelector('#list-title .crumb-current').click()`);
-assert.equal(await ev(`document.activeElement?.className`), 'inline-input', 'nome vira campo de edição');
+assert.equal(await ev(`document.activeElement?.className`), 'inline-input', 'name becomes an edit field');
 await typeText('Rascunho');
 await key('Escape'); await sleep(800);
-assert.equal((await tree()).folders.find(f => f.id === dest.id).name, 'Destino', 'Esc desiste');
+assert.equal((await tree()).folders.find(f => f.id === dest.id).name, 'Destino', 'Esc cancels');
 await ev(`document.querySelector('#list-title .crumb-current').click()`);
 await typeText('Projetos');
 await key('Enter'); await sleep(800);
-assert.equal((await tree()).folders.find(f => f.id === dest.id).name, 'Projetos', 'Enter salva o novo nome');
+assert.equal((await tree()).folders.find(f => f.id === dest.id).name, 'Projetos', 'Enter saves the new name');
 assert.equal(await ev(`document.querySelector('#list-title .crumb-current').textContent`), 'Projetos');
 
-// mapa: clicar no nome no topo edita ali mesmo (é o texto do nó central)
+// map: clicking the name at the top edits it in place (it is the central node's text)
 await ev(`location.hash = '#/map/demo'`); await sleep(800);
 await ev(`document.querySelector('#title').click()`);
 await typeText('Planejamento 2027');
 await key('Enter'); await sleep(900);
-assert.equal((await getMap()).root.text, 'Planejamento 2027', 'nome do mapa salvo');
+assert.equal((await getMap()).root.text, 'Planejamento 2027', 'map name saved');
 assert.equal(await ev(`document.querySelector('#title').textContent`), 'Planejamento 2027');
 
-// área de transferência do sistema (eventos copy/paste): mapa copia ramo como lista com recuo; texto colado vira tópicos
+// system clipboard (copy/paste events): the map copies a branch as an indented list; pasted text becomes topics
 const clipEvent = (type, data = {}) => ev(`(() => { const dt = new DataTransfer();
   for (const [k, v] of Object.entries(${JSON.stringify(data)})) dt.setData(k, v);
   const e = new ClipboardEvent('${type}', { clipboardData: dt, bubbles: true, cancelable: true });
@@ -1332,35 +1332,35 @@ const clipEvent = (type, data = {}) => ev(`(() => { const dt = new DataTransfer(
   return { prevented: e.defaultPrevented, types: [...dt.types], text: dt.getData('text/plain'), json: dt.getData('application/x-brainstorm-board') || dt.getData('application/x-brainstorm-branch') }; })()`);
 await clickNode('Planejamento 2027');
 const mcopy = await clipEvent('copy');
-assert.ok(mcopy.prevented && mcopy.json && mcopy.text.startsWith('Planejamento 2027\n  '), 'copiar ramo: Brainstorm + lista com recuo');
+assert.ok(mcopy.prevented && mcopy.json && mcopy.text.startsWith('Planejamento 2027\n  '), 'copy branch: Brainstorm + indented list');
 const kidsBefore = (await getMap()).root.children.length;
 await clipEvent('paste', { 'text/plain': 'Ideia A\n  Detalhe A1\nIdeia B' });
 await sleep(900);
 const rootKids = (await getMap()).root.children;
-assert.equal(rootKids.length, kidsBefore + 2, 'texto colado vira tópicos');
-assert.deepEqual(rootKids.find(c => c.text === 'Ideia A').children.map(c => c.text), ['Detalhe A1'], 'recuo vira filho');
+assert.equal(rootKids.length, kidsBefore + 2, 'pasted text becomes topics');
+assert.deepEqual(rootKids.find(c => c.text === 'Ideia A').children.map(c => c.text), ['Detalhe A1'], 'indent becomes child');
 await clipEvent('paste', { 'application/x-brainstorm-branch': '{"text": 1}' });
 await sleep(500);
-assert.equal((await getMap()).root.children.length, kidsBefore + 2, 'ramo inválido é ignorado');
+assert.equal((await getMap()).root.children.length, kidsBefore + 2, 'invalid branch is ignored');
 
-// quadro: copiar elementos para o sistema e colar (também depois de recarregar); texto de fora vira texto
+// board: copy elements to the system and paste (also after a reload); outside text becomes text
 await ev(`location.hash = '#/board/${boardId}'`); await sleep(1200);
 await key('a', 2);
 const nSel = await selCount(), nBoard = (await boardEls()).length;
 const bcopy = await clipEvent('copy');
-assert.ok(bcopy.prevented && JSON.parse(bcopy.json).length === nSel, 'copiar elementos para o sistema');
+assert.ok(bcopy.prevented && JSON.parse(bcopy.json).length === nSel, 'copy elements to the system');
 await cmd('Page.reload'); await sleep(1500);
 await clipEvent('paste', { 'application/x-brainstorm-board': bcopy.json });
 await sleep(900);
-assert.equal((await boardEls()).length, nBoard + nSel, 'colar depois de recarregar');
+assert.equal((await boardEls()).length, nBoard + nSel, 'paste after a reload');
 await clipEvent('paste', { 'text/plain': 'Texto colado' });
 await sleep(900);
-assert.deepEqual([(await boardEls()).at(-1).type, (await boardEls()).at(-1).text], ['text', 'Texto colado'], 'texto de fora vira texto');
+assert.deepEqual([(await boardEls()).at(-1).type, (await boardEls()).at(-1).text], ['text', 'Texto colado'], 'outside text becomes text');
 await clipEvent('paste', { 'application/x-brainstorm-board': '[{"type":"script","x":0,"y":0}]' });
 await sleep(500);
-assert.equal((await boardEls()).length, nBoard + nSel + 1, 'elemento desconhecido é ignorado');
+assert.equal((await boardEls()).length, nBoard + nSel + 1, 'unknown element is ignored');
 
-// Ctrl+X recorta: no sistema (evento cut) e pela tecla (cópia interna); colar devolve
+// Ctrl+X cuts: in the system (cut event) and by the key (internal copy); paste restores
 const nCut = (await boardEls()).length, cutId = (await boardEls()).at(-1).id;
 await key('a', 2);
 await key('Escape');
@@ -1368,21 +1368,21 @@ const lastBox = await elBox(cutId);
 await click(lastBox.x + lastBox.w / 2, lastBox.y + lastBox.h / 2);
 const bcut = await clipEvent('cut');
 await sleep(900);
-assert.ok(bcut.prevented && JSON.parse(bcut.json)[0].id === cutId, 'recortar copia para o sistema');
-assert.equal((await boardEls()).length, nCut - 1, 'recortar apaga');
+assert.ok(bcut.prevented && JSON.parse(bcut.json)[0].id === cutId, 'cut copies to the system');
+assert.equal((await boardEls()).length, nCut - 1, 'cut deletes');
 await clipEvent('paste', { 'application/x-brainstorm-board': bcut.json });
 await sleep(900);
-assert.equal((await boardEls()).length, nCut, 'colar devolve o recortado');
+assert.equal((await boardEls()).length, nCut, 'paste brings back what was cut');
 await key('x', 2);
 await sleep(900);
-assert.equal((await boardEls()).length, nCut - 1, 'Ctrl+X pela tecla também recorta');
+assert.equal((await boardEls()).length, nCut - 1, 'Ctrl+X by key also cuts');
 await ev(`location.hash = '#/map/demo'`); await sleep(1000);
 await clickNode('Ideia B');
 await clipEvent('cut');
 await sleep(900);
-assert.ok(!(await getMap()).root.children.some(c => c.text === 'Ideia B'), 'mapa: recortar apaga o ramo');
+assert.ok(!(await getMap()).root.children.some(c => c.text === 'Ideia B'), 'map: cut deletes the branch');
 
-// colar em outro documento leva junto os arquivos (imagem do quadro; imagem e anexo do nó)
+// pasting into another document brings the files along (board image; node image and attachment)
 const pngBytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 const upTo = async (doc, name) => (await (await fetch(BASE + `/api/maps/${doc}/files`, { method: 'POST', headers: { 'X-Filename': name }, body: pngBytes })).json()).id;
 const elBase = { strokeColor: '#1e1e1e', backgroundColor: 'transparent', fillStyle: 'hachure', strokeWidth: 2, strokeStyle: 'solid', roughness: 1, opacity: 100, seed: 1 };
@@ -1397,8 +1397,8 @@ await ev(`location.hash = '#/board/qb'`); await sleep(1200);
 await clipEvent('paste', { 'application/x-brainstorm-board': qcopy.json });
 await sleep(1200);
 const qbImg = (await (await fetch(BASE + '/api/maps/qb')).json()).elements[0];
-assert.ok(qbImg && qbImg.fileId !== qaFile && !('fileSrc' in qbImg), 'imagem colada ganha arquivo próprio no outro quadro');
-assert.equal((await fetch(BASE + `/api/maps/qb/files/${qbImg.fileId}`)).status, 200, 'arquivo existe no quadro de destino');
+assert.ok(qbImg && qbImg.fileId !== qaFile && !('fileSrc' in qbImg), 'pasted image gets its own file in the other board');
+assert.equal((await fetch(BASE + `/api/maps/qb/files/${qbImg.fileId}`)).status, 200, 'file exists in the destination board');
 await fetch(BASE + '/api/maps/ma', { method: 'PUT', body: JSON.stringify({ version: 0, root: { id: 'ra', text: 'Origem', children: [] } }) });
 const maImg = await upTo('ma', 'n.png'), maAtt = await upTo('ma', 'doc.png');
 await fetch(BASE + '/api/maps/ma', { method: 'PUT', body: JSON.stringify({ version: 1, root: { id: 'ra', text: 'Origem', children: [
@@ -1411,10 +1411,10 @@ await clickNode('Planejamento 2027');
 await clipEvent('paste', { 'application/x-brainstorm-branch': mcopy2.json });
 await sleep(1500);
 const pasted = (await getMap()).root.children.find(c => c.text === 'Com arquivos');
-assert.ok(pasted && pasted.image.id !== maImg && pasted.attachments[0].id !== maAtt && !('src' in pasted), 'ramo colado ganha arquivos próprios');
-assert.equal((await fetch(BASE + `/api/maps/demo/files/${pasted.attachments[0].id}`)).status, 200, 'anexo existe no mapa de destino');
+assert.ok(pasted && pasted.image.id !== maImg && pasted.attachments[0].id !== maAtt && !('src' in pasted), 'pasted branch gets its own files');
+assert.equal((await fetch(BASE + `/api/maps/demo/files/${pasted.attachments[0].id}`)).status, 200, 'attachment exists in the destination map');
 
-// texto não se desloca ao entrar na edição: primeira linha de tinta igual (±1 px) no desenho e na caixa
+// text does not shift on entering edit mode: first ink line equal (±1 px) in the drawing and in the box
 const inkTop = async (b) => {
   const shotData = (await cmd('Page.captureScreenshot', { clip: { x: b.x - 10, y: b.y - 10, width: b.w + 20, height: b.h + 20, scale: 1 } })).result.data;
   return ev(`(async () => { const im = new Image(); im.src = 'data:image/png;base64,${shotData}'; await im.decode();
@@ -1432,7 +1432,7 @@ for (const fam of ['hand', 'normal', 'code']) {
   await ev(`document.querySelector('#board-props [data-prop="fontSize"] [data-value="36"]').click()`);
   await ev(`document.querySelector('#board-props [data-prop="fontFamily"] [data-value="${fam}"]').click()`);
   await sleep(300);
-  await click(cv.x + 1250, cv.y + 120);  // solta a seleção (sem a moldura na foto)
+  await click(cv.x + 1250, cv.y + 120);  // drops the selection (without the frame in the snapshot)
   await sleep(500);
   const tid = (await ev(`[...document.querySelectorAll('#board-root .el')].at(-1).dataset.id`));
   const tb = await elBox(tid);
@@ -1440,13 +1440,13 @@ for (const fam of ['hand', 'normal', 'code']) {
   await dbl(tb.x + tb.w / 2, tb.y + tb.h / 2);
   await ev(`document.querySelector('#board-text').style.caretColor = 'transparent'`);
   const editTop = await inkTop(tb);
-  assert.ok(viewTop >= 0 && Math.abs(editTop - viewTop) <= 1, `texto (${fam}) no mesmo lugar ao editar: ${viewTop} vs ${editTop}`);
+  assert.ok(viewTop >= 0 && Math.abs(editTop - viewTop) <= 1, `text (${fam}) stays in place when editing: ${viewTop} vs ${editTop}`);
   await key('Escape');
   await key('Delete');
   await sleep(300);
 }
 
-// editando um texto existente, a moldura tracejada acompanha os caracteres incluídos/apagados
+// when editing an existing text, the dashed frame follows the added/deleted characters
 await key('8');
 await click(cv.x + 700, cv.y + 420);
 await typeText('casas');
@@ -1459,59 +1459,59 @@ await dbl(ebx.x + ebx.w / 2, ebx.y + ebx.h / 2);
 await ev(`document.querySelector('#board-text').setSelectionRange(99, 99)`);
 await typeText(' da mãe joana');
 const w1 = await selW();
-assert.ok(w1 > w0 + 50, `moldura cresce ao digitar: ${w0} → ${w1}`);
+assert.ok(w1 > w0 + 50, `frame grows while typing: ${w0} → ${w1}`);
 for (let i = 0; i < 9; i++) await key('Backspace');
-assert.ok(await selW() < w1 - 30, 'moldura diminui ao apagar');
+assert.ok(await selW() < w1 - 30, 'frame shrinks on delete');
 const selH = () => ev(`document.querySelector('#board-root .sel-item').getBoundingClientRect().height`);
 const h0 = await selH();
 await key('Enter');
-assert.ok(await selH() > h0 + 15, 'moldura cresce com o Enter');
+assert.ok(await selH() > h0 + 15, 'frame grows with Enter');
 await typeText('linha 2');
 await key('Escape');
 
-// lista: busca em todas as pastas (sem acento/maiúscula) e ordenação lembrada
+// list: search across all folders (accent/case-insensitive) and remembered sort order
 await ev(`location.hash = '#/'`); await sleep(1000);
 await ev(`document.querySelector('#search').focus()`);
 await typeText('clientes vip');
 await sleep(300);
 assert.deepEqual(await ev(`[...document.querySelectorAll('#maps li')].map(li => [li.classList.contains('folder'), li.querySelector('a').firstChild.nextSibling.textContent, li.querySelector('.where')?.textContent])`),
-  [[true, 'Clientes VIP', 'Meus mapas › Projetos']], 'busca acha a subpasta e mostra onde ela está');
+  [[true, 'Clientes VIP', 'Meus mapas › Projetos']], 'search finds the subfolder and shows where it is');
 await key('Escape');
-assert.equal(await ev(`document.querySelector('#search').value`), '', 'Esc limpa a busca');
-assert.equal(await ev(`document.querySelectorAll('#maps .where').length`), 0, 'sem busca, volta a lista da pasta');
+assert.equal(await ev(`document.querySelector('#search').value`), '', 'Esc clears the search');
+assert.equal(await ev(`document.querySelectorAll('#maps .where').length`), 0, 'without a search, goes back to the folder list');
 const folderOrder = () => ev(`[...document.querySelectorAll('#maps li.folder > a')].map(a => a.textContent)`);
 await ev(`(() => { const s = document.querySelector('#sort'); s.value = 'za'; s.dispatchEvent(new Event('change')); })()`);
 const za = await folderOrder();
 assert.deepEqual(za, [...za].sort((a, b) => b.localeCompare(a, 'pt-BR')), 'Nome (Z–A)');
 await cmd('Page.reload'); await sleep(1500);
-assert.equal(await ev(`document.querySelector('#sort').value`), 'za', 'ordenação lembrada depois de recarregar');
+assert.equal(await ev(`document.querySelector('#sort').value`), 'za', 'sort order remembered after a reload');
 await ev(`(() => { const s = document.querySelector('#sort'); s.value = 'recent'; s.dispatchEvent(new Event('change')); })()`);
 
-// busca também na lixeira (pelo nome), mesmo dentro de uma pasta
+// search also in the trash (by name), even inside a folder
 await fetch(BASE + '/api/maps/lixo-teste', { method: 'PUT', body: JSON.stringify({ version: 0, type: 'board', title: 'Lixo de teste', elements: [] }) });
 await fetch(BASE + '/api/maps/lixo-teste', { method: 'DELETE' });
 await ev(`location.hash = '#/folder/${dest.id}'`); await sleep(1000);
 await ev(`document.querySelector('#search').focus()`);
 await typeText('lixo de');
 await sleep(300);
-assert.equal(await shownSel('#trash'), true, 'lixeira aparece na busca');
-assert.equal(await ev(`document.querySelector('#trash').open`), true, 'aberta');
-assert.deepEqual(await ev(`[...document.querySelectorAll('#trash-list li span')].map(s => s.textContent)`), ['Lixo de teste'], 'só o que bate com a busca');
-assert.equal(await shownSel('#empty'), false, 'sem "nada encontrado" quando só a lixeira tem resultado');
+assert.equal(await shownSel('#trash'), true, 'trash appears in the search');
+assert.equal(await ev(`document.querySelector('#trash').open`), true, 'open');
+assert.deepEqual(await ev(`[...document.querySelectorAll('#trash-list li span')].map(s => s.textContent)`), ['Lixo de teste'], 'only what matches the search');
+assert.equal(await shownSel('#empty'), false, 'no "nothing found" when only the trash has results');
 await key('Escape');
-assert.equal(await shownSel('#trash'), false, 'sem busca, dentro da pasta, lixeira some');
+assert.equal(await shownSel('#trash'), false, 'without a search, inside the folder, the trash disappears');
 
-// apagar mapa/quadro pergunta antes; cancelar não apaga
+// deleting a map/board asks first; cancelling does not delete
 await fetch(BASE + '/api/maps/pergunta', { method: 'PUT', body: JSON.stringify({ version: 0, type: 'board', title: 'Pergunta', elements: [] }) });
 await ev(`location.hash = '#/'`); await sleep(1000);
 await ev(`window.__asked = []; window.confirm = (m) => { window.__asked.push(m); return false; }; document.querySelector('#maps [data-delete="pergunta"]').click()`); await sleep(600);
-assert.match(await ev(`window.__asked[0]`), /^Apagar o quadro "Pergunta"\?/, 'pergunta com o nome');
-assert.equal((await fetch(BASE + '/api/maps/pergunta')).status, 200, 'cancelar não apaga');
+assert.match(await ev(`window.__asked[0]`), /^Apagar o quadro "Pergunta"\?/, 'prompt with the name');
+assert.equal((await fetch(BASE + '/api/maps/pergunta')).status, 200, 'cancel does not delete');
 await ev(`window.confirm = () => true; document.querySelector('#maps [data-delete="pergunta"]').click()`); await sleep(800);
-assert.equal((await fetch(BASE + '/api/maps/pergunta')).status, 404, 'confirmar apaga (vai para a lixeira)');
+assert.equal((await fetch(BASE + '/api/maps/pergunta')).status, 404, 'confirming deletes (goes to the trash)');
 
-// colagens forjadas (outro site pode pôr qualquer coisa na área de transferência): nada quebra o desenho,
-// nada inválido é salvo e o documento continua editável
+// forged pastes (another site can put anything on the clipboard): nothing breaks the drawing,
+// nothing invalid is saved and the document stays editable
 await fetch(BASE + '/api/maps/secb', { method: 'PUT', body: JSON.stringify({ version: 0, type: 'board', title: 'Seguro', elements: [{ ...elBase, id: 'ok1', type: 'rectangle', x: 300, y: 200, w: 80, h: 60 }] }) });
 const secEls = async () => (await (await fetch(BASE + '/api/maps/secb')).json()).elements;
 const secDom = () => ev(`document.querySelectorAll('#board-root .el').length`);
@@ -1524,10 +1524,10 @@ for (const bad of ['[{"id":"1","type":"text","x":0,"y":0}]', '[{"id":"1","type":
 await clipEvent('paste', { 'application/x-brainstorm-board': '[{"id":"1","type":"rectangle","x":0,"y":0,"link":5}]' });
 await sleep(900);
 const secPasted = (await secEls()).at(-1);
-assert.deepEqual([(await secEls()).length, await secDom(), secPasted.type, 'link' in secPasted], [2, 2, 'rectangle', false], 'link inválido sai e o resto é colado');
+assert.deepEqual([(await secEls()).length, await secDom(), secPasted.type, 'link' in secPasted], [2, 2, 'rectangle', false], 'invalid link is dropped and the rest is pasted');
 await key('ArrowRight');
 await sleep(900);
-assert.equal((await secEls()).at(-1).x, secPasted.x + 1, 'quadro continua salvando depois das colagens forjadas');
+assert.equal((await secEls()).at(-1).x, secPasted.x + 1, 'board keeps saving after the forged pastes');
 
 await fetch(BASE + '/api/maps/secm', { method: 'PUT', body: JSON.stringify({ version: 0, layout: 'map', root: { id: 'sr', text: 'Seguro', children: [] } }) });
 const secMap = async () => (await (await fetch(BASE + '/api/maps/secm')).json()).root;
@@ -1536,27 +1536,27 @@ await ev(`location.hash = '#/map/secm'`); await sleep(1200);
 await clipEvent('paste', { 'application/x-brainstorm-branch': '{"text":"a","children":[{"text":"b","children":[],"shape":"rect","color":5}]}' });
 await sleep(900);
 const secA = (await secMap()).children[0];
-assert.deepEqual([secA.text, secA.children[0].text, secA.children[0].shape, 'color' in secA.children[0]], ['a', 'b', 'rect', false], 'cor inválida sai do ramo colado');
-assert.equal(await secNodes(), 3, 'mapa continua desenhado depois da colagem forjada');
+assert.deepEqual([secA.text, secA.children[0].text, secA.children[0].shape, 'color' in secA.children[0]], ['a', 'b', 'rect', false], 'invalid colour is dropped from the pasted branch');
+assert.equal(await secNodes(), 3, 'map is still drawn after the forged paste');
 await clickNode('Seguro');
 await clipEvent('paste', { 'application/x-brainstorm-branch': '{"text":"cor","children":[],"borderColor":"url(https://attacker.example/p.gif)","lineColor":"#e5383b"}' });
 await sleep(900);
 const secCor = (await secMap()).children.find(c => c.text === 'cor');
-assert.deepEqual(['borderColor' in secCor, secCor.lineColor], [false, '#e5383b'], 'cor url(...) não é guardada; a hexadecimal fica');
+assert.deepEqual(['borderColor' in secCor, secCor.lineColor], [false, '#e5383b'], 'url(...) colour is not stored; the hexadecimal one stays');
 await clickNode('cor');
 await ev(`document.querySelector('#style-btn').click()`);
-assert.equal(await ev(`document.querySelectorAll('#style-pop [style*="url("], #viewport [stroke*="url(h"], #viewport [fill*="url(h"]').length`), 0, 'nenhuma cor url(...) chega ao painel nem ao desenho');
+assert.equal(await ev(`document.querySelectorAll('#style-pop [style*="url("], #viewport [stroke*="url(h"], #viewport [fill*="url(h"]').length`), 0, 'no url(...) colour reaches the panel or the drawing');
 await clipEvent('paste', { 'application/x-brainstorm-branch': JSON.stringify({ text: 'x'.repeat(1000001), children: [] }) });
 await sleep(700);
-assert.equal(await secNodes(), 4, 'ramo grande demais é recusado');
+assert.equal(await secNodes(), 4, 'branch too large is refused');
 await key('Escape');
 await key('Tab');
 await typeText('depois');
 await key('Enter');
 await sleep(900);
-assert.ok((await secMap()).children.find(c => c.text === 'cor').children.some(c => c.text === 'depois'), 'mapa continua salvando depois das colagens forjadas');
+assert.ok((await secMap()).children.find(c => c.text === 'cor').children.some(c => c.text === 'depois'), 'map keeps saving after the forged pastes');
 
-// seletor de idioma: a escolha fica guardada, a página recarrega e os textos vêm do dicionário do idioma
+// language selector: the choice is stored, the page reloads and the texts come from the language's dictionary
 await ev(`location.hash = '#/'`); await sleep(800);
 assert.deepEqual(await ev(`[...document.querySelectorAll('#lang option')].map(o => o.textContent)`), ['Português (Brasil)', 'English', 'Español', '日本語']);
 assert.equal(await ev(`document.querySelector('#lang').title`), 'Idioma');
@@ -1568,163 +1568,163 @@ const pickLang = async (code) => {
 const uiTexts = () => ev(`[document.querySelector('#new-map').textContent, document.querySelector('#search').placeholder, document.querySelector('#logout-btn').title, document.querySelector('#trash summary').textContent.replace(/\\d+/, '{n}')]`);
 for (const code of ['en', 'es', 'ja']) {
   const d = (await import(new URL(`../static/locales/${code}.js`, import.meta.url))).default;
-  assert.deepEqual(await pickLang(code), ['reloaded', code, code, code], `escolher ${code} guarda a escolha e recarrega`);
-  assert.deepEqual(await uiTexts(), [d['list.newMap'], d['list.searchPlaceholder'], d['topbar.logout'], d['trash.title']], `interface em ${code} (HTML e textos montados em JS)`);
+  assert.deepEqual(await pickLang(code), ['reloaded', code, code, code], `choosing ${code} stores the choice and reloads`);
+  assert.deepEqual(await uiTexts(), [d['list.newMap'], d['list.searchPlaceholder'], d['topbar.logout'], d['trash.title']], `interface in ${code} (HTML and JS-built texts)`);
 }
-assert.deepEqual(await pickLang('pt-BR'), ['reloaded', 'pt-BR', 'pt-BR', 'pt-BR'], 'volta para o português');
+assert.deepEqual(await pickLang('pt-BR'), ['reloaded', 'pt-BR', 'pt-BR', 'pt-BR'], 'back to Portuguese');
 
-// menus Mapas / Quadros no topo: abrem e fecham, listam só aquele tipo (de todas as pastas) e criam um novo
+// Maps / Boards menus at the top: open and close, list only that kind (from all folders) and create a new one
 await ev(`location.hash = '#/'`); await sleep(800);
 await ev(`document.querySelector('#boards-menu-btn').click()`);
-assert.equal(await shownSel('#boards-menu'), true, 'menu Quadros abre');
+assert.equal(await shownSel('#boards-menu'), true, 'Quadros menu opens');
 await ev(`document.querySelector('#maps-menu-btn').click()`);
-assert.deepEqual([await shownSel('#boards-menu'), await shownSel('#maps-menu')], [false, true], 'abrir um menu fecha o outro');
+assert.deepEqual([await shownSel('#boards-menu'), await shownSel('#maps-menu')], [false, true], 'opening one menu closes the other');
 await ev(`document.querySelector('#maps-menu-btn').click()`);
-assert.equal(await shownSel('#maps-menu'), false, 'clicar de novo fecha');
+assert.equal(await shownSel('#maps-menu'), false, 'clicking again closes it');
 const docsOf = async (board) => (await (await fetch(BASE + '/api/maps')).json()).filter(m => (m.type === 'board') === board).length;
 await ev(`document.querySelector('#boards-menu-btn').click(); document.querySelector('#list-boards').click()`); await sleep(1000);
 assert.equal(await ev(`location.hash`), '#/boards');
-assert.equal(await shownSel('#boards-menu'), false, 'escolher um item fecha o menu');
+assert.equal(await shownSel('#boards-menu'), false, 'choosing an item closes the menu');
 const nBoards = await docsOf(true);
 assert.deepEqual(await ev(`[document.querySelectorAll('#maps li').length, document.querySelectorAll('#maps li.board').length, document.querySelectorAll('#maps li .where').length]`),
-  [nBoards, nBoards, nBoards], 'Listar quadros: só quadros, de todas as pastas, com o lugar de cada um');
-assert.equal(await ev(`document.querySelector('#list-title').textContent`), 'Meus mapas›Quadros', 'trilha mostra o tipo listado');
+  [nBoards, nBoards, nBoards], 'List boards: only boards, from all folders, with the location of each');
+assert.equal(await ev(`document.querySelector('#list-title').textContent`), 'Meus mapas›Quadros', 'breadcrumb shows the listed type');
 await ev(`document.querySelector('#maps-menu-btn').click(); document.querySelector('#list-maps').click()`); await sleep(1000);
 const nMaps = await docsOf(false);
-assert.deepEqual(await ev(`[document.querySelectorAll('#maps li').length, document.querySelectorAll('#maps li.board').length]`), [nMaps, 0], 'Listar mapas: só mapas');
+assert.deepEqual(await ev(`[document.querySelectorAll('#maps li').length, document.querySelectorAll('#maps li.board').length]`), [nMaps, 0], 'List maps: only maps');
 await ev(`location.hash = '#/map/demo'`); await sleep(1000);
-assert.equal(await ev(`getComputedStyle(document.querySelector('#boards-menu-btn')).display !== 'none'`), true, 'menus também no editor');
+assert.equal(await ev(`getComputedStyle(document.querySelector('#boards-menu-btn')).display !== 'none'`), true, 'menus in the editor too');
 await ev(`document.querySelector('#maps-menu-btn').click(); document.querySelector('#new-map').click()`); await sleep(1500);
-assert.match(await ev(`location.hash`), /^#\/map\/[a-z0-9-]+$/, 'Novo mapa pelo menu abre o mapa novo');
-assert.equal(await docsOf(false), nMaps + 1, 'mapa criado');
+assert.match(await ev(`location.hash`), /^#\/map\/[a-z0-9-]+$/, 'New map via the menu opens the new map');
+assert.equal(await docsOf(false), nMaps + 1, 'map created');
 
-// skills: criar, digitar com preview, tag, busca, versão nomeada, comparar, restaurar, listagem e modo guardado
+// skills: create, type with preview, tag, search, named version, compare, restore, listing and stored mode
 await ev(`location.hash = '#/'`); await sleep(800);
 const skillDocs = async () => (await (await fetch(BASE + '/api/maps')).json()).filter(m => m.type === 'skill');
 const nSkills0 = (await skillDocs()).length;
 await ev(`document.querySelector('#skills-menu-btn').click(); document.querySelector('#new-skill').click()`); await sleep(1500);
-assert.match(await ev(`location.hash`), /^#\/skill\/[a-z0-9-]+$/, 'Novo skill abre o skill');
+assert.match(await ev(`location.hash`), /^#\/skill\/[a-z0-9-]+$/, 'New skill opens the skill');
 const skId = (await ev(`location.hash`)).split('/').pop();
-assert.equal((await skillDocs()).length, nSkills0 + 1, 'skill criado');
-assert.equal(await ev(`document.querySelector('#skill-text').value`), '# Skill sem título\n\n## Quando usar\n\n## Instruções\n', 'esqueleto é o modelo pt-BR');
+assert.equal((await skillDocs()).length, nSkills0 + 1, 'skill created');
+assert.equal(await ev(`document.querySelector('#skill-text').value`), '# Skill sem título\n\n## Quando usar\n\n## Instruções\n', 'skeleton is the pt-BR template');
 const getSkill = async () => (await fetch(BASE + '/api/maps/' + skId)).json();
 const skType = (v) => ev(`(() => { const t = document.querySelector('#skill-text'); t.value = ${JSON.stringify(v)}; t.dispatchEvent(new Event('input')); })()`);
 await skType('**oi**'); await sleep(500);
-assert.match(await ev(`document.querySelector('#skill-preview').innerHTML`), /<strong>oi<\/strong>/, 'preview renderiza negrito');
+assert.match(await ev(`document.querySelector('#skill-preview').innerHTML`), /<strong>oi<\/strong>/, 'preview renders bold');
 await ev(`(() => { const i = document.querySelector('#skill-tag-input'); i.value = 'teste'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); })()`);
-assert.deepEqual(await ev(`[...document.querySelectorAll('#skill-tag-list .skill-tag')].map(c => c.firstChild.textContent)`), ['teste'], 'chip da tag aparece');
+assert.deepEqual(await ev(`[...document.querySelectorAll('#skill-tag-list .skill-tag')].map(c => c.firstChild.textContent)`), ['teste'], 'tag chip appears');
 await sleep(1500);
-assert.deepEqual((await (await fetch(BASE + '/api/maps')).json()).find(m => m.id === skId).tags, ['teste'], 'tag salva no servidor');
+assert.deepEqual((await (await fetch(BASE + '/api/maps')).json()).find(m => m.id === skId).tags, ['teste'], 'tag saved on the server');
 promptAnswer = 'v1';
 await ev(`document.querySelector('#skill-save-version').click()`); await sleep(1000);
 await ev(`document.querySelector('#skill-versions-btn').click()`); await sleep(800);
-assert.equal(await ev(`[...document.querySelectorAll('#skill-version-list li strong')].some(s => s.textContent === 'v1')`), true, 'versão nomeada aparece em negrito');
+assert.equal(await ev(`[...document.querySelectorAll('#skill-version-list li strong')].some(s => s.textContent === 'v1')`), true, 'named version appears in bold');
 await skType('**oi**\n\nnovo parágrafo'); await sleep(1500);
 await ev(`(() => { const i = document.querySelector('#skill-tag-input'); i.value = 'extra'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); })()`); await sleep(1500);
-assert.deepEqual((await getSkill()).tags, ['teste', 'extra'], 'tags atuais diferem da v1');
+assert.deepEqual((await getSkill()).tags, ['teste', 'extra'], 'current tags differ from v1');
 const v1Btn = `[...document.querySelectorAll('#skill-version-list li')].find(li => li.querySelector('strong').textContent === 'v1')`;
 await ev(`${v1Btn}.querySelector('[data-compare]').click()`); await sleep(800);
-assert.ok(await ev(`document.querySelectorAll('#skill-diff-lines .diff-line.add').length`) > 0, 'comparar mostra linha adicionada');
+assert.ok(await ev(`document.querySelectorAll('#skill-diff-lines .diff-line.add').length`) > 0, 'compare shows an added line');
 dialogAccept = true;
 await ev(`${v1Btn}.querySelector('[data-restore]').click()`); await sleep(1500);
-assert.equal(await ev(`document.querySelector('#skill-text').value`), '**oi**', 'restaurar devolve o texto da versão');
+assert.equal(await ev(`document.querySelector('#skill-text').value`), '**oi**', 'restore brings back the version text');
 const restored = await getSkill();
-assert.equal(restored.content, '**oi**', 'servidor recebeu o texto restaurado');
-assert.deepEqual(restored.tags, ['teste'], 'servidor recebeu as tags restauradas');
+assert.equal(restored.content, '**oi**', 'server received the restored text');
+assert.deepEqual(restored.tags, ['teste'], 'server received the restored tags');
 const hist = await (await fetch(BASE + '/api/maps/' + skId + '/history')).json();
-assert.ok((await Promise.all(hist.map(h => fetch(BASE + '/api/maps/' + skId + '/history/' + h.version).then(r => r.json())))).some(b => b.content === '**oi**\n\nnovo parágrafo'), 'texto anterior ao restaurar ficou no histórico');
+assert.ok((await Promise.all(hist.map(h => fetch(BASE + '/api/maps/' + skId + '/history/' + h.version).then(r => r.json())))).some(b => b.content === '**oi**\n\nnovo parágrafo'), 'text from before the restore stayed in the history');
 await ev(`document.querySelector('.skill-modes [data-mode="preview"]').click()`); await sleep(300);
-assert.equal(await ev(`getComputedStyle(document.querySelector('#skill-text')).display`), 'none', 'modo Preview esconde o textarea');
+assert.equal(await ev(`getComputedStyle(document.querySelector('#skill-text')).display`), 'none', 'Preview mode hides the textarea');
 await ev(`location.hash = '#/'`); await sleep(500);
 await ev(`location.reload()`); await sleep(2000);
 await ev(`location.hash = '#/skill/${skId}'`); await sleep(1200);
-assert.deepEqual(await ev(`[document.querySelector('#skill-view').dataset.mode, getComputedStyle(document.querySelector('#skill-text')).display]`), ['preview', 'none'], 'modo Preview persiste após recarregar');
+assert.deepEqual(await ev(`[document.querySelector('#skill-view').dataset.mode, getComputedStyle(document.querySelector('#skill-text')).display]`), ['preview', 'none'], 'Preview mode persists after a reload');
 await ev(`document.querySelector('.skill-modes [data-mode="split"]').click()`);
 await ev(`location.hash = '#/skills'`); await sleep(1000);
 const nSk = (await skillDocs()).length;
-assert.deepEqual(await ev(`[document.querySelectorAll('#maps li').length, document.querySelectorAll('#maps li.skill').length]`), [nSk, nSk], 'Listar skills: só skills');
+assert.deepEqual(await ev(`[document.querySelectorAll('#maps li').length, document.querySelectorAll('#maps li.skill').length]`), [nSk, nSk], 'List skills: only skills');
 await ev(`(() => { const s = document.querySelector('#search'); s.value = 'teste'; s.dispatchEvent(new Event('input')); })()`); await sleep(600);
-assert.ok(await ev(`document.querySelectorAll('#maps li.skill').length`) >= 1, 'buscar a tag acha o skill');
-assert.ok((await ev(`[...document.querySelectorAll('#maps li.skill a')].map(a => a.getAttribute('href'))`)).includes('#/skill/' + skId), 'o item achado é o skill criado');
+assert.ok(await ev(`document.querySelectorAll('#maps li.skill').length`) >= 1, 'searching the tag finds the skill');
+assert.ok((await ev(`[...document.querySelectorAll('#maps li.skill a')].map(a => a.getAttribute('href'))`)).includes('#/skill/' + skId), 'the item found is the skill created');
 await ev(`(() => { const s = document.querySelector('#search'); s.value = ''; s.dispatchEvent(new Event('input')); })()`);
 
-// configurações: o menu abre as duas telas; salvar a chave mostra só a máscara; região do Wasabi preenche o endpoint;
-// o segredo do storage não volta (endpoint local fechado: nada sai para a internet)
+// settings: the menu opens both screens; saving the key shows only the mask; the Wasabi region fills the endpoint;
+// the storage secret does not come back (closed local endpoint: nothing goes out to the internet)
 await ev(`location.hash = '#/'`); await sleep(500);
 await ev(`document.querySelector('#settings-menu-btn').click(); document.querySelector('#settings-llm-btn').click()`); await sleep(1000);
 assert.deepEqual(await ev(`[location.hash, document.body.dataset.view, document.querySelector('#settings-llm').hidden, document.querySelector('#settings-backup').hidden, document.querySelector('#settings-menu').hidden, document.querySelectorAll('#llm-list li').length]`),
-  ['#/settings/llm', 'settings', false, true, true, 6], 'Configurar LLM abre a tela com os provedores');
+  ['#/settings/llm', 'settings', false, true, true, 6], 'Configure LLM opens the screen with the providers');
 const llmRow = `document.querySelector('#llm-list li[data-id="openai"]')`;
 await ev(`(() => { const r = ${llmRow}; r.querySelector('input[type=password]').value = 'sk-e2e-segredo-WXYZ'; r.querySelector('button.primary').click(); })()`); await sleep(800);
 assert.deepEqual(await ev(`(() => { const r = ${llmRow}, k = r.querySelector('input[type=password]'); return [k.value, k.placeholder.includes('…WXYZ'), r.querySelector('.settings-msg').textContent, r.querySelector('.settings-badge').textContent]; })()`),
-  ['', true, 'Salvo.', 'Chave salva'], 'salvar a chave mostra só a máscara');
-assert.equal(await ev(`document.documentElement.outerHTML.includes('segredo')`), false, 'a chave não fica na página');
+  ['', true, 'Salvo.', 'Chave salva'], 'saving the key shows only the mask');
+assert.equal(await ev(`document.documentElement.outerHTML.includes('segredo')`), false, 'the key does not stay on the page');
 const llmApi = await (await fetch(BASE + '/api/settings/llm')).text();
-// LLM padrão: radio só vale para quem tem chave e marca um só
+// default LLM: the radio only applies to those with a key and marks just one
 assert.deepEqual(await ev(`[...document.querySelectorAll('#llm-list input[name=llm-default]')].map(r => r.disabled)`),
-  [true, false, true, true, true, true], 'só o provedor com chave pode ser o padrão');
+  [true, false, true, true, true, true], 'only the provider with a key can be the default');
 await ev(`${llmRow}.querySelector('input[name=llm-default]').click()`); await sleep(1000);
 assert.deepEqual(await ev(`[[...document.querySelectorAll('#llm-list input[name=llm-default]:checked')].map(r => r.closest('li').dataset.id), document.querySelector('#llm-list li.is-default')?.dataset.id]`),
-  [['openai'], 'openai'], 'escolher o padrão marca o cartão');
-assert.equal((await (await fetch(BASE + '/api/settings/llm')).json()).find(p => p.default)?.id, 'openai', 'o padrão fica salvo no servidor');
-assert.ok(!llmApi.includes('segredo') && llmApi.includes('…WXYZ'), 'a API só devolve a máscara');
+  [['openai'], 'openai'], 'choosing the default marks the card');
+assert.equal((await (await fetch(BASE + '/api/settings/llm')).json()).find(p => p.default)?.id, 'openai', 'the default is saved on the server');
+assert.ok(!llmApi.includes('segredo') && llmApi.includes('…WXYZ'), 'the API only returns the mask');
 await ev(`document.querySelector('#settings-menu-btn').click(); document.querySelector('#settings-backup-btn').click()`); await sleep(1000);
 assert.deepEqual(await ev(`[location.hash, document.querySelector('#settings-llm').hidden, document.querySelector('#settings-backup').hidden, document.querySelector('#backup-run').disabled]`),
-  ['#/settings/backup', true, false, true], 'Configurar backup abre a tela; sem storage não dá para fazer backup');
+  ['#/settings/backup', true, false, true], 'Configure backup opens the screen; without storage you cannot back up');
 await ev(`(() => { const r = document.querySelector('#backup-region'); r.value = 'eu-central-2'; r.dispatchEvent(new Event('input', { bubbles: true })); })()`);
-assert.equal(await ev(`document.querySelector('#backup-endpoint').value`), 'https://s3.eu-central-2.wasabisys.com', 'região preenche o endpoint');
+assert.equal(await ev(`document.querySelector('#backup-endpoint').value`), 'https://s3.eu-central-2.wasabisys.com', 'region fills the endpoint');
 const fillBackup = (endpoint) => ev(`(() => { const v = { '#backup-endpoint': '${endpoint}', '#backup-bucket': 'e2e-bucket', '#backup-access': 'AKE2E', '#backup-secret': 'segredo-storage-QRST' };
   for (const [s, x] of Object.entries(v)) document.querySelector(s).value = x;
   document.querySelector('#backup-form').requestSubmit(); })()`);
 await fillBackup('http://127.0.0.1:9'); await sleep(800);
-assert.match(await ev(`document.querySelector('#backup-msg').textContent`), /https:\/\//, 'endpoint sem https é recusado');
+assert.match(await ev(`document.querySelector('#backup-msg').textContent`), /https:\/\//, 'endpoint without https is refused');
 await fillBackup('https://127.0.0.1:9'); await sleep(1500);
 assert.deepEqual(await ev(`[document.querySelector('#backup-msg').textContent, document.querySelector('#backup-secret').value, document.querySelector('#backup-secret').placeholder.includes('…QRST'), document.querySelector('#backup-run').disabled]`),
-  ['Configuração salva.', '', true, false], 'salvar mostra só o final do segredo');
+  ['Configuração salva.', '', true, false], 'saving shows only the tail of the secret');
 const backupApi = await (await fetch(BASE + '/api/settings/backup')).text();
-assert.ok(!backupApi.includes('segredo-storage') && backupApi.includes('…QRST'), 'a API do backup só devolve a máscara');
-assert.match(await ev(`document.querySelector('#backup-list-msg').textContent`), /^Erro: network error/, 'storage fora do ar aparece na lista');
+assert.ok(!backupApi.includes('segredo-storage') && backupApi.includes('…QRST'), 'the backup API only returns the mask');
+assert.match(await ev(`document.querySelector('#backup-list-msg').textContent`), /^Erro: network error/, 'storage down appears in the list');
 
-// conflito (409) logo na primeira edição: o aviso ao fechar já vale, sem precisar editar de novo
+// conflict (409) right on the first edit: the close-tab warning already applies, no need to edit again
 const putDoc = (id, body) => fetch(BASE + '/api/maps/' + id, { method: 'PUT', body: JSON.stringify(body) });
 await putDoc('cf1', { version: 0, layout: 'map', root: { id: 'cf1r', text: 'Conflito', children: [] } });
 await ev(`location.hash = '#/map/cf1'`); await sleep(1000);
-await putDoc('cf1', { version: 1, layout: 'map', root: { id: 'cf1r', text: 'Outra aba', children: [] } });  // a "outra aba" grava antes
+await putDoc('cf1', { version: 1, layout: 'map', root: { id: 'cf1r', text: 'Outra aba', children: [] } });  // the "other tab" saves first
 await key('F2'); await typeText('Minha edição'); await key('Enter');
 await sleep(900);
-assert.match(await status(), /Documento alterado em outra aba/, 'conflito mostra a mensagem de documento');
-assert.equal(await unloadBlocked(), true, 'beforeunload avisa logo após o conflito');
-assert.equal((await (await fetch(BASE + '/api/maps/cf1')).json()).root.text, 'Outra aba', 'a outra aba não é sobrescrita');
+assert.match(await status(), /Documento alterado em outra aba/, 'conflict shows the document message');
+assert.equal(await unloadBlocked(), true, 'beforeunload warns right after the conflict');
+assert.equal((await (await fetch(BASE + '/api/maps/cf1')).json()).root.text, 'Outra aba', 'the other tab is not overwritten');
 
-// 410: documento movido para a lixeira em outra aba — para de tentar, mensagem própria, aviso ao fechar
+// 410: document moved to the trash in another tab — stops retrying, its own message, close-tab warning
 await putDoc('cf2', { version: 0, layout: 'map', root: { id: 'cf2r', text: 'Lixeira', children: [] } });
 await ev(`location.hash = '#/map/cf2'`); await sleep(1000);
 await fetch(BASE + '/api/maps/cf2', { method: 'DELETE' });
 await ev(`window.__puts = 0; window.__f = window.fetch; window.fetch = (u, o) => { if (o?.method === 'PUT') window.__puts++; return window.__f(u, o); }`);
 await key('F2'); await typeText('Editei na lixeira'); await key('Enter');
 await sleep(900);
-assert.match(await status(), /movido para a lixeira em outra aba/, '410 mostra mensagem própria');
-assert.equal(await unloadBlocked(), true, 'beforeunload avisa com o documento na lixeira');
-await sleep(5800);  // a nova tentativa seria a cada 5 s
-assert.equal(await ev(`window.__puts`), 1, '410 não é repetido');
+assert.match(await status(), /movido para a lixeira em outra aba/, '410 shows its own message');
+assert.equal(await unloadBlocked(), true, 'beforeunload warns with the document in the trash');
+await sleep(5800);  // the retry would be every 5 s
+assert.equal(await ev(`window.__puts`), 1, '410 is not repeated');
 await ev(`window.fetch = window.__f`);
 
-// corrida: abrir um documento e voltar antes da resposta deixa a lista na tela, sem abrir o editor
+// race: opening a document and going back before the response leaves the list on screen, without opening the editor
 await putDoc('cf3', { version: 0, layout: 'map', root: { id: 'cf3r', text: 'Corrida', children: [] } });
 await ev(`location.hash = '#/'`); await sleep(800);
 await ev(`window.__f = window.fetch; window.fetch = (u, o) => (String(u).endsWith('/api/maps/cf3') && !o?.method ? new Promise(r => setTimeout(r, 1200)).then(() => window.__f(u, o)) : window.__f(u, o))`);
 await ev(`location.hash = '#/map/cf3'`); await sleep(300);
 await ev(`location.hash = '#/'`); await sleep(2000);
-assert.deepEqual(await ev(`[location.hash, document.body.dataset.view]`), ['#/', 'list'], 'voltar antes da resposta fica na lista');
+assert.deepEqual(await ev(`[location.hash, document.body.dataset.view]`), ['#/', 'list'], 'going back before the response stays on the list');
 await ev(`window.fetch = window.__f`);
 
-// Sair: encerra a sessão e volta para a página de login
+// Log out: ends the session and goes back to the login page
 await ev(`location.hash = '#/'`); await sleep(800);
-assert.equal(await ev(`!document.querySelector('#logout-btn').hidden`), true, 'botão Sair aparece com login ativo');
+assert.equal(await ev(`!document.querySelector('#logout-btn').hidden`), true, 'Sair button appears with login active');
 await ev(`document.querySelector('#logout-btn').click()`); await sleep(1200);
-assert.equal(await ev(`location.pathname`), '/login.html', 'Sair volta para o login');
-assert.equal(await ev(`fetch('/api/maps').then(r => r.status)`), 401, 'sessão encerrada');
+assert.equal(await ev(`location.pathname`), '/login.html', 'Sair goes back to the login');
+assert.equal(await ev(`fetch('/api/maps').then(r => r.status)`), 401, 'session ended');
 
-assert.deepEqual(logs, [], 'sem erros no console');
+assert.deepEqual(logs, [], 'no console errors');
 console.log('E2E OK');
 process.exit(0);

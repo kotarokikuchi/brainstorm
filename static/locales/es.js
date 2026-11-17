@@ -1,60 +1,60 @@
-// Textos de la interfaz en español (neutro, tuteo). Traducción del diccionario base pt-BR.
-// Claves: área.significado. {nombre} se sustituye en tiempo de ejecución y debe aparecer igual en la traducción.
-// Los nombres de teclas (Ctrl, Shift, Alt, Tab, Esc, Del, Delete, Enter) no se traducen.
+// UI strings in Spanish (neutral, informal "tú"), translated from the base dictionary (pt-BR).
+// Keys: area.meaning. {name} is replaced at runtime and must appear unchanged in the translation.
+// Key names (Ctrl, Shift, Alt, Tab, Esc, Del, Delete, Enter) are not translated.
 export default {
-  // ---- Comunes (el mismo texto en varios lugares) ----
-  'common.undo': 'Deshacer (Ctrl+Z)',  // sugerencia de botón
-  'common.redo': 'Rehacer (Ctrl+Shift+Z)',  // sugerencia de botón
-  'common.close': 'Cerrar',  // sugerencia del botón ×
-  'common.save': 'Guardar',  // botón
-  'common.delete': 'Eliminar',  // botón (carpeta, documento, tema, elemento de la pizarra)
-  'common.duplicate': 'Duplicar',  // botón / elemento de menú
-  'common.move': 'Mover',  // botón: abre el menú "Mover a"
-  'common.rename': 'Renombrar',  // botón
-  'common.restore': 'Restaurar',  // botón (papelera e historial de versiones)
-  'common.moreOptions': 'Más opciones',  // sugerencia del botón "…"
-  'common.link': 'Enlace',  // dirección web asociada a un tema o elemento
-  'common.clickToRename': 'Haz clic para renombrar',  // sugerencia sobre el título del documento o de la carpeta
+  // ---- Common (same text in several places) ----
+  'common.undo': 'Deshacer (Ctrl+Z)',  // button tooltip
+  'common.redo': 'Rehacer (Ctrl+Shift+Z)',  // button tooltip
+  'common.close': 'Cerrar',  // tooltip of the × button
+  'common.save': 'Guardar',  // button
+  'common.delete': 'Eliminar',  // button (folder, document, topic, board element)
+  'common.duplicate': 'Duplicar',  // button / menu item
+  'common.move': 'Mover',  // button: opens the "Move to" menu
+  'common.rename': 'Renombrar',  // button
+  'common.restore': 'Restaurar',  // button (trash and version history)
+  'common.moreOptions': 'Más opciones',  // tooltip of the "…" button
+  'common.link': 'Enlace',  // web address attached to a topic or element
+  'common.clickToRename': 'Haz clic para renombrar',  // tooltip on the document or folder title
   'common.imageTypeError': 'Usa una imagen PNG, JPG, GIF o WEBP.',
-  'key.space': 'Espacio',  // nombre de la barra espaciadora
+  'key.space': 'Espacio',  // name of the Space bar key
 
-  // ---- Selector de idioma ----
-  'lang.select': 'Idioma',  // sugerencia y etiqueta accesible del selector
+  // ---- Language selector ----
+  'lang.select': 'Idioma',  // tooltip and accessible label of the selector
 
-  // ---- Barra superior ----
-  'topbar.docOptions': 'Opciones del mapa',  // sugerencia del botón "…" junto al título (vale también para pizarras)
-  'topbar.present': 'Presentar',  // sugerencia: modo presentación
-  'topbar.logout': 'Cerrar sesión',  // sugerencia: terminar la sesión
+  // ---- Top bar ----
+  'topbar.docOptions': 'Opciones del mapa',  // tooltip of the "…" button next to the title (also used for boards)
+  'topbar.present': 'Presentar',  // tooltip: presentation mode
+  'topbar.logout': 'Cerrar sesión',  // tooltip: end the session
   'topbar.maps': 'Mapas',
   'topbar.boards': 'Pizarras',
   'topbar.listMaps': 'Ver mapas',
   'topbar.listBoards': 'Ver pizarras',
 
-  // ---- Estado del guardado automático (texto en la parte superior) ----
+  // ---- Autosave status (text at the top) ----
   'status.saved': 'Guardado',
   'status.saving': 'Guardando…',
   'status.conflict': 'Documento modificado en otra pestaña — recarga',
   'status.trashed': 'Documento movido a la papelera en otra pestaña',
   'status.saveError': 'Error al guardar — reintentando',
 
-  // ---- Documentos (mapa mental o pizarra) ----
-  'doc.centralTopic': 'Tema central',  // texto del tema central de un mapa nuevo
-  'doc.untitledBoard': 'Pizarra sin título',  // título de una pizarra nueva
-  'doc.untitled': '(sin título)',  // se muestra en la lista para un documento sin título
-  'doc.copySuffix': ' (copia)',  // se añade al título al duplicar; conserva el espacio inicial
-  'doc.moveToTrash': 'Mover a la papelera',  // elemento de menú
+  // ---- Documents (mind map or board) ----
+  'doc.centralTopic': 'Tema central',  // text of the central topic of a new map
+  'doc.untitledBoard': 'Pizarra sin título',  // title of a new board
+  'doc.untitled': '(sin título)',  // shown in the list for a document without a title
+  'doc.copySuffix': ' (copia)',  // appended to the title when duplicating; keep the leading space
+  'doc.moveToTrash': 'Mover a la papelera',  // menu item
   'doc.trashConfirmMap': '¿Eliminar el mapa "{title}"? Irá a la papelera, desde donde puedes restaurarlo.',
   'doc.trashConfirmBoard': '¿Eliminar la pizarra "{title}"? Irá a la papelera, desde donde puedes restaurarla.',
   'doc.unsavedLeaveConfirm': 'Este documento tiene cambios sin guardar (error al guardar). ¿Salir de todos modos y perderlos?',
-  'doc.duplicateError': 'No se pudo duplicar el mapa.',  // vale también para pizarras
+  'doc.duplicateError': 'No se pudo duplicar el mapa.',  // also used for boards
 
-  // ---- Lista de documentos (página de inicio) ----
-  'list.root': 'Mis mapas',  // título de la página y nombre de la carpeta raíz (ruta y menú "Mover a")
-  'list.newFolder': 'Nueva carpeta',  // botón
-  'list.newBoard': 'Nueva pizarra',  // botón
-  'list.newMap': 'Nuevo mapa',  // botón
-  'list.searchPlaceholder': 'Buscar mapas, pizarras, skills y carpetas',  // texto de ejemplo del campo de búsqueda
-  'list.sortBy': 'Ordenar',  // sugerencia del selector de orden
+  // ---- Document list (home page) ----
+  'list.root': 'Mis mapas',  // page title and name of the root folder (breadcrumb and "Move to" menu)
+  'list.newFolder': 'Nueva carpeta',  // button
+  'list.newBoard': 'Nueva pizarra',  // button
+  'list.newMap': 'Nuevo mapa',  // button
+  'list.searchPlaceholder': 'Buscar mapas, pizarras, skills y carpetas',  // placeholder of the search field
+  'list.sortBy': 'Ordenar',  // tooltip of the sort selector
   'list.sortRecent': 'Modificados recientemente',
   'list.sortOldest': 'Modificados hace más tiempo',
   'list.sortAz': 'Nombre (A–Z)',
@@ -67,161 +67,161 @@ export default {
   'list.createMapError': 'No se pudo crear el mapa.',
   'list.createBoardError': 'No se pudo crear la pizarra.',
 
-  // ---- Carpetas ----
-  'folder.moveTo': 'Mover a',  // título del menú con la lista de carpetas de destino
-  'folder.newPrompt': 'Nombre de la nueva carpeta',  // pregunta al crear
-  'folder.renamePrompt': 'Nombre de la carpeta',  // pregunta al renombrar
+  // ---- Folders ----
+  'folder.moveTo': 'Mover a',  // title of the menu listing the destination folders
+  'folder.newPrompt': 'Nombre de la nueva carpeta',  // prompt when creating
+  'folder.renamePrompt': 'Nombre de la carpeta',  // prompt when renaming
   'folder.deleteConfirm': '¿Eliminar la carpeta "{name}"? Lo que contiene (mapas, pizarras y subcarpetas) pasará a la carpeta superior.',
   'folder.saveError': 'No se pudieron guardar las carpetas.',
 
-  // ---- Papelera ----
-  'trash.title': 'Papelera ({n})',  // {n}: cantidad de documentos
-  'trash.deletedAt': 'eliminado el {date}',  // {date}: fecha y hora ya formateadas
-  'trash.purge': 'Eliminar para siempre',  // botón: borrado definitivo
+  // ---- Trash ----
+  'trash.title': 'Papelera ({n})',  // {n}: number of documents
+  'trash.deletedAt': 'eliminado el {date}',  // {date}: date and time, already formatted
+  'trash.purge': 'Eliminar para siempre',  // button: permanent deletion
   'trash.purgeConfirm': '¿Eliminar para siempre? No se puede deshacer.',
 
-  // ---- Historial de versiones ----
-  'history.title': 'Historial de versiones',  // sugerencia del botón y título del panel
+  // ---- Version history ----
+  'history.title': 'Historial de versiones',  // button tooltip and panel title
   'history.hint': 'Una copia cada 2 min de edición · últimas 50',
   'history.empty': 'Aún no hay versiones anteriores.',
-  'history.entryOne': '{title} · 1 tema',  // versión con un único tema
-  'history.entryMany': '{title} · {n} temas',  // {n}: cantidad de temas (0 o más de 1)
+  'history.entryOne': '{title} · 1 tema',  // version with a single topic
+  'history.entryMany': '{title} · {n} temas',  // {n}: number of topics (0 or more than 1)
   'history.restoreConfirm': '¿Restaurar esta versión? (Ctrl+Z deshace)',
   'history.loadError': 'No se pudo cargar esta versión.',
 
-  // ---- Exportar ----
-  'export.title': 'Exportar',  // sugerencia del botón
+  // ---- Export ----
+  'export.title': 'Exportar',  // button tooltip
   'export.png': 'Imagen (PNG)',
   'export.pdf': 'PDF (imprimir / guardar)',
   'export.svg': 'Vector (SVG)',
   'export.md': 'Texto (Markdown)',
   'export.error': 'No se pudo exportar: {error}',
-  'export.fileFallback': 'mapa',  // nombre del archivo exportado cuando el título no tiene letras ni números
+  'export.fileFallback': 'mapa',  // exported file name when the title has no letters or digits
 
-  // ---- Errores técnicos (se insertan en {error} de otros mensajes) ----
+  // ---- Technical errors (inserted into {error} of other messages) ----
   'error.fileTooLarge': 'archivo de más de 20 MB',
   'error.invalidImage': 'imagen no válida',
 
-  // ---- Presentación ----
-  'present.prev': 'Anterior (←)',  // sugerencia
-  'present.next': 'Siguiente (→ o Espacio)',  // sugerencia
-  'present.exit': 'Salir (Esc)',  // sugerencia: salir de la presentación
+  // ---- Presentation ----
+  'present.prev': 'Anterior (←)',  // tooltip
+  'present.next': 'Siguiente (→ o Espacio)',  // tooltip
+  'present.exit': 'Salir (Esc)',  // tooltip: leave the presentation
 
-  // ---- Zoom (mapa y pizarra) ----
-  'zoom.out': 'Alejar',  // sugerencia
-  'zoom.in': 'Acercar',  // sugerencia
-  'zoom.reset': 'Zoom 100%',  // sugerencia del botón que muestra el zoom actual
-  'zoom.fit': 'Ajustar a la pantalla',  // sugerencia
+  // ---- Zoom (map and board) ----
+  'zoom.out': 'Alejar',  // tooltip
+  'zoom.in': 'Acercar',  // tooltip
+  'zoom.reset': 'Zoom 100%',  // tooltip of the button showing the current zoom
+  'zoom.fit': 'Ajustar a la pantalla',  // tooltip
 
-  // ---- Mapa: barra sobre el tema seleccionado (sugerencias de los botones) ----
+  // ---- Map: toolbar above the selected topic (button tooltips) ----
   'map.toolbar.style': 'Color y forma',
   'map.toolbar.text': 'Estilo del texto',
   'map.toolbar.image': 'Imagen',
   'map.toolbar.attachments': 'Adjuntos',
   'map.toolbar.comments': 'Comentarios (Alt+Shift+C)',
   'map.toolbar.delete': 'Eliminar (Del)',
-  'map.connect': 'Conectar con otro tema',  // sugerencia y elemento de menú: crear una conexión (flecha) hasta otro tema
-  'map.addChild': 'Nuevo subtema (Tab)',  // sugerencia del botón "+"
-  'map.addSibling': 'Nuevo tema hermano (Enter)',  // sugerencia del botón "+"
-  'map.hint.child': 'subtema',  // sugerencia corta junto a la tecla Tab: crea un subtema
-  'map.hint.sibling': 'hermano',  // sugerencia corta junto a la tecla Enter: crea un tema hermano
-  'map.outline': 'Esquema (Alt+Shift+O)',  // sugerencia: ver el mapa como lista editable
+  'map.connect': 'Conectar con otro tema',  // tooltip and menu item: create a connection (arrow) to another topic
+  'map.addChild': 'Nuevo subtema (Tab)',  // tooltip of the "+" button
+  'map.addSibling': 'Nuevo tema hermano (Enter)',  // tooltip of the "+" button
+  'map.hint.child': 'subtema',  // short hint next to the Tab key: creates a child topic
+  'map.hint.sibling': 'hermano',  // short hint next to the Enter key: creates a sibling topic
+  'map.outline': 'Esquema (Alt+Shift+O)',  // tooltip: view the map as an editable list
   'map.openError': 'No se pudo abrir este mapa: su archivo está dañado.',
 
-  // ---- Mapa: menú del tema ----
+  // ---- Map: topic menu ----
   'map.menu.child': 'Nuevo subtema',
   'map.menu.sibling': 'Nuevo tema hermano',
-  'map.menu.collapse': 'Contraer / expandir',  // elemento de menú y sugerencia del marcador en el esquema
+  'map.menu.collapse': 'Contraer / expandir',  // menu item and tooltip of the bullet in the outline
   'map.menu.focus': 'Enfocar esta rama',
-  'map.menu.showBranchAs': 'Mostrar rama como',  // seguido de las opciones de diseño
+  'map.menu.showBranchAs': 'Mostrar rama como',  // followed by the layout options
   'map.menu.copyBranch': 'Copiar rama',
   'map.menu.cutBranch': 'Cortar rama',
   'map.menu.pasteBranch': 'Pegar rama',
 
-  // ---- Mapa: diseño ----
-  'map.layout.title': 'Diseño',  // sugerencia del selector
-  'map.layout.map': 'Mapa',  // mapa mental (ramas hacia ambos lados)
+  // ---- Map: layout ----
+  'map.layout.title': 'Diseño',  // selector tooltip
+  'map.layout.map': 'Mapa',  // mind map (branches on both sides)
   'map.layout.org': 'Organigrama',
   'map.layout.list': 'Lista',
 
-  // ---- Mapa: modo enfoque ----
-  'map.focus.label': 'Enfoque:',  // seguido del nombre de la rama enfocada
-  'map.focus.exit': 'Salir del enfoque',  // botón
+  // ---- Map: focus mode ----
+  'map.focus.label': 'Enfoque:',  // followed by the name of the focused branch
+  'map.focus.exit': 'Salir del enfoque',  // button
 
-  // ---- Mapa: imagen del tema ----
+  // ---- Map: topic image ----
   'map.image.drop': 'Suelta la imagen aquí o haz clic para elegirla',
   'map.image.formats': 'PNG, JPG, GIF o WEBP · hasta 20 MB',
   'map.image.remove': 'Quitar imagen',
   'map.image.addError': 'No se pudo añadir la imagen: {error}',
 
-  // ---- Mapa: adjuntos del tema ----
-  'map.attach.title': 'Adjuntos',  // título del panel
+  // ---- Map: topic attachments ----
+  'map.attach.title': 'Adjuntos',  // panel title
   'map.attach.add': 'Añadir archivos',
   'map.attach.hint': 'Suelta aquí o haz clic · hasta 20 MB cada uno',
-  'map.attach.remove': 'Quitar adjunto',  // sugerencia del botón ×
+  'map.attach.remove': 'Quitar adjunto',  // tooltip of the × button
   'map.attach.uploadError': 'No se pudo subir el archivo: {error}',
 
-  // ---- Mapa: comentarios del tema ----
-  'map.comment.placeholder': 'Añadir comentario',  // texto de ejemplo del campo
-  'map.comment.send': 'Enviar (Enter)',  // sugerencia
-  'map.comment.delete': 'Eliminar comentario',  // sugerencia del botón ×
+  // ---- Map: topic comments ----
+  'map.comment.placeholder': 'Añadir comentario',  // field placeholder
+  'map.comment.send': 'Enviar (Enter)',  // tooltip
+  'map.comment.delete': 'Eliminar comentario',  // tooltip of the × button
 
-  // ---- Mapa: estilo del texto del tema ----
-  'map.text.bold': 'Negrita (Ctrl+B)',  // sugerencia
-  'map.text.italic': 'Cursiva (Ctrl+I)',  // sugerencia
+  // ---- Map: topic text style ----
+  'map.text.bold': 'Negrita (Ctrl+B)',  // tooltip
+  'map.text.italic': 'Cursiva (Ctrl+I)',  // tooltip
   'map.text.size': 'Tamaño',
   'map.text.small': 'Pequeño',
   'map.text.medium': 'Mediano',
   'map.text.large': 'Grande',
   'map.text.color': 'Color del texto',
 
-  // ---- Mapa: enlace del tema ----
-  'map.url.placeholder': 'Dirección (https://…)',  // texto de ejemplo del campo: dirección web
+  // ---- Map: topic link ----
+  'map.url.placeholder': 'Dirección (https://…)',  // field placeholder: web address
   'map.url.invalid': 'Usa una dirección http:// o https://',
   'map.url.remove': 'Quitar enlace',
 
-  // ---- Mapa: panel "Color y forma" ----
-  'map.style.tabShape': 'Forma',  // pestaña
-  'map.style.tabBorder': 'Borde',  // pestaña
-  'map.style.tabLine': 'Línea',  // pestaña: la línea que une el tema con su padre
+  // ---- Map: "Color and shape" panel ----
+  'map.style.tabShape': 'Forma',  // tab
+  'map.style.tabBorder': 'Borde',  // tab
+  'map.style.tabLine': 'Línea',  // tab: the line connecting the topic to its parent
   'map.style.themeColors': 'Colores del tema',
   'map.style.customColors': 'Colores personalizados',
-  'map.style.pickColor': 'Elegir color',  // sugerencia del botón "+"
-  'map.style.auto': 'Automático',  // sugerencia de la muestra: color automático (el de la rama)
-  'map.style.noFill': 'Sin relleno',  // sugerencia de la muestra
-  'map.style.boundary': 'Mostrar como contorno',  // interruptor: área discontinua alrededor de la rama
+  'map.style.pickColor': 'Elegir color',  // tooltip of the "+" button
+  'map.style.auto': 'Automático',  // swatch tooltip: automatic color (the branch's color)
+  'map.style.noFill': 'Sin relleno',  // swatch tooltip
+  'map.style.boundary': 'Mostrar como contorno',  // on/off switch: dashed area around the branch
   'map.style.borderColor': 'Color del borde',
   'map.style.lineColor': 'Color de la línea al padre',
-  'map.style.width': 'Grosor',  // del borde o de la línea
+  'map.style.width': 'Grosor',  // of the border or the line
   'map.style.thin': 'Fino',
   'map.style.medium': 'Medio',
   'map.style.thick': 'Grueso',
-  'map.style.style': 'Estilo',  // del borde o de la línea: sólido, discontinuo, punteado
+  'map.style.style': 'Estilo',  // of the border or the line: solid, dashed, dotted
   'map.style.solid': 'Sólido',
   'map.style.dashed': 'Discontinuo',
   'map.style.dotted': 'Punteado',
 
-  // ---- Mapa: forma del tema (sugerencias) ----
-  'map.shape.underline': 'Línea',  // solo un subrayado, sin caja
+  // ---- Map: topic shape (tooltips) ----
+  'map.shape.underline': 'Línea',  // just an underline, no box
   'map.shape.rect': 'Rectángulo',
   'map.shape.rounded': 'Redondeado',
   'map.shape.pill': 'Elipse',
   'map.shape.cloud': 'Nube',
 
-  // ---- Mapa: conexiones entre temas (flechas libres) ----
-  'map.link.color': 'Color',  // sugerencia
-  'map.link.startMarker': 'Extremo inicial',  // sugerencia: marcador al inicio de la conexión
-  'map.link.endMarker': 'Extremo final',  // sugerencia: marcador al final de la conexión
-  'map.link.swap': 'Invertir dirección',  // sugerencia
-  'map.link.addLabel': 'Añadir etiqueta',  // elemento de menú
-  'map.link.delete': 'Eliminar conexión',  // elemento de menú
-  'map.link.labelPrompt': 'Etiqueta de la conexión',  // pregunta
-  'map.link.exitTop': 'Salir por arriba',  // sugerencia: lado del tema por el que sale la conexión
+  // ---- Map: connections between topics (free arrows) ----
+  'map.link.color': 'Color',  // tooltip
+  'map.link.startMarker': 'Extremo inicial',  // tooltip: marker at the start of the connection
+  'map.link.endMarker': 'Extremo final',  // tooltip: marker at the end of the connection
+  'map.link.swap': 'Invertir dirección',  // tooltip
+  'map.link.addLabel': 'Añadir etiqueta',  // menu item
+  'map.link.delete': 'Eliminar conexión',  // menu item
+  'map.link.labelPrompt': 'Etiqueta de la conexión',  // prompt
+  'map.link.exitTop': 'Salir por arriba',  // tooltip: side of the topic the connection leaves from
   'map.link.exitRight': 'Salir por la derecha',
   'map.link.exitBottom': 'Salir por abajo',
   'map.link.exitLeft': 'Salir por la izquierda',
 
-  // ---- Pizarra: herramientas (sugerencias; entre paréntesis, las teclas de atajo) ----
+  // ---- Board: tools (tooltips; shortcut keys in parentheses) ----
   'board.tool.hand': 'Mover el lienzo (H o Espacio)',
   'board.tool.select': 'Seleccionar (V o 1)',
   'board.tool.rectangle': 'Rectángulo (R o 2)',
@@ -234,19 +234,19 @@ export default {
   'board.tool.note': 'Nota adhesiva (N)',
   'board.tool.eraser': 'Borrador (E o 0)',
   'board.tool.more': 'Más herramientas',
-  'board.tool.image': 'Insertar imagen',  // elemento de menú
-  'board.tool.bucket': 'Bote de pintura',  // elemento de menú
-  'board.tool.lasso': 'Selección de lazo',  // elemento de menú
-  'board.tool.laser': 'Puntero láser',  // elemento de menú
+  'board.tool.image': 'Insertar imagen',  // menu item
+  'board.tool.bucket': 'Bote de pintura',  // menu item
+  'board.tool.lasso': 'Selección de lazo',  // menu item
+  'board.tool.laser': 'Puntero láser',  // menu item
 
-  // ---- Pizarra: panel de estilo ----
-  'board.props.stroke': 'Trazo',  // color del trazo
-  'board.props.background': 'Fondo',  // color de fondo
-  'board.props.noBackground': 'Sin fondo',  // sugerencia de la muestra transparente
+  // ---- Board: style panel ----
+  'board.props.stroke': 'Trazo',  // stroke color
+  'board.props.background': 'Fondo',  // background color
+  'board.props.noBackground': 'Sin fondo',  // tooltip of the transparent swatch
   'board.props.fill': 'Relleno',
   'board.props.fillHachure': 'Tramado',
   'board.props.fillSolid': 'Sólido',
-  'board.props.width': 'Grosor del trazo',  // del trazo
+  'board.props.width': 'Grosor del trazo',  // of the stroke
   'board.props.widthThin': 'Fino',
   'board.props.widthMedium': 'Medio',
   'board.props.widthThick': 'Grueso',
@@ -254,42 +254,42 @@ export default {
   'board.props.strokeSolid': 'Sólido',
   'board.props.strokeDashed': 'Discontinuo',
   'board.props.strokeDotted': 'Punteado',
-  'board.props.roughness': 'Irregularidad',  // cuán "hecho a mano" parece el trazo
-  'board.props.roughArchitect': 'Arquitecto',  // trazo recto, preciso
-  'board.props.roughArtist': 'Artista',  // algo irregular
-  'board.props.roughCartoonist': 'Caricaturista',  // muy irregular
+  'board.props.roughness': 'Irregularidad',  // how "hand-drawn" the stroke looks
+  'board.props.roughArchitect': 'Arquitecto',  // straight, precise stroke
+  'board.props.roughArtist': 'Artista',  // slightly irregular
+  'board.props.roughCartoonist': 'Caricaturista',  // very irregular
   'board.props.fontFamily': 'Tipo de fuente',
   'board.props.fontHand': 'A mano',
   'board.props.fontNormal': 'Normal',
-  'board.props.fontCode': 'Código',  // fuente monoespaciada
+  'board.props.fontCode': 'Código',  // monospaced font
   'board.props.fontSize': 'Tamaño del texto',
-  'board.props.sizeS': 'P',  // abreviatura de "pequeño" (etiqueta de botón)
-  'board.props.sizeM': 'M',  // abreviatura de "mediano"
-  'board.props.sizeL': 'G',  // abreviatura de "grande"
-  'board.props.sizeXL': 'XG',  // abreviatura de "extra grande"
+  'board.props.sizeS': 'P',  // abbreviation of "small" (button label)
+  'board.props.sizeM': 'M',  // abbreviation of "medium"
+  'board.props.sizeL': 'G',  // abbreviation of "large"
+  'board.props.sizeXL': 'XG',  // abbreviation of "extra large"
   'board.props.textAlign': 'Alinear texto',
   'board.props.alignLeft': 'Izquierda',
   'board.props.alignCenter': 'Centrado',
   'board.props.alignRight': 'Derecha',
   'board.props.opacity': 'Opacidad',
-  'board.props.layers': 'Capas',  // orden de apilamiento
+  'board.props.layers': 'Capas',  // stacking order
   'board.props.toBack': 'Enviar al fondo',
   'board.props.backward': 'Enviar hacia atrás',
   'board.props.forward': 'Traer hacia adelante',
   'board.props.toFront': 'Traer al frente',
   'board.props.actions': 'Acciones',
-  'board.props.link': 'Enlace (Ctrl+K)',  // sugerencia
+  'board.props.link': 'Enlace (Ctrl+K)',  // tooltip
 
-  // ---- Pizarra: barra inferior y mensajes ----
-  'board.zoomOut': 'Alejar (Ctrl −)',  // sugerencia
-  'board.zoomIn': 'Acercar (Ctrl +)',  // sugerencia
+  // ---- Board: bottom bar and messages ----
+  'board.zoomOut': 'Alejar (Ctrl −)',  // tooltip
+  'board.zoomIn': 'Acercar (Ctrl +)',  // tooltip
   'board.openError': 'No se pudo abrir esta pizarra: su archivo está dañado.',
   'board.image.insertError': 'No se pudo insertar la imagen: {error}',
-  'board.link.prompt': 'Dirección del enlace (vacío lo quita)',  // pregunta
+  'board.link.prompt': 'Dirección del enlace (vacío lo quita)',  // prompt
   'board.link.invalid': 'Usa una dirección http o https.',
 
-  // ---- Pizarra: ayuda de atajos (las claves …Keys son la columna de las teclas) ----
-  'board.help.button': 'Atajos (?)',  // sugerencia del botón
+  // ---- Board: shortcuts help (the …Keys keys are the key column) ----
+  'board.help.button': 'Atajos (?)',  // button tooltip
   'board.help.title': 'Atajos de la pizarra',
   'board.help.panKeys': 'H / Espacio',
   'board.help.pan': 'Mover el lienzo',
@@ -322,18 +322,18 @@ export default {
   'board.help.selectAll': 'Seleccionar todo',
   'board.help.link': 'Enlace en el elemento (clic en el icono para abrirlo)',
   'board.help.delete': 'Eliminar',
-  'board.help.nudgeKeys': 'Flechas',  // las teclas de flecha del teclado
+  'board.help.nudgeKeys': 'Flechas',  // the keyboard arrow keys
   'board.help.nudge': 'Mover 1 px (Shift: 10)',
   'board.help.layerStep': 'Una capa hacia adelante / hacia atrás',
   'board.help.layerEnds': 'Traer al frente / enviar al fondo',
-  'board.help.zoomKeys': 'Ctrl+rueda, Ctrl ±',  // rueda = la rueda del ratón
+  'board.help.zoomKeys': 'Ctrl+rueda, Ctrl ±',  // wheel = the mouse wheel
   'board.help.zoom': 'Zoom',
 
-  // ---- Página de inicio de sesión ----
-  'login.title': 'Iniciar sesión · Brainstorm',  // título de la pestaña; "Brainstorm" es el nombre de la app, no se traduce
-  'login.user': 'Usuario',  // etiqueta del campo
-  'login.password': 'Contraseña',  // etiqueta del campo
-  'login.submit': 'Entrar',  // botón
+  // ---- Login page ----
+  'login.title': 'Iniciar sesión · Brainstorm',  // tab title; "Brainstorm" is the app name, not translated
+  'login.user': 'Usuario',  // field label
+  'login.password': 'Contraseña',  // field label
+  'login.submit': 'Entrar',  // button
   'login.wrongCredentials': 'Usuario o contraseña incorrectos.',
   'login.tooManyAttempts': 'Demasiados intentos fallidos. Espera unos minutos y vuelve a intentarlo.',
   'login.failed': 'No se pudo iniciar sesión (HTTP {status}).',

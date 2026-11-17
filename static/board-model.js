@@ -1,4 +1,4 @@
-// Lógica pura da lousa (sem DOM): elementos, traço "à mão" com semente, limites.
+// Pure board logic (no DOM): elements, seeded "hand-drawn" stroke, bounds.
 
 export const DEFAULTS = {
   strokeColor: '#1e1e1e', backgroundColor: 'transparent', fillStyle: 'hachure',
@@ -8,12 +8,12 @@ export const DEFAULTS = {
 import { isHex } from './model.js';
 
 const POINT_TYPES = new Set(['line', 'arrow', 'freedraw']);
-const starts = new WeakMap();  // ponto onde o arrasto começou (só durante o desenho)
+const starts = new WeakMap();  // point where the drag started (only while drawing)
 
 const uid = () => Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 const f = (n) => Math.round(n * 100) / 100;
 
-// gerador pseudoaleatório (mulberry32): o mesmo elemento sempre "treme" igual
+// pseudo-random generator (mulberry32): the same element always "wobbles" the same way
 export function rng(seed) {
   let a = seed >>> 0;
   return () => {
@@ -33,7 +33,7 @@ export function createElement(type, [x, y], opts = {}) {
   return el;
 }
 
-// atualiza o elemento enquanto o ponteiro arrasta até [px, py]
+// updates the element while the pointer drags to [px, py]
 export function resizeTo(el, [px, py]) {
   if (el.type === 'freedraw') el.points.push([px - el.x, py - el.y]);
   else if (POINT_TYPES.has(el.type)) el.points[el.points.length - 1] = [px - el.x, py - el.y];
@@ -51,7 +51,7 @@ export function elementBounds(el) {
   return { x: el.x + x, y: el.y + y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
 }
 
-// segmento levemente curvo e deslocado; desleixo 0 = reto
+// slightly curved, offset segment; sloppiness 0 = straight
 export function roughLine(x1, y1, x2, y2, r, roughness) {
   if (!roughness) return `M${f(x1)},${f(y1)} Q${f((x1 + x2) / 2)},${f((y1 + y2) / 2)} ${f(x2)},${f(y2)}`;
   const len = Math.hypot(x2 - x1, y2 - y1) || 1;
@@ -69,7 +69,7 @@ function ellipsePath(el, r, roughness) {
   const cx = el.x + el.w / 2, cy = el.y + el.h / 2, n = 32;
   const start = roughness ? r() * Math.PI * 2 : 0, wob = () => 1 + (roughness ? (r() * 2 - 1) * 0.015 * roughness : 0);
   const pts = [];
-  // um pouco além da volta completa quando "à mão", como um traço que não fecha perfeito
+  // a bit past the full loop when "hand-drawn", like a stroke that does not close perfectly
   for (let i = 0; i <= n + (roughness ? 2 : 0); i++) {
     const a = start + (i / n) * Math.PI * 2, k = wob();
     pts.push(`${f(cx + Math.cos(a) * el.w / 2 * k)},${f(cy + Math.sin(a) * el.h / 2 * k)}`);
@@ -99,9 +99,9 @@ function arrowHead(pts, r, roughness) {
   }).join(' ');
 }
 
-// atributos "d" do traço: um traço levemente torto; duas passadas só no "Cartunista" (desleixo 2)
+// stroke "d" attributes: a slightly crooked stroke; two passes only in "Cartoonist" (sloppiness 2)
 export function elementPaths(el) {
-  if (el.type === 'text') return [];  // texto é desenhado como <text>
+  if (el.type === 'text') return [];  // text is drawn as <text>
   if (el.type === 'freedraw') return [freedrawPath(el)];
   const passes = el.roughness >= 2 ? 2 : 1, out = [];
   const abs = el.points?.map(([x, y]) => [el.x + x, el.y + y]);
@@ -117,7 +117,7 @@ export function elementPaths(el) {
   return out;
 }
 
-// contorno liso para o preenchimento (sólido ou hachurado) das formas fechadas
+// smooth outline for the fill (solid or hatched) of closed shapes
 export function fillPath(el) {
   const { x, y, w, h } = el;
   if (el.type === 'rectangle') return `M${f(x)},${f(y)} H${f(x + w)} V${f(y + h)} H${f(x)} Z`;
@@ -126,7 +126,7 @@ export function fillPath(el) {
   return null;
 }
 
-// ---- Seleção e edição ----
+// ---- Selection and editing ----
 
 function distToSeg([px, py], [ax, ay], [bx, by]) {
   const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
@@ -135,7 +135,7 @@ function distToSeg([px, py], [ax, ay], [bx, by]) {
 }
 const polyDist = (pts, p) => Math.min(...pts.slice(1).map((q, i) => distToSeg(p, pts[i], q)));
 
-// o ponto acerta o elemento? forma vazia só pela borda; preenchida (ou inside: balde) também pelo miolo
+// does the point hit the element? an empty shape only by its border; a filled one (or inside: bucket) also by its interior
 export function hitTest(el, p, tol = 6, inside = false) {
   const [px, py] = p, t = tol + (el.strokeWidth ?? 2) / 2;
   const filled = inside || (el.backgroundColor && el.backgroundColor !== 'transparent');
@@ -153,16 +153,16 @@ export function hitTest(el, p, tol = 6, inside = false) {
     return (filled && r <= 1) || Math.abs(r - 1) * Math.min(a, b) <= t;
   }
   if (el.points) return polyDist(el.points.map(([qx, qy]) => [el.x + qx, el.y + qy]), p) <= t;
-  return px >= x && px <= x + w && py >= y && py <= y + h;  // texto: a caixa toda
+  return px >= x && px <= x + w && py >= y && py <= y + h;  // text: the whole box
 }
 
-// elemento mais em cima (último desenhado) sob o ponto
+// topmost element (last drawn) under the point
 export function elementAt(elements, p, tol = 6, inside = false) {
   for (let i = elements.length - 1; i >= 0; i--) if (hitTest(elements[i], p, tol, inside)) return elements[i].id;
   return null;
 }
 
-// seleção por área: só o que fica inteiro dentro da caixa
+// area selection: only what lies entirely inside the box
 export function elementsInBox(elements, box) {
   return elements.filter((el) => {
     const b = elementBounds(el);
@@ -170,7 +170,7 @@ export function elementsInBox(elements, box) {
   }).map(el => el.id);
 }
 
-// laço: só o que fica inteiro dentro do contorno livre (pontos de referência de cada forma)
+// lasso: only what lies entirely inside the free-form outline (reference points of each shape)
 function insidePolygon([px, py], poly) {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -201,7 +201,7 @@ export function selectionBounds(elements, ids) {
   return { x, y, w: Math.max(...bs.map(b => b.x + b.w)) - x, h: Math.max(...bs.map(b => b.y + b.h)) - y };
 }
 
-// arrasta a alça (n, ne, e, se, s, sw, w, nw) até [px, py], partindo do elemento como estava (start)
+// drags the handle (n, ne, e, se, s, sw, w, nw) to [px, py], starting from the element as it was (start)
 export function resizeElement(el, handle, [px, py], start) {
   const sb = elementBounds(start);
   let x1 = sb.x, y1 = sb.y, x2 = sb.x + sb.w, y2 = sb.y + sb.h;
@@ -211,7 +211,7 @@ export function resizeElement(el, handle, [px, py], start) {
   if (handle.includes('s')) y2 = py;
   const nb = { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) };
   if (start.type === 'text') {
-    // texto cresce/encolhe por inteiro: a fonte acompanha a altura
+    // text grows/shrinks as a whole: the font follows the height
     const scale = sb.h ? Math.max(0.1, nb.h / sb.h) : 1;
     Object.assign(el, { x: nb.x, y: nb.y, w: f(start.w * scale), h: nb.h, fontSize: Math.max(4, Math.round(start.fontSize * scale)) });
     return el;
@@ -220,7 +220,7 @@ export function resizeElement(el, handle, [px, py], start) {
     Object.assign(el, nb);
     return el;
   }
-  // linhas e traços: escala (com sinal, para espelhar ao passar do lado oposto) os pontos
+  // lines and strokes: scales the points (signed, to mirror when crossing to the opposite side)
   const sx = sb.w ? (x2 - x1) / sb.w : 1, sy = sb.h ? (y2 - y1) / sb.h : 1;
   const abs = start.points.map(([qx, qy]) => [x1 + (start.x + qx - sb.x) * sx, y1 + (start.y + qy - sb.y) * sy]);
   el.x = abs[0][0];
@@ -229,7 +229,7 @@ export function resizeElement(el, handle, [px, py], start) {
   return el;
 }
 
-// balde de tinta: forma fechada recebe o fundo atual; linha, traço e texto recebem a cor do traço
+// paint bucket: a closed shape gets the current fill; line, stroke and text get the stroke colour
 const CLOSED = new Set(['rectangle', 'diamond', 'ellipse', 'note']);
 export function paint(el, { backgroundColor, fillStyle, strokeColor }) {
   if (CLOSED.has(el.type)) Object.assign(el, { backgroundColor, fillStyle });
@@ -242,7 +242,7 @@ export const bringToFront = (elements, ids) =>
 export const sendToBack = (elements, ids) =>
   [...elements.filter(el => ids.includes(el.id)), ...elements.filter(el => !ids.includes(el.id))];
 
-// uma camada: cada selecionado troca de lugar com o vizinho não selecionado de cima (ou de baixo)
+// one layer: each selected element swaps places with the unselected neighbour above (or below)
 export function forwardOne(elements, ids) {
   const out = [...elements];
   for (let i = out.length - 2; i >= 0; i--) {
@@ -258,19 +258,19 @@ export function backwardOne(elements, ids) {
   return out;
 }
 
-// cópias deslocadas, com ids novos (mesma semente: a cópia tem o mesmo traço)
+// offset copies, with new ids (same seed: the copy has the same stroke)
 export const duplicateElements = (elements, ids, offset = 10) =>
   elements.filter(el => ids.includes(el.id)).map(el => ({ ...structuredClone(el), id: uid(), x: el.x + offset, y: el.y + offset }));
 
-// borracha: o que o trecho do ponteiro de a até b atravessa (amostras a cada 2 px)
+// eraser: whatever the pointer segment from a to b crosses (samples every 2 px)
 export function elementsHitBy(elements, [ax, ay], [bx, by], tol = 4) {
   const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 2));
   const samples = Array.from({ length: n + 1 }, (_, i) => [ax + (bx - ax) * i / n, ay + (by - ay) * i / n]);
   return elements.filter(el => samples.some(p => hitTest(el, p, tol))).map(el => el.id);
 }
 
-// ---- Colar: elementos da área de transferência podem ter vindo de outro site ----
-// só tipos conhecidos, com posição numérica; texto/nota com texto; linha/seta com 2+ pontos, traço com 1+
+// ---- Paste: clipboard elements may have come from another site ----
+// only known types, with a numeric position; text/note with text; line/arrow with 2+ points, stroke with 1+
 const KINDS = new Set(['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw', 'text', 'image', 'note']);
 const HAS_TEXT = new Set(['text', 'note']);
 const okPoints = (pts, min) => Array.isArray(pts) && pts.length >= min
@@ -280,7 +280,7 @@ export const okElement = (x) => !!x && typeof x === 'object' && KINDS.has(x.type
   && (!POINT_TYPES.has(x.type) || okPoints(x.points, x.type === 'freedraw' ? 1 : 2))
   && (typeof x.text === 'string' || (x.text === undefined && !HAS_TEXT.has(x.type)));
 
-// o resto do elemento aceito: campo de estilo com tipo errado sai (o desenho usa o padrão)
+// the rest of the accepted element: a style field of the wrong type is dropped (drawing uses the default)
 export function sanitizeElement(x) {
   const e = { ...x, w: x.w ?? 0, h: x.h ?? 0 };
   if (!POINT_TYPES.has(e.type)) delete e.points;

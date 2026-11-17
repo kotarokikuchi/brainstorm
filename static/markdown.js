@@ -1,14 +1,14 @@
-// Markdown seguro: todo texto do usuário é escapado; só saem tags geradas aqui.
+// Safe Markdown: all user text is escaped; the only tags emitted are the ones generated here.
 const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-// URL aceita: http(s), mailto, âncora ou relativa. Controles são removidos (o navegador também os ignora).
+// Accepted URLs: http(s), mailto, anchor or relative. Control characters are removed (the browser ignores them too).
 const safeUrl = u => {
   u = u.trim().split(' ')[0].replace(/[\x00-\x20\x7f]/g, '');
   return /^(https?:|mailto:|#|\/|\.\.?\/|[^:]*$)/i.test(u) ? u : null;
 };
 const openA = u => `<a href="${u}" target="_blank" rel="noopener noreferrer">`;
 
-// Recebe texto já escapado. Código e links viram marcadores (\0n\0) até o fim, para não sofrerem mais regras.
+// Takes already-escaped text. Code and links become placeholders (\0n\0) until the end, so no further rules touch them.
 function fmt(t, stash) {
   const keep = h => `\0${stash.push(h) - 1}\0`;
   t = t.replace(/`([^`]+)`/g, (_, c) => keep(`<code>${c}</code>`));
@@ -76,7 +76,7 @@ function blocks(lines, depth = 0) {
     } else if (HR.test(l)) {
       html += '<hr>';
       i++;
-    } else if (l.startsWith('>') && depth < 20) { // limite evita estouro de pilha
+    } else if (l.startsWith('>') && depth < 20) { // the limit prevents a stack overflow
       const q = [];
       for (; i < lines.length && lines[i].startsWith('>'); i++) q.push(lines[i].replace(/^>\s?/, ''));
       html += `<blockquote>${blocks(q, depth + 1)}</blockquote>`;
@@ -106,13 +106,13 @@ export function renderMarkdown(src) {
 
 const split = s => (s === '' ? [] : s.split('\n'));
 
-// ponytail: O(n·m) — trocar por Myers se skills passarem de ~2 000 linhas
+// Simplification: O(n·m) — switch to Myers if skills grow past ~2,000 lines
 export function diffLines(a, b) {
   const x = split(a), y = split(b);
   const n = x.length, m = y.length;
   if (n * m > 4_000_000) return null;
   const w = m + 1;
-  const dp = new Uint16Array((n + 1) * w); // dp[i*w+j] = LCS de x[i:] e y[j:]
+  const dp = new Uint16Array((n + 1) * w); // dp[i*w+j] = LCS of x[i:] and y[j:]
   for (let i = n - 1; i >= 0; i--)
     for (let j = m - 1; j >= 0; j--)
       dp[i * w + j] = x[i] === y[j] ? dp[(i + 1) * w + j + 1] + 1 : Math.max(dp[(i + 1) * w + j], dp[i * w + j + 1]);
