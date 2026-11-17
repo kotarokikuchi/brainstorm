@@ -708,9 +708,11 @@ class AuthTest(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/login", None)[0], 401)
         for _ in range(6):
             self.login(password="errada")
-        status, headers, _ = self.login()
-        self.assertEqual(status, 429, "10 erros em 10 min bloqueiam até a senha certa")
+        status, headers, _ = self.login(password="errada")
+        self.assertEqual(status, 429, "10 erros em 10 min bloqueiam")
         self.assertIn("Retry-After", headers)
+        self.assertEqual(self.login()[0], 200, "a senha certa entra mesmo no bloqueio (senão qualquer um tranca o dono)")
+        self.assertEqual(self.login(password="errada")[0], 401, "acertar zera a contagem")
 
     def test_logout_ends_the_session(self):
         c = self.cookie()
@@ -743,12 +745,29 @@ class AuthTest(unittest.TestCase):
         self.assertNotIn(hashlib.sha256(b"s3gredo \xc3\xa7").hexdigest(), json.dumps(value))
 
     def test_concurrent_attempts_cannot_pass_the_limit(self):
-        self.server.login_delay = 0.3
+        # só 10 tentativas por janela são conferidas em paralelo; no bloqueio, uma de cada vez com o atraso:
+        # as outras 20 levam pelo menos 20 atrasos, por mais conexões que o atacante abra
+        self.server.login_delay = 0.1
+        started = time.monotonic()
         with ThreadPoolExecutor(30) as pool:
             codes = list(pool.map(lambda _: self.login(password="errada")[0], range(30)))
-        self.assertEqual(codes.count(401), 10, "só 10 tentativas chegam a conferir a senha")
+        self.assertGreaterEqual(time.monotonic() - started, 20 * 0.1)
+        self.assertEqual(codes.count(401), 10, "só 10 tentativas conferidas em paralelo")
         self.assertEqual(codes.count(429), 20)
-        self.assertEqual(self.login()[0], 429)
+        self.assertEqual(self.login()[0], 200)
+
+    def test_lockout_answer_waits_for_the_body(self):
+        # responder sem ler o corpo faz o fechamento virar RST: o navegador mostraria "sem conexão"
+        for _ in range(10):
+            self.login(password="errada")
+        body = json.dumps({"user": "ana", "password": "errada"}).encode()
+        with socket.create_connection(self.server.server_address, timeout=0.3) as s:
+            s.sendall(f"POST /api/login HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: {len(body)}\r\n\r\n".encode())
+            with self.assertRaises(TimeoutError, msg="respondeu antes de ler o corpo"):
+                s.recv(1)
+            s.sendall(body)
+            s.settimeout(5)
+            self.assertIn(b" 429 ", s.recv(65536))
 
     def test_correct_login_clears_the_failure_count(self):
         for _ in range(9):
