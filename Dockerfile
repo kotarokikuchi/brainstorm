@@ -1,8 +1,8 @@
 # Galho: só a biblioteca padrão do Python, nenhuma dependência para instalar
 FROM python:3.13-slim
 
-ENV GALHO_HOST=0.0.0.0 \
-    GALHO_DATA=/data \
+ENV BRAINSTORM_HOST=0.0.0.0 \
+    BRAINSTORM_DATA=/data \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
