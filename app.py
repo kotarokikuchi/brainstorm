@@ -284,10 +284,13 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _history(self, method, map_id, sub):
         # GET /api/maps/<id>/history (lista) e /api/maps/<id>/history/<versão> (conteúdo)
+        _, _, version = sub.partition("/")
+        if method == "POST" and not version:
+            self._label_version(map_id)
+            return
         if method != "GET":
             self._send(404, {"error": "not found"})
             return
-        _, _, version = sub.partition("/")
         if not version:
             self._send(200, self.server.store.history(map_id))
             return
@@ -296,6 +299,30 @@ class Handler(SimpleHTTPRequestHandler):
             return
         data = self.server.store.history_version(map_id, int(version))
         self._send(*((200, data) if data is not None else (404, {"error": "not found"})))
+
+    def _label_version(self, map_id):
+        # corpo opcional {"label": "..."}: dá nome à versão atual; ausente ou vazio = sem nome
+        length = self._length(MAX_LOGIN_BODY)
+        if length is None:
+            return
+        raw = self.rfile.read(length)
+        label = None
+        if raw:
+            try:
+                body = json.loads(raw)
+            except (ValueError, RecursionError):
+                body = None
+            if not isinstance(body, dict):
+                self._send(400, {"error": "invalid body"})
+                return
+            label = body.get("label")
+        if label is not None and not (isinstance(label, str) and len(label) <= 100 and label.isprintable()):
+            self._send(400, {"error": "invalid label"})
+            return
+        if label is not None:
+            label = label.strip()
+        version = self.server.store.label_version(map_id, label or None)
+        self._send(*((201, {"version": version}) if version is not None else (404, {"error": "not found"})))
 
     def _files(self, method, map_id, sub):
         # /api/maps/<id>/files (POST) e /api/maps/<id>/files/<arquivo> (GET); só de documento ativo

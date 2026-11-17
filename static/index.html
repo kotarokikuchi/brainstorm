@@ -22,6 +22,7 @@
     <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12l14 0" /></symbol>
     <symbol id="i-oval" viewBox="0 0 24 24"><path d="M12 12m-6 0a6 9 0 1 0 12 0a6 9 0 1 0 -12 0" /></symbol>
     <symbol id="i-photo" viewBox="0 0 24 24"><path d="M15 8h.01" /> <path d="M3 6a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v12a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-12z" /> <path d="M3 16l5 -5c.928 -.893 2.072 -.893 3 0l5 5" /> <path d="M14 14l1 -1c.928 -.893 2.072 -.893 3 0l3 3" /></symbol>
+    <symbol id="i-file-text" viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4" /> <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2" /> <path d="M9 9l1 0" /> <path d="M9 13l6 0" /> <path d="M9 17l6 0" /></symbol>
     <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3l6.5 -6.5a3 3 0 0 0 -6 -6l-6.5 6.5a4.5 4.5 0 0 0 9 9l6.5 -6.5" /></symbol>
     <symbol id="i-link" viewBox="0 0 24 24"><path d="M9 15l6 -6" /> <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" /> <path d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" /></symbol>
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6l11 0" /> <path d="M9 12l11 0" /> <path d="M9 18l11 0" /> <path d="M5 6l0 .01" /> <path d="M5 12l0 .01" /> <path d="M5 18l0 .01" /></symbol>
@@ -74,6 +75,13 @@
           <button id="new-board"><span data-i18n="list.newBoard">Novo quadro</span></button>
         </div>
       </span>
+      <span class="top-menu">
+        <button id="skills-menu-btn" class="topbar-toggle top-menu-btn"><svg viewBox="0 0 24 24"><use href="#i-file-text"/></svg><span data-i18n="topbar.skills">Skills</span><svg class="chev" viewBox="0 0 24 24"><use href="#i-chevron-down"/></svg></button>
+        <div id="skills-menu" class="card menu top-menu-pop" hidden>
+          <button id="list-skills" data-i18n="topbar.listSkills">Listar skills</button>
+          <button id="new-skill"><span data-i18n="list.newSkill">Novo skill</span></button>
+        </div>
+      </span>
     </nav>
     <span id="title" tabindex="0" data-i18n-title="common.clickToRename" title="Clique para renomear"></span>
     <button id="map-menu-btn" class="icon topbar-toggle" data-i18n-title="topbar.docOptions" title="Opções do mapa"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></button>
@@ -113,7 +121,7 @@
       <h1 id="list-title" data-i18n="list.root">Meus mapas</h1>
     </div>
     <div class="list-tools">
-      <label class="search"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg><input id="search" type="search" data-i18n-placeholder="list.searchPlaceholder" placeholder="Buscar mapas, quadros e pastas" autocomplete="off"></label>
+      <label class="search"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg><input id="search" type="search" data-i18n-placeholder="list.searchPlaceholder" placeholder="Buscar mapas, quadros, skills e pastas" autocomplete="off"></label>
       <label class="sort" data-i18n-title="list.sortBy" title="Ordenar"><svg viewBox="0 0 24 24"><use href="#i-arrows-sort"/></svg><select id="sort">
         <option value="recent" data-i18n="list.sortRecent">Modificados recentemente</option>
         <option value="oldest" data-i18n="list.sortOldest">Modificados há mais tempo</option>
@@ -309,6 +317,36 @@
     </div>
   </section>
 
+  <section id="skill-view" data-mode="split">
+    <div class="skill-bar">
+      <div class="seg skill-modes">
+        <button data-mode="edit" data-i18n="skill.edit">Editar</button>
+        <button data-mode="split" data-i18n="skill.split">Dividir</button>
+        <button data-mode="preview" data-i18n="skill.preview">Preview</button>
+      </div>
+      <span class="skill-spacer"></span>
+      <button id="skill-save-version" data-i18n="skill.saveVersion">Salvar versão</button>
+      <button id="skill-versions-btn" data-i18n="skill.versions">Versões</button>
+    </div>
+    <div class="skill-tags">
+      <span id="skill-tag-list"></span>
+      <input id="skill-tag-input" maxlength="40" autocomplete="off" data-i18n-placeholder="skill.addTag" data-i18n-aria-label="skill.addTag" placeholder="Adicionar tag" aria-label="Adicionar tag">
+    </div>
+    <div class="skill-main">
+      <div class="skill-body">
+        <textarea id="skill-text" spellcheck="false"></textarea>
+        <article id="skill-preview" class="markdown"></article>
+        <div id="skill-diff" hidden>
+          <div class="skill-diff-bar"><button id="skill-close-compare" data-i18n="skill.closeCompare">Fechar comparação</button></div>
+          <div id="skill-diff-lines"></div>
+        </div>
+      </div>
+      <aside id="skill-versions" hidden>
+        <p id="skill-no-versions" data-i18n="skill.noVersions" hidden>Nenhuma versão ainda.</p>
+        <ul id="skill-version-list"></ul>
+      </aside>
+    </div>
+  </section>
   <section id="board-view">
     <svg id="board-canvas"><g id="board-root"></g></svg>
     <div id="board-tools" class="card">
