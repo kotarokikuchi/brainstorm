@@ -35,6 +35,7 @@ LOGIN_MAX_FAILS, LOGIN_WINDOW = 10, 600
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
        "font-src 'self' data:; connect-src 'self' blob: data:; object-src 'none'; base-uri 'none'; "
        "form-action 'self'; frame-ancestors 'none'")
+LLM_PROVIDERS = ("anthropic", "openai", "gemini", "openrouter", "custom")  # custom = compatível com OpenAI (baseUrl)
 INLINE = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 
 
@@ -192,6 +193,9 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _api(self, method):
         path = urlsplit(self.path).path
+        if path.startswith(("/api/settings/", "/api/backup/")):
+            self._settings(method, path)
+            return True
         if path == "/api/trash" or path.startswith("/api/trash/"):
             self._trash(method, path[len("/api/trash"):].strip("/"))
             return True
@@ -405,6 +409,51 @@ class Handler(SimpleHTTPRequestHandler):
         ok, saved = self.server.store.put_folders(body)
         self._send(200 if ok else 409, saved)
 
+    def _json(self, limit=MAX_LOGIN_BODY):
+        # (respondeu?, corpo): corpo None se não for JSON válido
+        length = self._length(limit)
+        if length is None:
+            return True, None
+        try:
+            return False, json.loads(self.rfile.read(length))
+        except (ValueError, RecursionError):
+            return False, None
+
+    # ---- Configurações (segredos nunca voltam: só o final mascarado) ----
+    def _settings(self, method, path):
+        kind, _, rest = path[len("/api/settings/"):].partition("/") if path.startswith("/api/settings/") else ("", "", "")
+        if kind == "llm":
+            self._llm(method, rest)
+        else:
+            self._send(404, {"error": "not found"})
+
+    def _llm(self, method, pid):
+        store = self.server.store
+        if method == "GET" and not pid:
+            providers = (store.setting("llm") or {}).get("providers", {})
+            self._send(200, [llm_view(p, providers.get(p, {})) for p in LLM_PROVIDERS])
+            return
+        if pid not in LLM_PROVIDERS or method not in ("PUT", "DELETE"):
+            self._send(404, {"error": "not found"})
+            return
+        body = None
+        if method == "PUT":
+            responded, body = self._json()
+            if responded:
+                return
+            if not valid_llm(body):
+                self._send(400, {"error": "invalid provider settings"})
+                return
+        with self.server.settings_lock:  # ler-mudar-gravar sem outra gravação no meio
+            llm = store.setting("llm") or {"providers": {}}
+            if body is None:
+                llm["providers"].pop(pid, None)
+            else:
+                current = llm["providers"].setdefault(pid, {})
+                current.update({k: v.strip() for k, v in body.items() if k in ("key", "model", "baseUrl")})
+            store.set_setting("llm", llm)
+        self._send(*((204, None) if body is None else (200, llm_view(pid, llm["providers"][pid]))))
+
     def _send(self, status, payload, headers=None):
         data = b"" if payload is None else json.dumps(payload, ensure_ascii=False).encode()
         self.send_response(status)
@@ -416,6 +465,29 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(data)
+
+
+def hint(secret):
+    # só o final do segredo, e nem isso se for curto demais (mostraria quase tudo)
+    return "…" + secret[-4:] if len(secret) > 8 else "…" if secret else ""
+
+
+def text_ok(v, limit):
+    return isinstance(v, str) and len(v) <= limit and v.isprintable()
+
+
+def valid_llm(body):
+    # key ausente = mantém; vazia não vale (para remover há o DELETE)
+    return (isinstance(body, dict)
+            and ("key" not in body or (text_ok(body["key"], 500) and body["key"].strip() != ""))
+            and ("model" not in body or text_ok(body["model"], 200))
+            and ("baseUrl" not in body or (text_ok(body["baseUrl"], 500)
+                                           and (body["baseUrl"] == "" or re.match(r"https?://[^\s/]", body["baseUrl"])))))
+
+
+def llm_view(pid, p):
+    return {"id": pid, "configured": bool(p.get("key")), "keyHint": hint(p.get("key", "")),
+            "model": p.get("model", ""), "baseUrl": p.get("baseUrl", "")}
 
 
 def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: Path | None = None,
@@ -431,6 +503,7 @@ def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: P
     if auth:
         store.reset_sessions_if_auth_changed(*auth)  # trocou usuário/senha: todo mundo entra de novo
     server.login_delay, server.login_fails, server.login_lock = 1.0, [], threading.Lock()
+    server.settings_lock = threading.Lock()
     server.data_dir = data_dir
     server.static_dir = ROOT / "static"
     server.history_interval = HISTORY_INTERVAL
