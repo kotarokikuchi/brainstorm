@@ -281,6 +281,22 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.raw_get(f"/api/maps/{new}/files/{info['id']}")[0], 200, "arquivos copiados")
         self.assertEqual(self.req("POST", "/api/maps/zzz/duplicate", raw=b"")[0], 404)
 
+    def test_duplicate_takes_the_title_suffix_from_the_client(self):
+        self.make_map()
+        def title(**kw):
+            status, body = self.req("POST", "/api/maps/abc/duplicate", **kw)
+            self.assertEqual(status, 201)
+            return self.req("GET", f"/api/maps/{body['id']}")[1]["root"]["text"]
+        self.assertEqual(title(body={"suffix": " (copy)"}), "a (copy)")
+        self.assertEqual(title(body={"suffix": " (コピー)"}), "a (コピー)")
+        for bad in ({"suffix": "x" * 41}, {"suffix": "a\nb"}, {"suffix": "a\x00"}, {"suffix": 5}, {"suffix": ""}, {}, [], "texto"):
+            self.assertEqual(title(body=bad), "a (cópia)", bad)
+        self.assertEqual(title(raw=b"{nao e json"), "a (cópia)")
+        self.assertEqual(self.req("POST", "/api/maps/abc/duplicate", raw=b"x" * 10_001)[0], 413, "corpo limitado")
+        self.req("PUT", "/api/maps/qd", self.board())
+        _, dup = self.req("POST", "/api/maps/qd/duplicate", {"suffix": " (copia)"})
+        self.assertEqual(self.req("GET", f"/api/maps/{dup['id']}")[1]["title"], "Quadro (copia)")
+
     def board(self, version=0, title="Quadro", elements=None):
         return {"version": version, "type": "board", "title": title, "elements": elements or []}
 
@@ -478,6 +494,16 @@ class AuthTest(unittest.TestCase):
         self.assertEqual((status, headers["Cache-Control"]), (401, "no-store"), "401 de anexo não fica em cache")
         for public in ("/login.html", "/style.css", "/fonts/kalam-latin-400-normal.woff2"):
             self.assertEqual(self.call("GET", public)[0], 200, public)
+
+    def test_login_page_texts_are_public(self):
+        # a página de login carrega o i18n.js e os dicionários sem sessão; o resto continua fechado
+        for public in ("/i18n.js", "/locales/pt-BR.js"):
+            self.assertEqual(self.call("GET", public)[0], 200, public)
+        self.assertEqual(self.call("GET", "/locales/nao-existe.js")[0], 404, "idioma sem dicionário: 404, não o login")
+        for path in ("/locales/../app.js", "/locales/%2e%2e/app.js", "/locales/..%2fapp.js", "//locales/../index.html",
+                     "/i18n.js/../app.js", "/locales/./../app.js", "/locales//../app.js", "/locales"):
+            self.assertEqual(self.call("GET", path)[0], 302, path)
+            self.assertEqual(self.call("HEAD", path)[0], 302, path)
 
     def test_login_sets_a_safe_cookie_and_unlocks_the_app(self):
         status, headers, _ = self.login()

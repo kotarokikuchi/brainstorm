@@ -169,15 +169,15 @@ class Store:
             rows = db.execute("SELECT id, title, type, updated FROM docs WHERE deleted IS NULL ORDER BY updated DESC").fetchall()
         return [{"id": r["id"], "title": r["title"], "type": r["type"], "updated": iso(r["updated"])} for r in rows]
 
-    def duplicate(self, doc_id):
+    def duplicate(self, doc_id, suffix=" (cópia)"):
         body = self.get(doc_id)
         if body is None:
             return None
         new_id = f"{doc_id[:48]}-copia-{uuid.uuid4().hex[:6]}"
         if body.get("type") == "board":
-            body["title"] = f"{body.get('title', '')} (cópia)"
+            body["title"] = f"{body.get('title', '')}{suffix}"
         else:
-            body["root"]["text"] = f"{body['root'].get('text', '')} (cópia)"
+            body["root"]["text"] = f"{body['root'].get('text', '')}{suffix}"
         body["version"] = 0
         if self.files(doc_id).exists():
             shutil.copytree(self.files(doc_id), self.files(new_id))  # imagens/anexos apontam para o documento

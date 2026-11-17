@@ -28,7 +28,8 @@ FILE_RE = re.compile(r"[a-f0-9]{32}(\.[a-z0-9]{1,10})?")
 SESSION_COOKIE = "brainstorm_session"
 SESSION_RE = re.compile(rf"(?:^|;)\s*{SESSION_COOKIE}=([A-Za-z0-9_-]+)\s*(?:;|$)")
 SESSION_TTL = 30 * 86400
-PUBLIC = {"/login.html", "/login.js", "/style.css"}  # e /fonts/ (o visual da página de login)
+PUBLIC = {"/login.html", "/login.js", "/style.css", "/i18n.js"}  # e /fonts/ e /locales/ (visual e textos da página de login)
+PUBLIC_DIRS = ("/fonts/", "/locales/")
 LOGIN_MAX_FAILS, LOGIN_WINDOW = 10, 600
 # scripts só do próprio app; estilo inline é usado nos SVG; data:/blob: para exportar PNG e baixar arquivos
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
@@ -89,7 +90,7 @@ class Handler(SimpleHTTPRequestHandler):
             return True
         # público só se o arquivo que será servido (translate_path desfaz "%2e", ".." e "//") é o mesmo
         # conferido aqui: /fonts/../app.js não passa
-        public = (path in PUBLIC or path.startswith("/fonts/")) and path == posixpath.normpath(unquote(path)) \
+        public = (path in PUBLIC or path.startswith(PUBLIC_DIRS)) and path == posixpath.normpath(unquote(path)) \
             and self.translate_path(self.path) == os.path.join(self.directory, path[1:])
         if not self.server.auth or public or self._logged_in():
             return False
@@ -268,7 +269,17 @@ class Handler(SimpleHTTPRequestHandler):
             self._send(404, {"error": "not found"})
 
     def _duplicate(self, map_id):
-        new_id = self.server.store.duplicate(map_id)
+        # corpo opcional {"suffix": "..."}: o que acrescentar ao título (no idioma da interface); inválido ou ausente = padrão
+        length = self._length(MAX_LOGIN_BODY)
+        if length is None:
+            return
+        try:
+            suffix = json.loads(self.rfile.read(length)).get("suffix")
+        except (ValueError, RecursionError, AttributeError):
+            suffix = None
+        if not isinstance(suffix, str) or not 0 < len(suffix) <= 40 or not suffix.isprintable():
+            suffix = " (cópia)"
+        new_id = self.server.store.duplicate(map_id, suffix)
         self._send(*((201, {"id": new_id}) if new_id else (404, {"error": "not found"})))
 
     def _history(self, method, map_id, sub):

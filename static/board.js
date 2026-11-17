@@ -6,6 +6,7 @@ import {
   moveElements, resizeElement, bringToFront, sendToBack, duplicateElements, elementsHitBy, paint, elementsInPolygon, forwardOne, backwardOne, okElement, sanitizeElement,
 } from './board-model.js';
 import { History, safeUrl, wrapLines, isHex, FILE_ID } from './model.js';
+import { t } from './i18n.js';
 
 const $ = (s) => document.querySelector(s);
 const SVG = 'http://www.w3.org/2000/svg';
@@ -37,12 +38,12 @@ export const currentBoard = () => board;
 export const boardPlace = () => ({ view: { ...view }, selection: [...selection] });
 export function closeBoard() { board = null; }
 
-export const newBoard = (id) => ({ id, version: 0, type: 'board', title: 'Quadro sem título', elements: [] });
+export const newBoard = (id, title = 'Quadro sem título') => ({ id, version: 0, type: 'board', title, elements: [] });
 
 export async function openBoard(id) {
   const r = await deps.api('GET', `/${id}`);
   if (!r.ok) {
-    if (r.status === 500) alert('Não foi possível abrir este quadro: o arquivo dele está corrompido.');
+    if (r.status === 500) alert(t('board.openError'));
     location.hash = '#/';
     return;
   }
@@ -57,7 +58,7 @@ export async function openBoard(id) {
   selection = (Array.isArray(place?.selection) ? place.selection : []).filter(s => board.elements.some(x => x.id === s));
   deps.resetSave();
   document.body.dataset.view = 'board';
-  deps.setStatus('Salvo');
+  deps.setStatus(t('status.saved'));
   $('#title').textContent = board.title;
   render();
 }
@@ -447,11 +448,11 @@ svg.addEventListener('drop', (e) => {
 // envia ao servidor (mesma rota de anexos dos mapas) e põe no centro da tela, com no máx. 400 px
 async function insertImage(file, at = null) {
   if (!file || !board) return;
-  if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) { alert('Use uma imagem PNG, JPG, GIF ou WEBP.'); return; }
+  if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) { alert(t('common.imageTypeError')); return; }
   const id = board.id;
   try {
     const r = await fetch(`/api/maps/${id}/files`, { method: 'POST', headers: { 'X-Filename': encodeURIComponent(file.name || 'imagem.png') }, body: file });
-    if (!r.ok) throw new Error(r.status === 413 ? 'arquivo maior que 20 MB' : `HTTP ${r.status}`);
+    if (!r.ok) throw new Error(r.status === 413 ? t('error.fileTooLarge') : `HTTP ${r.status}`);
     const { id: fileId } = await r.json();
     const im = new Image();
     im.src = `/api/maps/${id}/files/${fileId}`;
@@ -465,7 +466,7 @@ async function insertImage(file, at = null) {
     selection = [item.id];
     changed(before);
   } catch (err) {
-    alert(`Não foi possível inserir a imagem: ${err.message}`);
+    alert(t('board.image.insertError', { error: err.message }));
   }
 }
 
@@ -564,10 +565,10 @@ function act(name) {
   const before = snapshot();
   if (name === 'link') {
     const sel = board.elements.filter(x => selection.includes(x.id));
-    const input = prompt('Endereço do link (vazio remove)', sel[0].link ?? '');
+    const input = prompt(t('board.link.prompt'), sel[0].link ?? '');
     if (input === null) return;
     const url = safeUrl(input);
-    if (input.trim() && !url) { alert('Use um endereço http ou https.'); return; }
+    if (input.trim() && !url) { alert(t('board.link.invalid')); return; }
     for (const x of sel) { if (url) x.link = url; else delete x.link; }
     return changed(before);
   }
@@ -612,7 +613,7 @@ for (const [prop, colors] of [['strokeColor', STROKES], ['backgroundColor', FILL
   props.querySelector(`[data-prop="${prop}"]`).append(...colors.map((c) => {
     const b = document.createElement('button');
     b.dataset.value = c;
-    b.title = c === 'transparent' ? 'Sem fundo' : c;
+    b.title = c === 'transparent' ? t('board.props.noBackground') : c;
     if (c !== 'transparent') b.style.background = c;
     return b;
   }));

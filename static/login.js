@@ -1,5 +1,12 @@
+import { LANGS, lang, setLang, t, applyI18n } from './i18n.js';
+
+applyI18n();
 const form = document.querySelector('#login-form'), error = document.querySelector('#login-error');
-const MESSAGES = { 401: 'Usuário ou senha incorretos.', 429: 'Muitas tentativas erradas. Espere alguns minutos e tente de novo.' };
+const langSelect = document.querySelector('#lang');
+langSelect.append(...LANGS.map(l => new Option(l.name, l.code)));
+langSelect.value = lang;
+langSelect.onchange = () => { setLang(langSelect.value); location.reload(); };
+const MESSAGES = { 401: t('login.wrongCredentials'), 429: t('login.tooManyAttempts') };
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const button = form.querySelector('button');
@@ -11,9 +18,9 @@ form.addEventListener('submit', async (e) => {
       body: JSON.stringify({ user: form.user.value, password: form.password.value }),
     });
     if (r.ok) { location.href = '/'; return; }
-    error.textContent = MESSAGES[r.status] ?? `Não foi possível entrar (HTTP ${r.status}).`;
+    error.textContent = MESSAGES[r.status] ?? t('login.failed', { status: r.status });
   } catch {
-    error.textContent = 'Sem conexão com o servidor.';
+    error.textContent = t('login.noConnection');
   }
   error.hidden = false;
   button.disabled = false;
