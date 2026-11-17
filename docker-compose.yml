@@ -10,12 +10,13 @@ services:
       - ./data:/data
       # anexos num disco externo: descomente e troque o caminho
       # - /mnt/storage/brainstorm-anexos:/anexos
-    # environment:
-    #   BRAINSTORM_FILES: /anexos
-    # usuário e senha do login (BRAINSTORM_USER / BRAINSTORM_PASSWORD) vêm do .env, se existir
-    env_file:
-      - path: .env
-        required: false
+    # login: usuário e senha vêm das variáveis de ambiente de quem roda o "docker compose"
+    # (ex.: BRAINSTORM_USER=ana BRAINSTORM_PASSWORD=... docker compose up -d) ou, se não estiverem
+    # definidas, do arquivo .env ao lado deste. Sem as duas, o app abre sem login.
+    environment:
+      BRAINSTORM_USER: ${BRAINSTORM_USER:-}
+      BRAINSTORM_PASSWORD: ${BRAINSTORM_PASSWORD:-}
+      # BRAINSTORM_FILES: /anexos
     # roda com o seu usuário para os arquivos em ./data não ficarem como root
     user: "${UID:-1000}:${GID:-1000}"
     restart: unless-stopped
