@@ -13,11 +13,15 @@ const WASABI = {
 };
 
 async function call(method, path, body) {
-  const r = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body && JSON.stringify(body) });
-  const data = r.status === 204 ? null : await r.json().catch(() => null);
-  return { ok: r.ok, status: r.status, data };
+  try {
+    const r = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body && JSON.stringify(body) });
+    const data = r.status === 204 ? null : await r.json().catch(() => null);
+    return { ok: r.ok, status: r.status, data };
+  } catch {
+    return { ok: false, status: 0, data: null };  // rede fora do ar: nunca rejeita
+  }
 }
-const errorText = (r) => (r.status === 409 ? t('settings.busy') : t('settings.error', { detail: r.data?.error ?? `HTTP ${r.status}` }));
+const errorText = (r) => (r.status === 409 ? t('settings.busy') : t('settings.error', { detail: r.data?.error ?? (r.status ? `HTTP ${r.status}` : 'network error') }));
 function say(el, text, error = false) {
   el.textContent = text;
   el.classList.toggle('error', error);
@@ -123,6 +127,7 @@ function showStatus() {
   if (!v.configured) lines.push(t('settings.backup.notConfigured'));
   else lines.push(s.lastSuccess ? t('settings.backup.lastSuccess', { when: fmtDateTime(new Date(s.lastSuccess)) }) : t('settings.backup.never'));
   if (s.lastError) lines.push(t('settings.backup.lastError', { when: fmtDateTime(new Date(s.lastAttempt)), error: s.lastError }));
+  $('#backup-status').classList.remove('error');  // o erro de uma ação anterior não pinta o status novo
   $('#backup-status').replaceChildren(...lines.map((l, i) => el('span', { className: i ? 'error' : '', textContent: l })));
   $('#backup-run').disabled = !v.configured;
 }
@@ -165,6 +170,8 @@ async function busy(text, work) {
   try { return await work(); } finally {
     for (const b of buttons) b.disabled = false;
     $('#backup-run').disabled = !backupView?.configured;
+    // nenhuma resposta substituiu o texto de andamento: volta ao status guardado
+    if ($('#backup-status').textContent === text) backupView ? showStatus() : say($('#backup-status'), '');
   }
 }
 
