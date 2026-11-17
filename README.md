@@ -37,7 +37,7 @@ cp -r data/attachments backup-attachments
 
 Ou pare o app (`docker compose down`) e copie a pasta `data/` inteira.
 
-Para deixar os anexos direto num disco externo, use `GALHO_FILES=/caminho/do/disco` (no Docker,
+Para deixar os anexos direto num disco externo, use `BRAINSTORM_FILES=/caminho/do/disco` (no Docker,
 veja o comentário no `docker-compose.yml`).
 
 Na primeira vez que a versão com banco sobe, os dados do formato antigo (um `.json` por documento)
@@ -54,8 +54,8 @@ python app.py        # http://127.0.0.1:8000  (ou: python app.py 8080)
 Nesse modo o servidor reinicia sozinho quando `app.py` muda, e a página recarrega quando
 `static/` muda.
 
-Variáveis opcionais: `GALHO_HOST` (padrão `127.0.0.1`), `GALHO_DATA` (padrão `./data`) e
-`GALHO_FILES` (padrão `<GALHO_DATA>/attachments`).
+Variáveis opcionais: `BRAINSTORM_HOST` (padrão `127.0.0.1`), `BRAINSTORM_DATA` (padrão `./data`) e
+`BRAINSTORM_FILES` (padrão `<BRAINSTORM_DATA>/attachments`).
 
 ## Testes
 

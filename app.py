@@ -339,11 +339,11 @@ def restart():
 
 def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
-    # GALHO_HOST/GALHO_DATA: no Docker, escuta em 0.0.0.0 dentro do container e guarda em /data
-    # GALHO_FILES: pasta dos anexos (ex.: um disco externo); padrão <dados>/attachments
-    host = os.environ.get("GALHO_HOST", "127.0.0.1")
-    files = os.environ.get("GALHO_FILES")
-    server = make_server(Path(os.environ.get("GALHO_DATA") or ROOT / "data"), port, host, Path(files) if files else None)
+    # BRAINSTORM_HOST/BRAINSTORM_DATA: no Docker, escuta em 0.0.0.0 dentro do container e guarda em /data
+    # BRAINSTORM_FILES: pasta dos anexos (ex.: um disco externo); padrão <dados>/attachments
+    host = os.environ.get("BRAINSTORM_HOST", "127.0.0.1")
+    files = os.environ.get("BRAINSTORM_FILES")
+    server = make_server(Path(os.environ.get("BRAINSTORM_DATA") or ROOT / "data"), port, host, Path(files) if files else None)
     # recarrega sozinho ao editar o servidor (HTML/CSS/JS já vêm frescos a cada F5)
     watch([Path(__file__).resolve()], restart)
     print(f"Abra http://127.0.0.1:{port}")
