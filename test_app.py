@@ -911,6 +911,8 @@ class MainTest(unittest.TestCase):
     def test_example_password_is_refused(self):
         refused, _, _ = self.main(BRAINSTORM_USER="ana", BRAINSTORM_PASSWORD="change-this-password")
         self.assertIn(".env.example", refused or "")
+        refused, _, _ = self.main(BRAINSTORM_USER="ana", BRAINSTORM_PASSWORD="troque-esta-senha")
+        self.assertIn(".env.example", refused or "", "the example password of older versions is refused too")
         example = (Path(app.__file__).with_name(".env.example")).read_text()
         self.assertIn("BRAINSTORM_PASSWORD=change-this-password", example, "the refusal follows the example")
 

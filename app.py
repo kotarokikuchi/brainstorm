@@ -33,7 +33,8 @@ SESSION_RE = re.compile(rf"(?:^|;)\s*{SESSION_COOKIE}=([A-Za-z0-9_-]+)\s*(?:;|$)
 SESSION_TTL = 30 * 86400
 PUBLIC = {"/login.html", "/login.js", "/style.css", "/i18n.js"}  # plus /fonts/ and /locales/ (look and texts of the login page)
 PUBLIC_DIRS = ("/fonts/", "/locales/")
-EXAMPLE_PASSWORD = "change-this-password"  # the one from .env.example: the app refuses to start with it
+# the one from .env.example (and the one it shipped with before v1.7.2): the app refuses to start with them
+EXAMPLE_PASSWORDS = {"change-this-password", "troque-esta-senha"}
 LOGIN_MAX_FAILS, LOGIN_WINDOW = 10, 600
 # scripts only from the app itself; inline style is used in SVGs; data:/blob: to export PNG and download files
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
@@ -610,7 +611,7 @@ def main():
     user, password = os.environ.get("BRAINSTORM_USER", ""), os.environ.get("BRAINSTORM_PASSWORD", "")
     if bool(user) != bool(password):
         sys.exit("Set BRAINSTORM_USER and BRAINSTORM_PASSWORD together (in .env or in the environment), or neither.")
-    if password == EXAMPLE_PASSWORD:
+    if password in EXAMPLE_PASSWORDS:
         sys.exit("BRAINSTORM_PASSWORD is still the example password from .env.example: change it to your own.")
     if not user and not loopback(host) and os.environ.get("BRAINSTORM_ALLOW_NO_LOGIN") != "1":
         sys.exit(f"Without BRAINSTORM_USER/BRAINSTORM_PASSWORD the app opens without login, and BRAINSTORM_HOST={host!r} accepts "
