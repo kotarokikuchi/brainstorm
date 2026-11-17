@@ -1,12 +1,13 @@
 // Pastas (lógica pura): tree = {version, folders: [{id, name, parent}], place: {id do documento: id da pasta}}
 
+const str = (x) => String(x ?? '');  // título/nome vindo do arquivo pode não ser texto
 const byId = (tree, id) => tree.folders.find(f => f.id === id) ?? null;
 
 // pasta de um documento; pasta que sumiu conta como Início (null)
 export const folderOf = (tree, docId) => byId(tree, tree.place[docId])?.id ?? null;
 
 export const childFolders = (tree, parent) =>
-  tree.folders.filter(f => (f.parent ?? null) === parent).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  tree.folders.filter(f => (f.parent ?? null) === parent).sort((a, b) => str(a.name).localeCompare(str(b.name), 'pt-BR'));
 
 // caminho do Início até a pasta (sem o Início); [] para o Início ou pasta desconhecida
 export function folderPath(tree, id) {
@@ -61,14 +62,14 @@ export function folderOptions(tree, parent = null, depth = 0) {
 }
 
 // ---- Ordenar e buscar na lista ----
-const fold = (s) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();  // sem acento, sem maiúscula
-const byName = (a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base', numeric: true });
+const fold = (s) => str(s).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();  // sem acento, sem maiúscula
+const byName = (a, b) => str(a).localeCompare(str(b), 'pt-BR', { sensitivity: 'base', numeric: true });
 
 // pastas sempre por nome (Z–A inverte); documentos por data de modificação ou por nome
 export function sortItems({ folders, docs }, mode) {
   const fs = [...folders].sort((a, b) => byName(a.name, b.name));
   const ds = [...docs];
-  if (mode === 'az' || mode === 'za') ds.sort((a, b) => byName(a.title || '', b.title || ''));
+  if (mode === 'az' || mode === 'za') ds.sort((a, b) => byName(a.title, b.title));
   else ds.sort((a, b) => (a.updated < b.updated ? 1 : a.updated > b.updated ? -1 : 0));  // mais recentes primeiro
   if (mode === 'za') { fs.reverse(); ds.reverse(); }
   if (mode === 'oldest') ds.reverse();
@@ -79,5 +80,5 @@ export function sortItems({ folders, docs }, mode) {
 export function searchItems(tree, docs, query) {
   const words = fold(query).split(/\s+/).filter(Boolean);
   const hit = (s) => words.every(w => fold(s).includes(w));
-  return { folders: tree.folders.filter(f => hit(f.name)), docs: docs.filter(d => hit(d.title || '')) };
+  return { folders: tree.folders.filter(f => hit(f.name)), docs: docs.filter(d => hit(d.title)) };
 }

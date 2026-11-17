@@ -195,3 +195,37 @@ test('paint recolors sticky notes like closed shapes', () => {
   const n = paint({ ...createElement('note', [0, 0]), w: 200, h: 200 }, { backgroundColor: '#b2f2bb', fillStyle: 'solid', strokeColor: '#e03131' });
   assert.deepEqual([n.backgroundColor, n.strokeColor], ['#b2f2bb', '#1e1e1e']);
 });
+
+import { okElement, sanitizeElement } from '../static/board-model.js';
+
+test('okElement rejects pasted elements the renderer cannot draw', () => {
+  assert.equal(okElement({ id: '1', type: 'text', x: 0, y: 0 }), false, 'texto sem text');
+  assert.equal(okElement({ id: '1', type: 'note', x: 0, y: 0, text: 5 }), false);
+  assert.equal(okElement({ id: '1', type: 'arrow', x: 0, y: 0 }), false, 'seta sem pontos');
+  assert.equal(okElement({ id: '1', type: 'line', x: 0, y: 0, points: [[0, 0]] }), false, 'linha com 1 ponto');
+  assert.equal(okElement({ id: '1', type: 'freedraw', x: 0, y: 0, points: [] }), false);
+  assert.equal(okElement({ id: '1', type: 'arrow', x: 0, y: 0, points: [[0, 0], [1, 'a']] }), false);
+  assert.equal(okElement({ id: '1', type: 'script', x: 0, y: 0 }), false);
+  assert.equal(okElement({ id: '1', type: 'rectangle', x: 0, y: null }), false);
+  assert.equal(okElement(null), false);
+  assert.ok(okElement({ id: '1', type: 'rectangle', x: 0, y: 0, link: 5 }), 'sem pontos e com link ruim: aceito (e limpo depois)');
+  assert.ok(okElement({ id: '1', type: 'text', x: 0, y: 0, text: '' }));
+  assert.ok(okElement({ id: '1', type: 'freedraw', x: 0, y: 0, points: [[0, 0]] }));
+  assert.ok(okElement({ id: '1', type: 'arrow', x: 0, y: 0, points: [[0, 0], [5, 5]] }));
+});
+
+test('sanitizeElement drops badly typed fields so drawing never throws', () => {
+  const r = sanitizeElement({ id: '1', type: 'rectangle', x: 0, y: 0, link: 5 });
+  assert.deepEqual(r, { id: '1', type: 'rectangle', x: 0, y: 0, w: 0, h: 0 });
+  assert.equal(elementPaths(r).length, 1);
+  const e = sanitizeElement({
+    id: '2', type: 'ellipse', x: 1, y: 2, w: 3, h: 4, points: 'x', strokeColor: 'url(https://attacker.example/p.gif)',
+    backgroundColor: 5, strokeWidth: '2', roughness: null, opacity: {}, seed: 7, fillStyle: 1, link: 'https://a.com',
+  });
+  assert.deepEqual(e, { id: '2', type: 'ellipse', x: 1, y: 2, w: 3, h: 4, roughness: null, seed: 7, link: 'https://a.com' });
+  assert.equal(sanitizeElement({ type: 'rectangle', x: 0, y: 0, backgroundColor: 'transparent' }).backgroundColor, 'transparent');
+  assert.equal(sanitizeElement({ type: 'rectangle', x: 0, y: 0, backgroundColor: '#ffc9c9' }).backgroundColor, '#ffc9c9');
+  assert.equal(sanitizeElement({ type: 'text', x: 0, y: 0, text: 'a', fontSize: 'big' }).fontSize, 20);
+  assert.equal(sanitizeElement({ type: 'note', x: 0, y: 0, text: 'a', fontSize: 28 }).fontSize, 28);
+  assert.deepEqual(sanitizeElement({ type: 'line', x: 0, y: 0, points: [[0, 0], [1, 1]] }).points, [[0, 0], [1, 1]]);
+});

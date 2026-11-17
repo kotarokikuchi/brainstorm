@@ -1505,6 +1505,52 @@ assert.equal((await fetch(BASE + '/api/maps/pergunta')).status, 200, 'cancelar n
 await ev(`window.confirm = () => true; document.querySelector('#maps [data-delete="pergunta"]').click()`); await sleep(800);
 assert.equal((await fetch(BASE + '/api/maps/pergunta')).status, 404, 'confirmar apaga (vai para a lixeira)');
 
+// colagens forjadas (outro site pode pôr qualquer coisa na área de transferência): nada quebra o desenho,
+// nada inválido é salvo e o documento continua editável
+await fetch(BASE + '/api/maps/secb', { method: 'PUT', body: JSON.stringify({ version: 0, type: 'board', title: 'Seguro', elements: [{ ...elBase, id: 'ok1', type: 'rectangle', x: 300, y: 200, w: 80, h: 60 }] }) });
+const secEls = async () => (await (await fetch(BASE + '/api/maps/secb')).json()).elements;
+const secDom = () => ev(`document.querySelectorAll('#board-root .el').length`);
+await ev(`location.hash = '#/board/secb'`); await sleep(1200);
+for (const bad of ['[{"id":"1","type":"text","x":0,"y":0}]', '[{"id":"1","type":"arrow","x":0,"y":0}]', JSON.stringify([{ id: '1', type: 'text', x: 0, y: 0, text: 'a'.repeat(1000001) }])]) {
+  await clipEvent('paste', { 'application/x-galho-board': bad });
+  await sleep(700);
+  assert.deepEqual([(await secEls()).length, await secDom()], [1, 1], 'colagem forjada recusada: ' + bad.slice(0, 40));
+}
+await clipEvent('paste', { 'application/x-galho-board': '[{"id":"1","type":"rectangle","x":0,"y":0,"link":5}]' });
+await sleep(900);
+const secPasted = (await secEls()).at(-1);
+assert.deepEqual([(await secEls()).length, await secDom(), secPasted.type, 'link' in secPasted], [2, 2, 'rectangle', false], 'link inválido sai e o resto é colado');
+await key('ArrowRight');
+await sleep(900);
+assert.equal((await secEls()).at(-1).x, secPasted.x + 1, 'quadro continua salvando depois das colagens forjadas');
+
+await fetch(BASE + '/api/maps/secm', { method: 'PUT', body: JSON.stringify({ version: 0, layout: 'map', root: { id: 'sr', text: 'Seguro', children: [] } }) });
+const secMap = async () => (await (await fetch(BASE + '/api/maps/secm')).json()).root;
+const secNodes = () => ev(`document.querySelectorAll('#viewport .node').length`);
+await ev(`location.hash = '#/map/secm'`); await sleep(1200);
+await clipEvent('paste', { 'application/x-galho-branch': '{"text":"a","children":[{"text":"b","children":[],"shape":"rect","color":5}]}' });
+await sleep(900);
+const secA = (await secMap()).children[0];
+assert.deepEqual([secA.text, secA.children[0].text, secA.children[0].shape, 'color' in secA.children[0]], ['a', 'b', 'rect', false], 'cor inválida sai do ramo colado');
+assert.equal(await secNodes(), 3, 'mapa continua desenhado depois da colagem forjada');
+await clickNode('Seguro');
+await clipEvent('paste', { 'application/x-galho-branch': '{"text":"cor","children":[],"borderColor":"url(https://attacker.example/p.gif)","lineColor":"#e5383b"}' });
+await sleep(900);
+const secCor = (await secMap()).children.find(c => c.text === 'cor');
+assert.deepEqual(['borderColor' in secCor, secCor.lineColor], [false, '#e5383b'], 'cor url(...) não é guardada; a hexadecimal fica');
+await clickNode('cor');
+await ev(`document.querySelector('#style-btn').click()`);
+assert.equal(await ev(`document.querySelectorAll('#style-pop [style*="url("], #viewport [stroke*="url(h"], #viewport [fill*="url(h"]').length`), 0, 'nenhuma cor url(...) chega ao painel nem ao desenho');
+await clipEvent('paste', { 'application/x-galho-branch': JSON.stringify({ text: 'x'.repeat(1000001), children: [] }) });
+await sleep(700);
+assert.equal(await secNodes(), 4, 'ramo grande demais é recusado');
+await key('Escape');
+await key('Tab');
+await typeText('depois');
+await key('Enter');
+await sleep(900);
+assert.ok((await secMap()).children.find(c => c.text === 'cor').children.some(c => c.text === 'depois'), 'mapa continua salvando depois das colagens forjadas');
+
 // Sair: encerra a sessão e volta para a página de login
 await ev(`location.hash = '#/'`); await sleep(800);
 assert.equal(await ev(`!document.querySelector('#logout-btn').hidden`), true, 'botão Sair aparece com login ativo');

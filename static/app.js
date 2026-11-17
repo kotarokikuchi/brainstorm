@@ -1,6 +1,6 @@
 import {
   PALETTE, uid, newMap, branchToText, textToBranches, findNode, addChild, addSibling, removeNode, commitText,
-  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, toMarkdown, slides, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines,
+  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, toMarkdown, slides, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines, isHex, hexColor, sanitizeBranch, FILE_ID,
 } from './model.js';
 import { folderOf, childFolders, folderPath, removeFolder, placeDoc, subtree, moveFolder, folderOptions, sortItems, searchItems } from './folders.js';
 import { initBoard, openBoard, closeBoard, currentBoard, newBoard, boardSvg, boardPlace, renameBoard } from './board.js';
@@ -53,7 +53,7 @@ function loadPlace(id) {
 window.addEventListener('pagehide', savePlace);  // recarregar (F5 ou automática) e fechar a aba
 
 // ---------- Área de transferência do mapa (sistema): entre abas, depois de recarregar e com outros programas ----------
-const BRANCH = 'application/x-galho-branch';
+const BRANCH = 'application/x-galho-branch', MAX_CLIP = 1e6;
 let pendingMapPaste = 0, pendingMapCut = 0;
 // o que vem colado pode ter sido posto por outro site: só ramos com texto e filhos bem formados
 const okBranch = (b, depth = 0) => !!b && typeof b === 'object' && typeof b.text === 'string'
@@ -76,6 +76,7 @@ document.addEventListener('cut', (e) => {  // recortar = copiar e apagar (o nó 
 document.addEventListener('paste', (e) => {
   if (!mapKeys(e) || !e.clipboardData || !selected) return;
   const json = e.clipboardData.getData(BRANCH), text = e.clipboardData.getData('text/plain');
+  if (json.length > MAX_CLIP) { clearTimeout(pendingMapPaste); e.preventDefault(); return; }  // grande demais: recusa
   let branches = [];
   try { branches = json ? [JSON.parse(json)] : textToBranches(text.slice(0, 100000)); } catch { /* ramo inválido: ignora */ }
   if (!branches.length || !branches.every(b => okBranch(b))) return;
@@ -88,7 +89,8 @@ document.addEventListener('paste', (e) => {
 // cola os ramos sob o tópico selecionado; vindos de outro mapa, imagens e anexos são copiados para este
 async function pasteBranches(branches) {
   const id = map.id, parent = selected, ready = [];
-  for (const { src, ...b } of branches) {
+  for (const { src, ...raw } of branches) {
+    const b = sanitizeBranch(raw);  // estilo com tipo errado sai antes de entrar no mapa
     if (src && src !== id) await bringNodeFiles(b, src);
     ready.push(b);
   }
@@ -96,7 +98,8 @@ async function pasteBranches(branches) {
   mutate(() => { for (const b of ready) selected = pasteBranch(map, parent, b).id; });
 }
 async function copyFile(src, fileId, name) {
-  if (!/^[a-z0-9-]{1,64}$/.test(src)) throw new Error('origem inválida');
+  // id fora do formato do servidor (ex.: "..") faria a URL apontar para outra coisa que não um arquivo
+  if (!/^[a-z0-9-]{1,64}$/.test(src) || typeof fileId !== 'string' || !FILE_ID.test(fileId)) throw new Error('origem inválida');
   const r = await fetch(`/api/maps/${src}/files/${encodeURIComponent(fileId)}`);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return (await uploadFile(new File([await r.blob()], name || fileId))).id;
@@ -476,13 +479,12 @@ const lvl = (depth) => Math.min(depth, 2);
 
 // linhas do texto: uma só, ou quebradas para caber na largura fixa do nó (redimensionado)
 function linesFor(n, depth, width) {
-  const text = n.text;
+  const text = String(n.text ?? '');
   ctx.font = fontFor(depth, n);
   return width ? wrapLines(text, width - PAD[lvl(depth)], (t) => ctx.measureText(t).width) : [text];
 }
 
-// id de arquivo vindo do mapa só vira URL se tiver o formato gerado pelo servidor
-const FILE_ID = /^[a-f0-9]{32}(\.[a-z0-9]{1,10})?$/;
+// id de arquivo vindo do mapa só vira URL se tiver o formato gerado pelo servidor (FILE_ID)
 const fileUrl = (id) => `/api/maps/${map.id}/files/${id}`;
 
 // tamanho de exibição da imagem: no máx. 200 px (ou a largura fixa do nó), sem ampliar
@@ -543,12 +545,17 @@ function render() {
     // a linha até o pai é estilizada pelo filho; ramo com sub-layout usa o estilo dele (e.kind)
     const n = findNode(map.root, e.to.id).node;
     el('path', {
-      class: 'edge', d: edgePath(e.kind ?? map.layout, e.from, e.to), fill: 'none', stroke: n.lineColor || e.color,
+      class: 'edge', d: edgePath(e.kind ?? map.layout, e.from, e.to), fill: 'none', stroke: hexColor(n.lineColor) || e.color,
       'stroke-width': n.lineWidth ? WIDTHS[n.lineWidth] : Math.max(2, 6 - e.depth),
       'stroke-dasharray': n.lineStyle === 'dashed' ? DASHES.dashed : null, 'stroke-linecap': 'round',
     }, viewport);
   }
-  for (const b of boxes) drawNode(b);
+  for (const b of boxes) {
+    // um nó inválido no arquivo não derruba o mapa: fica como estiver (dá para selecionar e apagar)
+    try { drawNode(b); } catch (err) {
+      if (!warned.has(b.id)) { warned.add(b.id); console.warn('Tópico inválido ignorado no desenho:', b.id, err); }
+    }
+  }
   drawLinks();
   if (drag?.active) drawDrop();
   if (editing) placeInput();
@@ -558,9 +565,12 @@ function render() {
   placeLinkBar();
 }
 
+const warned = new Set();  // nós inválidos já avisados no console
 function drawNode(b) {
   const n = findNode(map.root, b.id).node;
   const g = el('g', { class: 'node', 'data-id': b.id }, viewport);
+  g.addEventListener('click', (ev) => { ev.stopPropagation(); select(b.id, true); });
+  g.addEventListener('dblclick', (ev) => { ev.stopPropagation(); startEdit(b.id, false); });
   if (drag?.active && drag.ids.has(b.id)) g.classList.add('dragging');
   // forma efetiva: raiz sem caixa, 1º nível pílula, demais sublinhado
   const shape = b.shape;  // forma efetiva (effectiveShape): estilo em nó sem forma vira caixa
@@ -569,7 +579,7 @@ function drawNode(b) {
   // borda: explícita, ou automática quando a caixa não tem preenchimento
   const border = n.borderColor || n.borderWidth || n.borderStyle || (boxed && !solid);
   const line = {
-    stroke: border ? n.borderColor || b.color : null,
+    stroke: border ? hexColor(n.borderColor) || b.color : null,
     'stroke-width': border ? WIDTHS[n.borderWidth || 'medium'] : null,
     'stroke-dasharray': DASHES[n.borderStyle || 'solid'],
   };
@@ -586,7 +596,7 @@ function drawNode(b) {
   if (shape === 'underline') {
     el('line', {
       x1: b.x, y1: b.y + b.h, x2: b.x + b.w, y2: b.y + b.h, 'stroke-linecap': 'round',
-      stroke: n.borderColor || b.color, 'stroke-width': n.borderWidth ? WIDTHS[n.borderWidth] : 2.5,
+      stroke: hexColor(n.borderColor) || b.color, 'stroke-width': n.borderWidth ? WIDTHS[n.borderWidth] : 2.5,
       'stroke-dasharray': line['stroke-dasharray'],
     }, g);
   }
@@ -597,7 +607,7 @@ function drawNode(b) {
   if (icon) drawInlineIcons(b, cy, g, n);
   const t = el('text', {
     x: tx, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central',
-    fill: n.textColor || (solid ? textOn(b.color) : '#1d1d2b'), style: `font: ${fontFor(b.depth, n)}`,
+    fill: hexColor(n.textColor) || (solid ? textOn(b.color) : '#1d1d2b'), style: `font: ${fontFor(b.depth, n)}`,
   }, g);
   const lines = editing?.id === b.id ? [''] : linesFor(n, b.depth, n.width && n.width - inlineIcons(n) * ICON_W);
   if (lines.length === 1) t.textContent = lines[0];
@@ -610,8 +620,6 @@ function drawNode(b) {
   }
   if (n.children.length && b.depth > 0) drawToggle(b, n, g);
   if (n.attachments?.length) drawAttachBadge(b, n);
-  g.addEventListener('click', (ev) => { ev.stopPropagation(); select(b.id, true); });
-  g.addEventListener('dblclick', (ev) => { ev.stopPropagation(); startEdit(b.id, false); });
 }
 
 // bolinha de recolher/expandir na borda externa do nó
@@ -648,9 +656,15 @@ function select(id, byClick = false) {
 const snapshot = () => JSON.stringify({ root: map.root, layout: map.layout, links: map.links ?? [] });
 
 function mutate(fn) {
-  history.push(snapshot());
-  fn();
-  render();
+  const before = snapshot();
+  history.push(before);
+  try { fn(); render(); } catch (err) {
+    // a mudança quebrou o desenho: volta ao estado anterior (nada é salvo) e deixa o erro aparecer
+    history.past.pop();
+    load(before);
+    render();
+    throw err;
+  }
   scheduleSave();
 }
 
@@ -670,14 +684,17 @@ function deleteSelected() {
 
 function restore(state) {
   if (state === null) return;
+  load(state);
+  render();
+  scheduleSave();
+}
+function load(state) {
   const s = JSON.parse(state);
   map.root = s.root;
   map.layout = s.layout;
   map.links = s.links ?? [];
   if (!map.links.some(k => k.id === selectedLink)) selectedLink = null;
   if (selected !== null && !findNode(map.root, selected)) selected = map.root.id;
-  render();
-  scheduleSave();
 }
 
 // ---------- Edição de texto ----------
@@ -907,7 +924,7 @@ let styleTab = 'shape', customProp = 'color';
 const swatch = (c) => {
   const b = document.createElement('button');
   b.dataset.value = c;
-  if (c && c !== 'none') b.style.background = c;
+  if (isHex(c)) b.style.background = c;
   b.title = c === '' ? 'Automática' : c === 'none' ? 'Sem preenchimento' : c;
   return b;
 };
@@ -920,7 +937,7 @@ for (const row of document.querySelectorAll('#style-pop .swatches[data-extra], #
 function fillCustomRows() {
   const known = new Set([...PALETTE, ...EXTRA_COLORS]), used = new Set();
   const walk = (n) => {
-    for (const k of ['color', 'borderColor', 'lineColor']) if (n[k] && !known.has(n[k])) used.add(n[k]);
+    for (const k of ['color', 'borderColor', 'lineColor']) if (isHex(n[k]) && !known.has(n[k])) used.add(n[k]);
     n.children.forEach(walk);
   };
   walk(map.root);
@@ -1201,7 +1218,7 @@ function drawLinks() {
     const a = boxes.find(b => b.id === k.from), b = boxes.find(b => b.id === k.to);
     if (!a || !b) continue;  // ponta escondida num ramo recolhido
     if (retarget?.link === k) { drawRetarget(k, a, b); continue; }
-    const d = linkPath(a, b, k.bend, k.fromSide, k.toSide), sel = k.id === selectedLink, color = k.color || LINK_GREEN;
+    const d = linkPath(a, b, k.bend, k.fromSide, k.toSide), sel = k.id === selectedLink, color = hexColor(k.color) || LINK_GREEN;
     el('path', {
       d, class: 'link', fill: 'none', stroke: color, 'stroke-width': sel ? 3 : 2, 'stroke-dasharray': '5 5',
       'marker-start': markerUrl(k.startMarker, color), 'marker-end': markerUrl(k.endMarker ?? 'arrow', color),
@@ -1519,8 +1536,7 @@ function placeLinkBar() {
   const x = view.x + hx * view.k, y = view.y + hy * view.k + 22;
   Object.assign(linkBar.style, { left: `${x}px`, top: `${y}px` });
   for (const p of document.querySelectorAll('.link-pop')) Object.assign(p.style, { left: `${x}px`, top: `${y + 56}px` });
-  const color = k.color || LINK_GREEN;
-  linkBar.querySelector('.dot').style.background = color;
+  linkBar.querySelector('.dot').style.background = hexColor(k.color) || LINK_GREEN;
   $('#link-start-btn').innerHTML = markerIcon(k.startMarker ?? 'none', true);
   $('#link-end-btn').innerHTML = markerIcon(k.endMarker ?? 'arrow', false);
   for (const s of linkColors.querySelectorAll('[data-value]')) s.classList.toggle('active', s.dataset.value === (k.color ?? ''));

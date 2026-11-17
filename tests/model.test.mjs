@@ -586,3 +586,43 @@ test('branchToText and textToBranches round-trip an indented outline', () => {
   assert.deepEqual(textToBranches('- um\n\t* dois\n3. três\n\n').map(shape), [['um', [['dois', []]]], ['três', []]], 'marcadores, tab, linhas vazias');
   assert.ok(back[0].id && back[0].children[0].id !== back[0].id, 'tópicos novos com id');
 });
+
+import { sanitizeBranch, isHex, hexColor, safeColor } from '../static/model.js';
+
+test('safeUrl returns null for non-string input', () => {
+  for (const v of [5, null, undefined, {}, ['https://a.com'], true]) assert.equal(safeUrl(v), null);
+});
+
+test('colour validators accept only hex strings', () => {
+  assert.ok(isHex('#fff') && isHex('#2f5bea') && isHex('#2f5beacc'));
+  for (const v of [5, null, undefined, 'red', 'url(https://attacker.example/p.gif)', '#12', ['#fff'], '#fff;x']) assert.equal(isHex(v), false);
+  assert.equal(hexColor('url(x)'), null);
+  assert.equal(safeColor(['#fff']), '#22a559');
+  assert.equal(safeColor('currentColor'), 'currentColor');
+});
+
+test('sanitizeBranch drops badly typed style fields and keeps the rest', () => {
+  const b = sanitizeBranch({ text: 'a', children: [{ text: 'b', children: [], shape: 'rect', color: 5 }] });
+  assert.deepEqual(b, { text: 'a', children: [{ text: 'b', children: [], shape: 'rect' }] });
+  const id = 'a'.repeat(32) + '.png';
+  const c = sanitizeBranch({
+    text: 't', children: [], color: '#2f5bea', borderColor: 'url(https://attacker.example/p.gif)', lineColor: 'red', textColor: null,
+    url: 5, width: '300', shape: {}, image: { id: '..' }, attachments: [null, { id, name: 'x' }], comments: 'oi', collapsed: true,
+  });
+  assert.deepEqual(c, { text: 't', children: [], color: '#2f5bea', textColor: null, attachments: [{ id, name: 'x' }], collapsed: true });
+  assert.deepEqual(sanitizeBranch({ text: 't', children: [], image: { id, w: 1, h: 1 }, width: 120, url: 'a.com' }),
+    { text: 't', children: [], image: { id, w: 1, h: 1 }, width: 120, url: 'a.com' });
+});
+
+test('layout and branchColor ignore colours that are not hex', () => {
+  const kid = { id: 'k', text: 'k', color: 5, children: [{ id: 'g', text: 'g', color: 'url(x)', children: [] }] };
+  const map = { layout: 'map', root: { id: 'r', text: 'r', color: 'url(x)', children: [kid] } };
+  const { nodes } = layout(map, () => ({ w: 50, h: 20 }));
+  assert.deepEqual(nodes.map(b => b.color), ['#222', '#222', '#222']);
+  assert.equal(branchColor(map.root, 'g'), '#222');
+});
+
+test('toMarkdown escapes HTML and keeps each topic on one line', () => {
+  const md = toMarkdown({ root: { text: 'T', children: [{ text: 'x\n\n<script>alert(2)</script>', children: [] }, { text: '![i](u) & 1', children: [] }] } });
+  assert.equal(md, '# T\n\n- x \\<script\\>alert(2)\\</script\\>\n- \\!\\[i\\](u) \\& 1\n');
+});

@@ -32,8 +32,11 @@ const MARKER_SHAPES = {
   'dot-open': '<circle cx="5" cy="5" r="3.5" fill="#fff" stroke="C" stroke-width="1.4"/>',
 };
 
-// cor vinda do arquivo do mapa só entra em marcação se for hexadecimal (ou currentColor)
-export const safeColor = (c) => (c === 'currentColor' || /^#[0-9a-fA-F]{3,8}$/.test(c ?? '') ? c : '#22a559');
+// cor vinda do documento só chega a CSS/SVG se for hexadecimal (nunca url(...), nem outro tipo)
+export const isHex = (c) => typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(c);
+export const hexColor = (c) => (isHex(c) ? c : null);
+export const safeColor = (c) => (c === 'currentColor' || isHex(c) ? c : '#22a559');
+export const FILE_ID = /^[a-f0-9]{32}(\.[a-z0-9]{1,10})?$/;  // id de arquivo no formato que o servidor gera
 
 // marcação SVG da ponta; null para "nenhuma" ou tipo desconhecido
 export function markerShape(type, color) {
@@ -223,6 +226,25 @@ export function pasteBranch(map, parentId, branch) {
   return n;
 }
 
+// ramo colado pode ter vindo de outro site: campos de estilo com tipo errado saem, para o desenho
+// nunca quebrar (cores só hexadecimais; link e opções só texto; largura só número)
+const BRANCH_COLORS = ['color', 'borderColor', 'lineColor', 'textColor'];
+const BRANCH_STRINGS = ['url', 'shape', 'side', 'borderWidth', 'borderStyle', 'lineWidth', 'lineStyle', 'textSize', 'branchLayout'];
+const isObj = (x) => !!x && typeof x === 'object';
+export function sanitizeBranch(b) {
+  const n = { ...b, children: b.children.map(sanitizeBranch) };
+  for (const k of BRANCH_COLORS) if (n[k] != null && !isHex(n[k])) delete n[k];
+  for (const k of BRANCH_STRINGS) if (n[k] != null && typeof n[k] !== 'string') delete n[k];
+  if (n.width != null && !(Number.isFinite(n.width) && n.width > 0)) delete n.width;
+  if (n.image != null && !(isObj(n.image) && typeof n.image.id === 'string' && FILE_ID.test(n.image.id))) delete n.image;
+  for (const k of ['attachments', 'comments']) {
+    if (n[k] == null) continue;
+    const ok = Array.isArray(n[k]) ? n[k].filter(isObj) : [];
+    if (ok.length) n[k] = ok; else delete n[k];
+  }
+  return n;
+}
+
 // onde um ramo arrastado cairia com o ponteiro em (px, py): {parentId, index, side} ou null
 export function dropTarget(map, boxes, dragId, px, py) {
   const drag = findNode(map.root, dragId)?.node;
@@ -272,12 +294,12 @@ export function branchColor(root, nodeId) {
   let color = '#222';
   const walk = (n) => {
     if (n.id === nodeId) {
-      if (n !== root && n.color) color = n.color;
+      if (n !== root && isHex(n.color)) color = n.color;
       return true;
     }
     for (const c of n.children) {
       if (walk(c)) {
-        if (color === '#222' && n !== root && n.color) color = n.color;
+        if (color === '#222' && n !== root && isHex(n.color)) color = n.color;
         return true;
       }
     }
@@ -328,11 +350,11 @@ export function layout(map, measure, focusId = null) {
     return b;
   };
   const box = makeBox(nodes);
-  const colorOf = (n, parentColor, depth) => (depth > 0 && n.color) || parentColor;
+  const colorOf = (n, parentColor, depth) => (depth > 0 && hexColor(n.color)) || parentColor;
   const fn = { map: layoutMap, org: layoutOrg, list: layoutList }[map.layout] || layoutMap;
   const focus = focusId && focusId !== map.root.id ? findNode(map.root, focusId)?.node : null;
   const root = focus ?? map.root;
-  const rootColor = focus ? branchColor(map.root, focus.id) : map.root.color || '#222';
+  const rootColor = focus ? branchColor(map.root, focus.id) : hexColor(map.root.color) || '#222';
   fn(root, measure, box, colorOf, edges, rootColor, { makeBox, nodes });
   return { nodes, edges };
 }
@@ -527,7 +549,8 @@ export function wrapLines(text, maxW, widthOf) {
 // ---- Link (URL) no nó ----
 // só http(s); sem esquema vira https://; qualquer outro esquema (javascript:, data:...) é recusado
 export function safeUrl(input) {
-  const s = (input ?? '').trim();
+  if (typeof input !== 'string') return null;
+  const s = input.trim();
   if (!s || /\s/.test(s)) return null;
   const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(s);
   try {
@@ -574,7 +597,8 @@ export function textToBranches(text) {
 }
 
 export function toMarkdown(map) {
-  const esc = (t) => t.replace(/([\\[\]*_`#])/g, '\\$1');
+  // uma linha por tópico; HTML e marcação do texto saem escapados
+  const esc = (t) => String(t ?? '').replace(/\s*\n\s*/g, ' ').replace(/([\\[\]*_`#<>&!])/g, '\\$1');
   const item = (n) => {
     const url = safeUrl(n.url);
     return url ? `[${esc(n.text)}](${url})` : esc(n.text);

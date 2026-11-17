@@ -5,6 +5,8 @@ export const DEFAULTS = {
   strokeWidth: 2, strokeStyle: 'solid', roughness: 1, opacity: 100,
 };
 
+import { isHex } from './model.js';
+
 const POINT_TYPES = new Set(['line', 'arrow', 'freedraw']);
 const starts = new WeakMap();  // ponto onde o arrasto começou (só durante o desenho)
 
@@ -265,4 +267,27 @@ export function elementsHitBy(elements, [ax, ay], [bx, by], tol = 4) {
   const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 2));
   const samples = Array.from({ length: n + 1 }, (_, i) => [ax + (bx - ax) * i / n, ay + (by - ay) * i / n]);
   return elements.filter(el => samples.some(p => hitTest(el, p, tol))).map(el => el.id);
+}
+
+// ---- Colar: elementos da área de transferência podem ter vindo de outro site ----
+// só tipos conhecidos, com posição numérica; texto/nota com texto; linha/seta com 2+ pontos, traço com 1+
+const KINDS = new Set(['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw', 'text', 'image', 'note']);
+const HAS_TEXT = new Set(['text', 'note']);
+const okPoints = (pts, min) => Array.isArray(pts) && pts.length >= min
+  && pts.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite));
+export const okElement = (x) => !!x && typeof x === 'object' && KINDS.has(x.type)
+  && [x.x, x.y, x.w ?? 0, x.h ?? 0].every(Number.isFinite)
+  && (!POINT_TYPES.has(x.type) || okPoints(x.points, x.type === 'freedraw' ? 1 : 2))
+  && (typeof x.text === 'string' || (x.text === undefined && !HAS_TEXT.has(x.type)));
+
+// o resto do elemento aceito: campo de estilo com tipo errado sai (o desenho usa o padrão)
+export function sanitizeElement(x) {
+  const e = { ...x, w: x.w ?? 0, h: x.h ?? 0 };
+  if (!POINT_TYPES.has(e.type)) delete e.points;
+  if (e.strokeColor != null && !isHex(e.strokeColor)) delete e.strokeColor;
+  if (e.backgroundColor != null && e.backgroundColor !== 'transparent' && !isHex(e.backgroundColor)) delete e.backgroundColor;
+  for (const k of ['link', 'fillStyle', 'strokeStyle', 'textAlign', 'fontFamily', 'fileId']) if (e[k] != null && typeof e[k] !== 'string') delete e[k];
+  for (const k of ['strokeWidth', 'roughness', 'opacity', 'seed', 'fontSize']) if (e[k] != null && !Number.isFinite(e[k])) delete e[k];
+  if (HAS_TEXT.has(e.type) && !(e.fontSize > 0)) e.fontSize = 20;
+  return e;
 }
