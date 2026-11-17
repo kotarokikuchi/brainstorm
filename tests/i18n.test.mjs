@@ -39,3 +39,13 @@ test('every locale has the same keys and placeholders as pt-BR, and no empty tex
     }
   }
 });
+
+test('language detection: saved choice > browser language > English', async () => {
+  const { pick } = await import('../static/i18n.js');
+  assert.equal(pick('ja', ['pt-BR']), 'ja', 'saved choice wins');
+  assert.equal(pick('xx', ['pt-PT']), 'pt-BR', 'invalid saved choice is ignored');
+  assert.equal(pick(null, ['de-DE', 'es-AR']), 'es', 'first supported browser language');
+  assert.equal(pick(null, ['en-US']), 'en');
+  assert.equal(pick(null, ['de-DE']), 'en', 'unsupported browser language falls back to English');
+  assert.equal(pick(null, []), 'en');
+});

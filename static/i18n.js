@@ -10,16 +10,17 @@ export const LANGS = [
 ];
 const STORE = 'brainstorm:lang', codes = LANGS.map(l => l.code);
 
-// escolha guardada > idioma do navegador (pt* → pt-BR, en* → en...) > pt-BR
-function pick() {
-  try { const s = localStorage.getItem(STORE); if (codes.includes(s)) return s; } catch { /* sem armazenamento */ }
-  for (const n of navigator.languages ?? []) {
+// saved choice > browser language (pt* → pt-BR, en* → en...) > English
+export function pick(stored, languages = []) {
+  if (codes.includes(stored)) return stored;
+  for (const n of languages) {
     const c = codes.find(c => n.toLowerCase().startsWith(c.slice(0, 2)));
     if (c) return c;
   }
-  return 'pt-BR';
+  return 'en';
 }
-export const lang = pick();
+function saved() { try { return localStorage.getItem(STORE); } catch { return null; /* sem armazenamento */ } }
+export const lang = pick(saved(), navigator.languages);
 let dict = ptBR;
 if (lang !== 'pt-BR') {
   try { dict = (await import(`./locales/${lang}.js`)).default; } catch { /* dicionário ausente: fica em pt-BR */ }
