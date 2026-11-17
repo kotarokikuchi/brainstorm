@@ -1,4 +1,4 @@
-# Galho
+# Brainstorm
 
 Mapas mentais e quadros de desenho para uso pessoal, rodando na sua máquina.
 
