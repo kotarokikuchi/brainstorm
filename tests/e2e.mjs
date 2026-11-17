@@ -1606,7 +1606,8 @@ await ev(`document.querySelector('#skills-menu-btn').click(); document.querySele
 assert.match(await ev(`location.hash`), /^#\/skill\/[a-z0-9-]+$/, 'Novo skill abre o skill');
 const skId = (await ev(`location.hash`)).split('/').pop();
 assert.equal((await skillDocs()).length, nSkills0 + 1, 'skill criado');
-assert.ok((await ev(`document.querySelector('#skill-text').value`)).length > 0, 'esqueleto preenchido');
+assert.equal(await ev(`document.querySelector('#skill-text').value`), '# Skill sem título\n\n## Quando usar\n\n## Instruções\n', 'esqueleto é o modelo pt-BR');
+const getSkill = async () => (await fetch(BASE + '/api/maps/' + skId)).json();
 const skType = (v) => ev(`(() => { const t = document.querySelector('#skill-text'); t.value = ${JSON.stringify(v)}; t.dispatchEvent(new Event('input')); })()`);
 await skType('**oi**'); await sleep(500);
 assert.match(await ev(`document.querySelector('#skill-preview').innerHTML`), /<strong>oi<\/strong>/, 'preview renderiza negrito');
@@ -1619,12 +1620,19 @@ await ev(`document.querySelector('#skill-save-version').click()`); await sleep(1
 await ev(`document.querySelector('#skill-versions-btn').click()`); await sleep(800);
 assert.equal(await ev(`[...document.querySelectorAll('#skill-version-list li strong')].some(s => s.textContent === 'v1')`), true, 'versão nomeada aparece em negrito');
 await skType('**oi**\n\nnovo parágrafo'); await sleep(1500);
+await ev(`(() => { const i = document.querySelector('#skill-tag-input'); i.value = 'extra'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); })()`); await sleep(1500);
+assert.deepEqual((await getSkill()).tags, ['teste', 'extra'], 'tags atuais diferem da v1');
 const v1Btn = `[...document.querySelectorAll('#skill-version-list li')].find(li => li.querySelector('strong').textContent === 'v1')`;
 await ev(`${v1Btn}.querySelector('[data-compare]').click()`); await sleep(800);
 assert.ok(await ev(`document.querySelectorAll('#skill-diff-lines .diff-line.add').length`) > 0, 'comparar mostra linha adicionada');
 dialogAccept = true;
 await ev(`${v1Btn}.querySelector('[data-restore]').click()`); await sleep(1500);
 assert.equal(await ev(`document.querySelector('#skill-text').value`), '**oi**', 'restaurar devolve o texto da versão');
+const restored = await getSkill();
+assert.equal(restored.content, '**oi**', 'servidor recebeu o texto restaurado');
+assert.deepEqual(restored.tags, ['teste'], 'servidor recebeu as tags restauradas');
+const hist = await (await fetch(BASE + '/api/maps/' + skId + '/history')).json();
+assert.ok((await Promise.all(hist.map(h => fetch(BASE + '/api/maps/' + skId + '/history/' + h.version).then(r => r.json())))).some(b => b.content === '**oi**\n\nnovo parágrafo'), 'texto anterior ao restaurar ficou no histórico');
 await ev(`document.querySelector('.skill-modes [data-mode="preview"]').click()`); await sleep(300);
 assert.equal(await ev(`getComputedStyle(document.querySelector('#skill-text')).display`), 'none', 'modo Preview esconde o textarea');
 await ev(`location.hash = '#/'`); await sleep(500);
@@ -1637,6 +1645,7 @@ const nSk = (await skillDocs()).length;
 assert.deepEqual(await ev(`[document.querySelectorAll('#maps li').length, document.querySelectorAll('#maps li.skill').length]`), [nSk, nSk], 'Listar skills: só skills');
 await ev(`(() => { const s = document.querySelector('#search'); s.value = 'teste'; s.dispatchEvent(new Event('input')); })()`); await sleep(600);
 assert.ok(await ev(`document.querySelectorAll('#maps li.skill').length`) >= 1, 'buscar a tag acha o skill');
+assert.ok((await ev(`[...document.querySelectorAll('#maps li.skill a')].map(a => a.getAttribute('href'))`)).includes('#/skill/' + skId), 'o item achado é o skill criado');
 await ev(`(() => { const s = document.querySelector('#search'); s.value = ''; s.dispatchEvent(new Event('input')); })()`);
 
 // Sair: encerra a sessão e volta para a página de login
