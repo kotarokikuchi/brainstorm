@@ -1,128 +1,133 @@
 # Brainstorm
 
-Mapas mentais, quadros de desenho e skills (textos Markdown para LLMs, com preview, tags e versões nomeadas) para uso pessoal, rodando na sua máquina.
+Mind maps, drawing boards and skills (Markdown texts for LLMs, with preview, tags and named
+versions) for personal use, running on your own machine.
 
-## Rodar com Docker
+No dependencies: the server is Python's standard library plus SQLite, and the frontend is plain
+JavaScript. The interface is available in English, Portuguese (Brazil), Spanish and Japanese.
+
+## Run with Docker
 
 ```bash
-mkdir -p data                  # antes da primeira vez: senão o Docker cria a pasta como root
+mkdir -p data                  # before the first run: otherwise Docker creates the folder as root
 docker compose up -d --build
 ```
 
-Abra http://127.0.0.1:8080. Os dados ficam em `./data` (mapas, quadros, anexos, histórico,
-lixeira e pastas). Para parar: `docker compose down`. Depois de mudar o código, rode o
-`docker compose up -d --build` de novo.
+Open http://127.0.0.1:8080. Your data lives in `./data` (maps, boards, attachments, history, trash
+and folders). To stop: `docker compose down`. After changing the code, run
+`docker compose up -d --build` again.
 
-O container usa a porta 8080 da sua máquina, então ele e o `python3 app.py` (porta 8000) podem
-rodar ao mesmo tempo. Se `docker ps` mostrar a coluna PORTS vazia, a porta 8080 estava ocupada
-quando o container subiu. Libere a porta e rode `docker compose up -d --force-recreate`.
+The container uses port 8080 on your machine, so it can run alongside `python3 app.py` (port 8000).
+If `docker ps` shows an empty PORTS column, port 8080 was taken when the container started. Free
+the port and run `docker compose up -d --force-recreate`.
 
-Outra porta: troque o primeiro número de `127.0.0.1:8080:8000` no `docker-compose.yml` (o segundo,
-8000, é a porta dentro do container e não muda).
+Another port: change the first number of `127.0.0.1:8080:8000` in `docker-compose.yml` (the second
+one, 8000, is the port inside the container and stays as it is).
 
-**Atenção:** o app fala HTTP puro (senha e dados passam sem criptografia) e só atende pelos
-endereços `127.0.0.1` e `localhost`. Para acessar de outra máquina, use um túnel SSH
-(`ssh -L 8080:127.0.0.1:8080 usuario@servidor`); nunca troque o mapeamento da porta para `0.0.0.0`.
-Atrás de um proxy reverso com outro domínio ele não funciona: recusa o endereço.
+**Warning:** the app speaks plain HTTP (password and data travel unencrypted) and only answers on
+`127.0.0.1` and `localhost`. To reach it from another machine, use an SSH tunnel
+(`ssh -L 8080:127.0.0.1:8080 user@server`); never change the port mapping to `0.0.0.0`. It does
+not work behind a reverse proxy on another domain: it rejects the address.
 
 ## Login
 
-Para proteger o acesso, crie um `.env` (modelo em `.env.example`):
+To protect access, create a `.env` (template in `.env.example`):
 
 ```bash
-cp .env.example .env    # e troque usuário e senha
+cp .env.example .env    # then change the user and the password
 ```
 
-Com `BRAINSTORM_USER` e `BRAINSTORM_PASSWORD` definidos (no `.env` ou como variáveis de ambiente,
-que têm prioridade), o app pede login; sem eles, abre sem login para qualquer usuário ou programa
-desta máquina. O app não inicia com a senha de exemplo do `.env.example`. A sessão dura 30 dias; o botão
-"Sair" fica no canto do topo. Depois de 10 senhas erradas em 10 minutos (no total, venham de onde
-vierem), o login fica bloqueado por um tempo.
+With `BRAINSTORM_USER` and `BRAINSTORM_PASSWORD` set (in `.env` or as environment variables, which
+take precedence), the app asks for a login; without them it opens with no login for any user or
+program on this machine. The app does not start with the example password from `.env.example`.
+The session lasts 30 days; the "Log out" button is at the top right. After 10 wrong passwords in
+10 minutes (in total, wherever they come from), login is locked for a while.
 
-No Docker, o `docker-compose.yml` repassa as duas variáveis ao container. Elas vêm do ambiente de
-quem roda o comando ou, se não estiverem definidas ali, do `.env`:
+With Docker, `docker-compose.yml` passes both variables to the container. They come from the
+environment of whoever runs the command or, if not set there, from `.env`:
 
 ```bash
-BRAINSTORM_USER=ana BRAINSTORM_PASSWORD='uma senha longa' docker compose up -d
+BRAINSTORM_USER=ana BRAINSTORM_PASSWORD='a long password' docker compose up -d
 ```
 
-Depois de mudar usuário ou senha (de qualquer um dos dois jeitos), rode `docker compose up -d` de novo.
+After changing the user or the password (either way), run `docker compose up -d` again.
 
-## Onde ficam os dados
+## Where the data lives
 
 ```
 data/
-├── brainstorm.db     ← mapas, quadros, histórico, lixeira e pastas (SQLite)
-└── attachments/      ← imagens e anexos, uma pasta por documento
+├── brainstorm.db     ← maps, boards, skills, history, trash and folders (SQLite)
+└── attachments/      ← images and attachments, one folder per document
 ```
 
-Para arquivar num storage externo, basta guardar esses dois itens. Com o app rodando, copie o
-banco com segurança assim (o arquivo `.db` sozinho pode estar no meio de uma gravação):
+To archive to external storage, keeping those two items is enough. With the app running, copy the
+database safely like this (the `.db` file alone may be in the middle of a write):
 
 ```bash
 python3 -c "import sqlite3, os; sqlite3.connect('data/brainstorm.db').backup(sqlite3.connect(os.path.expanduser('~/brainstorm-backup.db')))"
 cp -r data/attachments ~/brainstorm-backup-attachments
 ```
 
-A cópia do banco também leva os hashes das sessões de login, uma impressão (scrypt com sal) do
-usuário e da senha e, se configuradas, as chaves de API e do storage (em texto puro, tabela `settings`):
-guarde-a em lugar seguro e use uma senha forte. O backup automático abaixo já tira tudo isso.
+The database copy also carries the login session hashes, a fingerprint (salted scrypt) of the user
+and password and, if configured, the API and storage keys (in plain text, `settings` table): keep
+it somewhere safe and use a strong password. The automatic backup below leaves all of that out.
 
-Ou pare o app (`docker compose down`) e copie a pasta `data/` inteira.
+Or stop the app (`docker compose down`) and copy the whole `data/` folder.
 
-### Backup automático no Wasabi (ou outro S3)
+### Automatic backup to Wasabi (or another S3)
 
-Em **Configurações ▾ → Configurar backup**: escolha a região do Wasabi (preenche o endpoint
-`https://s3.<região>.wasabisys.com`), informe bucket, prefixo (padrão `brainstorm/`), access key e
-secret key, a frequência (6 h, 12 h, diária ou semanal) e quantos backups manter (padrão 14). Ligado, o
-app faz sozinho um `brainstorm-AAAA-MM-DD-HHMMSS.tar.gz` (UTC) só quando algo mudou, e apaga do prefixo
-os mais antigos além do limite; "Fazer backup agora" faz na hora. O endpoint precisa ser `https://`.
+In **Settings ▾ → Configure backup (Object Storage)**: pick the Wasabi region (it fills in the endpoint
+`https://s3.<region>.wasabisys.com`), then enter the bucket, prefix (default `brainstorm/`), access
+key and secret key, the frequency (6 h, 12 h, daily or weekly) and how many backups to keep
+(default 14). When enabled, the app creates a `brainstorm-YYYY-MM-DD-HHMMSS.tar.gz` (UTC) on its
+own, only when something changed, and deletes the oldest ones beyond the limit from the prefix;
+"Back up now" does it right away. The endpoint must be `https://`.
 
-O arquivo leva o banco e os anexos, mas **sem** as chaves de API, sem as credenciais do storage, sem as
-sessões de login e sem a impressão do usuário/senha. Para restaurar, escolha o backup na lista e
-confirme: antes, o app faz um backup do estado atual (dá para desfazer); a troca é tudo ou nada, não
-desloga ninguém e mantém as configurações; durante ela as gravações esperam (respondem 503) e as abas
-abertas recarregam no fim. Backup de uma versão mais nova do app é recusado.
+The archive holds the database and the attachments, but **not** the API keys, the storage
+credentials, the login sessions or the user/password fingerprint. To restore, pick a backup from
+the list and confirm: the app first backs up the current state (so it can be undone); the swap is
+all or nothing, signs nobody out and keeps the settings; while it runs, writes wait (they answer
+503), and open tabs reload at the end. A backup from a newer version of the app is refused.
 
-Em **Configurar LLM** ficam as chaves de API (Anthropic, OpenAI, Gemini, DeepSeek, OpenRouter ou um servidor
-compatível com OpenAI) para funcionalidades futuras: guardadas só no servidor, a tela mostra apenas o
-final mascarado.
+**Configure LLM** holds the API keys (Anthropic, OpenAI, Gemini, DeepSeek, OpenRouter or an
+OpenAI-compatible server) for future features: they are stored only on the server, and the screen
+shows just the masked ending.
 
-Para deixar os anexos direto num disco externo, use `BRAINSTORM_FILES=/caminho/do/disco` (no Docker,
-veja o comentário no `docker-compose.yml`).
+To keep attachments directly on an external disk, use `BRAINSTORM_FILES=/path/to/disk` (with
+Docker, see the comment in `docker-compose.yml`).
 
-Na primeira vez que a versão com banco sobe, os dados do formato antigo (um `.json` por documento)
-são importados sozinhos; os arquivos antigos ficam guardados em `data/legacy-<data>/`.
+The first time the database version starts, data in the old format (one `.json` per document) is
+imported automatically; the old files are kept in `data/legacy-<date>/`.
 
-## Rodar sem Docker
+## Run without Docker
 
-Só precisa do Python 3.10 ou mais novo:
-
-```bash
-python3 app.py        # http://127.0.0.1:8000  (ou: python3 app.py 8080)
-```
-
-Nesse modo o servidor reinicia sozinho quando `app.py` muda, e a página recarrega quando
-`static/` muda.
-
-Variáveis opcionais: `BRAINSTORM_HOST` (padrão `127.0.0.1`), `BRAINSTORM_DATA` (padrão `./data`),
-`BRAINSTORM_FILES` (padrão `<BRAINSTORM_DATA>/attachments`) e `BRAINSTORM_USER` / `BRAINSTORM_PASSWORD`
-(login; veja acima). Sem login, o app só inicia em endereço local; para escutar em outro endereço
-sem login (como dentro do container, que só publica a porta em `127.0.0.1`), defina
-`BRAINSTORM_ALLOW_NO_LOGIN=1`.
-
-## Testes
+All you need is Python 3.10 or newer:
 
 ```bash
-python3 -m unittest test_app        # servidor
-python3 -m unittest test_backup     # cliente S3 (SigV4), backup e restauração contra um S3 falso
-node --test tests/*.test.mjs        # lógica dos mapas, quadros, skills e pastas
-node tests/e2e.mjs                  # ponta a ponta no Chrome headless (~4 min)
+python3 app.py        # http://127.0.0.1:8000  (or: python3 app.py 8080)
 ```
 
-Os testes em Node pedem o Node 22 ou mais novo; o `e2e` também precisa do `google-chrome` no PATH.
+In this mode the server restarts itself when `app.py` changes, and the page reloads when `static/`
+changes.
 
-## Licença
+Optional variables: `BRAINSTORM_HOST` (default `127.0.0.1`), `BRAINSTORM_DATA` (default `./data`),
+`BRAINSTORM_FILES` (default `<BRAINSTORM_DATA>/attachments`) and `BRAINSTORM_USER` /
+`BRAINSTORM_PASSWORD` (login; see above). Without a login, the app only starts on a local address;
+to listen on another address without a login (as inside the container, which only publishes the
+port on `127.0.0.1`), set `BRAINSTORM_ALLOW_NO_LOGIN=1`.
 
-[MIT](LICENSE). Os ícones ([Tabler Icons](static/LICENSE-tabler-icons.txt), MIT) e a fonte
-[Kalam](static/fonts/LICENSE-kalam.txt) (SIL Open Font License) seguem as licenças próprias.
+## Tests
+
+```bash
+python3 -m unittest test_app        # server
+python3 -m unittest test_backup     # S3 client (SigV4), backup and restore against a fake S3
+node --test tests/*.test.mjs        # logic for maps, boards, skills and folders
+node tests/e2e.mjs                  # end to end in headless Chrome (~4 min)
+```
+
+The Node tests need Node 22 or newer; the `e2e` also needs `google-chrome` on the PATH.
+
+## License
+
+[MIT](LICENSE). The icons ([Tabler Icons](static/LICENSE-tabler-icons.txt), MIT) and the
+[Kalam](static/fonts/LICENSE-kalam.txt) font (SIL Open Font License) keep their own licenses.
