@@ -382,6 +382,11 @@ class ApiTest(unittest.TestCase):
         _, info = self.upload("abc", "foto.png", b"x")
         _, headers, _ = self.raw_get(f"/api/maps/abc/files/{info['id']}")
         self.assertEqual(headers["Cache-Control"], "private, max-age=3600", "anexo: cache só do navegador")
+        r = urllib.request.Request(self.base + f"/api/maps/abc/files/{'0' * 32}.png")
+        with self.assertRaises(urllib.error.HTTPError) as missing:
+            urllib.request.urlopen(r)
+        self.assertEqual((missing.exception.code, missing.exception.headers["Cache-Control"]), (404, "no-store"), "erro não fica em cache")
+        missing.exception.close()
 
     def test_no_directory_listing(self):
         self.assertEqual(self.req("GET", "/fonts/")[0], 404)
@@ -469,6 +474,8 @@ class AuthTest(unittest.TestCase):
         status, headers, _ = self.call("GET", "/")
         self.assertEqual((status, headers.get("Location")), (302, "/login.html"), "abrir o app leva ao login")
         self.assertEqual(self.call("GET", "/app.js")[0], 302)
+        status, headers, _ = self.call("GET", f"/api/maps/abc/files/{'0' * 32}.png")
+        self.assertEqual((status, headers["Cache-Control"]), (401, "no-store"), "401 de anexo não fica em cache")
         for public in ("/login.html", "/style.css", "/fonts/kalam-latin-400-normal.woff2"):
             self.assertEqual(self.call("GET", public)[0], 200, public)
 
@@ -500,6 +507,7 @@ class AuthTest(unittest.TestCase):
         status, headers, _ = self.call("POST", "/api/logout", cookie=c)
         self.assertEqual(status, 204)
         self.assertIn("Max-Age=0", headers["Set-Cookie"])
+        self.assertEqual(headers["Clear-Site-Data"], '"cache"', "Sair limpa as imagens em cache")
         self.assertEqual(self.call("GET", "/api/maps", cookie=c)[0], 401)
 
     def test_session_survives_server_restart(self):
