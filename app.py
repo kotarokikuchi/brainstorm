@@ -103,17 +103,20 @@ class Handler(SimpleHTTPRequestHandler):
         self._foreign_host() or self._foreign_origin() or self._api("DELETE") or self._send(404, {"error": "not found"})
 
     def _foreign_origin(self):
-        # escrita vinda de outra origem (página de outro site aberta no navegador) é recusada
-        port = self.server.server_address[1]
-        if self.headers.get("Origin") in (None, f"http://127.0.0.1:{port}", f"http://localhost:{port}"):
+        # escrita vinda de outra origem (página de outro site aberta no navegador) é recusada:
+        # a origem tem de ser o próprio endereço da página (Host já validado como local)
+        if self.headers.get("Origin") in (None, f"http://{self.headers.get('Host')}"):
             return False
         self._send(403, {"error": "forbidden origin"})
         return True
 
     def _foreign_host(self):
-        # bloqueia DNS rebinding: um site externo apontando para 127.0.0.1 chega com outro Host
-        port = self.server.server_address[1]
-        if self.headers.get("Host") in (f"127.0.0.1:{port}", f"localhost:{port}"):
+        # bloqueia DNS rebinding: um site externo apontando para 127.0.0.1 chega com outro Host.
+        # Vale qualquer porta: no Docker a porta publicada pode ser outra que a do container.
+        name, sep, port = (self.headers.get("Host") or "").rpartition(":")
+        if not sep:
+            name, port = self.headers.get("Host") or "", ""
+        if name in ("127.0.0.1", "localhost") and (port == "" or port.isdigit()):
             return False
         self._send(403, {"error": "forbidden host"})
         return True
@@ -432,9 +435,9 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(data)
 
 
-def make_server(data_dir: Path, port: int) -> ThreadingHTTPServer:
+def make_server(data_dir: Path, port: int, host: str = "127.0.0.1") -> ThreadingHTTPServer:
     data_dir.mkdir(parents=True, exist_ok=True)
-    server = ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=str(ROOT / "static")))
+    server = ThreadingHTTPServer((host, port), partial(Handler, directory=str(ROOT / "static")))
     server.data_dir = data_dir
     server.static_dir = ROOT / "static"
     server.history_interval = HISTORY_INTERVAL
@@ -464,7 +467,9 @@ def restart():
 
 def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
-    server = make_server(ROOT / "data", port)
+    # GALHO_HOST/GALHO_DATA: no Docker, escuta em 0.0.0.0 dentro do container e guarda em /data
+    host = os.environ.get("GALHO_HOST", "127.0.0.1")
+    server = make_server(Path(os.environ.get("GALHO_DATA") or ROOT / "data"), port, host)
     # recarrega sozinho ao editar o servidor (HTML/CSS/JS já vêm frescos a cada F5)
     watch([Path(__file__).resolve()], restart)
     print(f"Abra http://127.0.0.1:{port}")

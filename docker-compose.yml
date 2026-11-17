@@ -1,0 +1,13 @@
+services:
+  galho:
+    build: .
+    image: galho
+    # só na sua máquina (127.0.0.1): ninguém na rede acessa
+    ports:
+      - "127.0.0.1:8000:8000"
+    # seus mapas, quadros, anexos, histórico e lixeira continuam na pasta ./data
+    volumes:
+      - ./data:/data
+    # roda com o seu usuário para os arquivos em ./data não ficarem como root
+    user: "${UID:-1000}:${GID:-1000}"
+    restart: unless-stopped
