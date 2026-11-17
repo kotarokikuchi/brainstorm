@@ -1,5 +1,4 @@
 """Servidor local do editor de mapas mentais: arquivos estáticos + API JSON."""
-import contextlib
 import hmac
 import ipaddress
 import json
@@ -120,40 +119,36 @@ class Handler(SimpleHTTPRequestHandler):
         return bool(token) and self.server.store.session_ok(token)
 
     def _login(self):
-        # o corpo é lido antes de qualquer resposta: corpo não lido vira RST ao fechar ("sem conexão" no navegador)
-        responded, body = self._json(MAX_LOGIN_BODY)
-        if responded:
-            return
         if not self.server.auth:
             self._send(404, {"error": "login disabled"})
             return
+        length = self._length(MAX_LOGIN_BODY)
+        if length is None:
+            return
         now = time.time()
         # a tentativa é reservada (contada como erro) antes de conferir a senha, na mesma trava da
-        # checagem: no máximo LOGIN_MAX_FAILS por janela são conferidas em paralelo; acertar zera a contagem.
-        # Contagem única (o app tem um usuário só): por endereço, um processo local trocaria de 127.x.y.z
-        # a cada tentativa. Só as últimas LOGIN_MAX_FAILS importam: a lista não cresce sob ataque
+        # checagem: tentativas simultâneas não passam do limite; acertar zera a contagem. Contagem única
+        # (o app tem um usuário só): por endereço, um processo local trocaria de 127.x.y.z a cada tentativa
         with self.server.login_lock:
             fails = [t for t in self.server.login_fails if now - t < LOGIN_WINDOW]
             locked = len(fails) >= LOGIN_MAX_FAILS
-            self.server.login_fails = (fails + [now])[-LOGIN_MAX_FAILS:]
-            retry = int(LOGIN_WINDOW - (now - self.server.login_fails[0])) + 1
-        # bloqueado: a senha ainda é conferida (a certa entra; senão qualquer um tranca o dono para fora),
-        # mas uma de cada vez e com o atraso dentro da trava. Com login_delay = 1 s: no máximo 3600 palpites
-        # por hora no bloqueio + 10 por janela fora dele (≤ 3660/h), por mais conexões que o atacante abra
+            self.server.login_fails = fails if locked else fails + [now]
+        if locked:
+            self._send(429, {"error": "too many attempts"}, {"Retry-After": str(int(LOGIN_WINDOW - (now - fails[0])) + 1)})
+            return
+        try:
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, RecursionError):
+            body = {}
         user, password = (body.get(k) if isinstance(body, dict) else None for k in ("user", "password"))
         want_user, want_password = self.server.auth
-        with self.server.login_serial if locked else contextlib.nullcontext():
-            # compara os dois sempre e em tempo constante: a resposta não indica qual dos dois errou
-            ok = isinstance(user, str) and isinstance(password, str)
-            ok = hmac.compare_digest((user if ok else "").encode(), want_user.encode()) & \
-                hmac.compare_digest((password if ok else "").encode(), want_password.encode()) & ok
-            if not ok:
-                time.sleep(self.server.login_delay)  # atrasa quem tenta adivinhar (o erro já foi contado)
+        # compara os dois sempre e em tempo constante: a resposta não indica qual dos dois errou
+        ok = isinstance(user, str) and isinstance(password, str)
+        ok = hmac.compare_digest((user if ok else "").encode(), want_user.encode()) & \
+            hmac.compare_digest((password if ok else "").encode(), want_password.encode()) & ok
         if not ok:
-            if locked:
-                self._send(429, {"error": "too many attempts"}, {"Retry-After": str(retry)})
-            else:
-                self._send(401, {"error": "invalid credentials"})
+            time.sleep(self.server.login_delay)  # atrasa quem tenta adivinhar (o erro já foi contado)
+            self._send(401, {"error": "invalid credentials"})
             return
         with self.server.login_lock:
             self.server.login_fails = []
@@ -553,7 +548,6 @@ def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: P
     if auth:
         store.reset_sessions_if_auth_changed(*auth)  # trocou usuário/senha: todo mundo entra de novo
     server.login_delay, server.login_fails, server.login_lock = 1.0, [], threading.Lock()
-    server.login_serial = threading.Lock()  # conferência de senha no bloqueio: uma de cada vez
     server.settings_lock = threading.Lock()
     server.backup = Backup(store)  # a agenda só liga no main() (testes não fazem backup sozinhos)
     server.data_dir = data_dir
