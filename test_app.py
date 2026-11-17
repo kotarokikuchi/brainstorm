@@ -378,6 +378,10 @@ class ApiTest(unittest.TestCase):
         _, headers, _ = self.raw_get("/api/maps")
         self.assertEqual(headers["Cache-Control"], "no-store")
         self.assertEqual((headers["X-Content-Type-Options"], headers["X-Frame-Options"]), ("nosniff", "DENY"))
+        self.make_map()
+        _, info = self.upload("abc", "foto.png", b"x")
+        _, headers, _ = self.raw_get(f"/api/maps/abc/files/{info['id']}")
+        self.assertEqual(headers["Cache-Control"], "private, max-age=3600", "anexo: cache só do navegador")
 
     def test_no_directory_listing(self):
         self.assertEqual(self.req("GET", "/fonts/")[0], 404)

@@ -43,9 +43,12 @@ class Handler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         # arquivos do app: o navegador sempre confere se mudaram (304 barato) em vez de usar JS antigo do cache;
-        # respostas da API (dados do usuário) não ficam em cache nenhum
-        api = urlsplit(getattr(self, "path", "")).path.startswith("/api/")
-        self.send_header("Cache-Control", "no-store" if api else "no-cache")
+        # respostas da API (dados do usuário) não ficam em cache nenhum; anexos (id único, nunca mudam)
+        # ficam 1 h só no cache do próprio navegador, senão cada redesenho baixaria as imagens de novo
+        path = urlsplit(getattr(self, "path", "")).path
+        attachment = re.fullmatch(r"/api/maps/[^/]+/files/[^/]+", path) and self.command == "GET"
+        self.send_header("Cache-Control", "private, max-age=3600" if attachment
+                         else "no-store" if path.startswith("/api/") else "no-cache")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
