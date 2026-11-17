@@ -8,6 +8,10 @@ services:
     # seus mapas, quadros, anexos, histórico e lixeira continuam na pasta ./data
     volumes:
       - ./data:/data
+      # anexos num disco externo: descomente e troque o caminho
+      # - /mnt/storage/brainstorm-anexos:/anexos
+    # environment:
+    #   GALHO_FILES: /anexos
     # roda com o seu usuário para os arquivos em ./data não ficarem como root
     user: "${UID:-1000}:${GID:-1000}"
     restart: unless-stopped
