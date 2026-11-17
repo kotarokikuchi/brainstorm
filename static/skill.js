@@ -60,7 +60,9 @@ function closeCompare() {
 }
 
 async function loadVersions() {
-  const r = await deps.api('GET', `/${skill.id}/history`);
+  const doc = skill;
+  const r = await deps.api('GET', `/${doc.id}/history`);
+  if (skill !== doc) return;
   const items = r.ok ? await r.json() : [];
   $('#skill-no-versions').hidden = items.length > 0;
   $('#skill-version-list').replaceChildren(...items.map((v) => {
@@ -83,8 +85,10 @@ async function loadVersions() {
 }
 
 async function versionBody(v) {
-  const r = await deps.api('GET', `/${skill.id}/history/${v}`);
-  return r.ok ? r.json() : null;
+  const doc = skill;
+  const r = await deps.api('GET', `/${doc.id}/history/${v}`);
+  const body = r.ok ? await r.json() : null;
+  return skill === doc ? body : null;
 }
 
 function bind() {
@@ -92,13 +96,14 @@ function bind() {
   const text = $('#skill-text');
   for (const b of document.querySelectorAll('.skill-modes button')) b.onclick = () => setMode(b.dataset.mode);
   text.addEventListener('input', () => {
+    if (!skill) return;
     skill.content = text.value;
     deps.scheduleSave(skill);
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(renderPreview);
   });
   text.addEventListener('keydown', (e) => {
-    if (e.key !== 'Tab' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!skill || e.key !== 'Tab' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
     e.preventDefault();
     document.execCommand('insertText', false, '  ');  // mantém o desfazer nativo do campo
   });
@@ -110,21 +115,26 @@ function bind() {
   });
   const input = $('#skill-tag-input');
   input.addEventListener('keydown', (e) => {
+    if (!skill || e.isComposing || e.keyCode === 229) return;  // Enter que confirma a conversão do IME
     if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(input.value); input.value = ''; }
     else if (e.key === 'Backspace' && !input.value && skill.tags.length) { skill.tags.pop(); renderTags(); deps.scheduleSave(skill); }
   });
   input.addEventListener('blur', () => { addTag(input.value); input.value = ''; });
   $('#skill-save-version').onclick = async () => {
+    if (!skill) return;
     const label = prompt(t('skill.versionLabelPrompt'));
     if (label === null) return;
+    const doc = skill;
     await deps.flushSave();
+    if (skill !== doc) return;
     const r = await deps.api('POST', `/${skill.id}/history`, label.trim() ? { label: label.trim() } : {});
-    if (!r.ok) return;
+    if (!r.ok || skill !== doc) return;
     deps.setStatus(t('skill.versionSaved'));
     if (!$('#skill-versions').hidden) loadVersions();
   };
   $('#skill-versions-btn').onclick = async () => {
     const panel = $('#skill-versions');
+    if (!skill) return;
     if (panel.hidden) await loadVersions();
     panel.hidden = !panel.hidden;
     $('#skill-versions-btn').classList.toggle('active', !panel.hidden);
@@ -132,7 +142,7 @@ function bind() {
   $('#skill-close-compare').onclick = closeCompare;
   $('#skill-version-list').addEventListener('click', async (e) => {
     const v = e.target.closest('[data-compare], [data-restore]');
-    if (!v) return;
+    if (!v || !skill) return;
     if (v.dataset.restore && !confirm(t('history.restoreConfirm'))) return;
     const old = await versionBody(v.dataset.compare ?? v.dataset.restore);
     if (!old) return;
@@ -190,7 +200,7 @@ export async function openSkill(id) {
   $('#skill-versions-btn').classList.remove('active');
   $('#skill-tag-input').value = '';
   renderTags();
-  setMode([place?.mode, saved].find((m) => MODES.includes(m)) ?? 'split');
+  setMode([saved].find((m) => MODES.includes(m)) ?? 'split');
   text.scrollTop = Number.isFinite(place?.scroll) ? place.scroll : 0;
   if (Number.isFinite(place?.cursor)) text.setSelectionRange(place.cursor, place.cursor);
 }
