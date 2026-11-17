@@ -1,4 +1,4 @@
-"""Servidor local do editor de mapas mentais: arquivos estáticos + API JSON."""
+"""Local server for the mind-map editor: static files + JSON API."""
 import hmac
 import ipaddress
 import json
@@ -22,36 +22,36 @@ from store import ID_RE, Store, load_json, migrate_legacy, valid_doc, valid_fold
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 5_000_000
 MAX_LOGIN_BODY = 10_000
-START = f"{os.getpid()}-{time.time()}"  # muda a cada partida/reinício do servidor
+START = f"{os.getpid()}-{time.time()}"  # changes on every server start/restart
 MAX_FILE = 20_000_000
-HISTORY_INTERVAL = 120  # s entre cópias no histórico (autosave grava a cada edição)
+HISTORY_INTERVAL = 120  # seconds between history snapshots (autosave writes on every edit)
 FILE_RE = re.compile(r"[a-f0-9]{32}(\.[a-z0-9]{1,10})?")
-# só estes tipos abrem no navegador; o resto (inclusive SVG/HTML) sempre baixa como anexo
-# login: cookie de sessão, páginas abertas sem login e limite de tentativas erradas (um só, global)
+# only these types open in the browser; everything else (including SVG/HTML) is always downloaded as an attachment
+# login: session cookie, pages open without login, and the failed-attempt limit (a single, global one)
 SESSION_COOKIE = "brainstorm_session"
 SESSION_RE = re.compile(rf"(?:^|;)\s*{SESSION_COOKIE}=([A-Za-z0-9_-]+)\s*(?:;|$)")
 SESSION_TTL = 30 * 86400
-PUBLIC = {"/login.html", "/login.js", "/style.css", "/i18n.js"}  # e /fonts/ e /locales/ (visual e textos da página de login)
+PUBLIC = {"/login.html", "/login.js", "/style.css", "/i18n.js"}  # plus /fonts/ and /locales/ (look and texts of the login page)
 PUBLIC_DIRS = ("/fonts/", "/locales/")
-EXAMPLE_PASSWORD = "troque-esta-senha"  # a do .env.example: o app não abre com ela
+EXAMPLE_PASSWORD = "troque-esta-senha"  # the one from .env.example: the app refuses to start with it
 LOGIN_MAX_FAILS, LOGIN_WINDOW = 10, 600
-# scripts só do próprio app; estilo inline é usado nos SVG; data:/blob: para exportar PNG e baixar arquivos
+# scripts only from the app itself; inline style is used in SVGs; data:/blob: to export PNG and download files
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
        "font-src 'self' data:; connect-src 'self' blob: data:; object-src 'none'; base-uri 'none'; "
        "form-action 'self'; frame-ancestors 'none'")
-LLM_PROVIDERS = ("anthropic", "openai", "gemini", "deepseek", "openrouter", "custom")  # custom = compatível com OpenAI (baseUrl)
+LLM_PROVIDERS = ("anthropic", "openai", "gemini", "deepseek", "openrouter", "custom")  # custom = OpenAI-compatible (baseUrl)
 INLINE = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 
 
 class Handler(SimpleHTTPRequestHandler):
-    timeout = 30  # s sem tráfego: conexão parada não segura uma thread para sempre
-    server_version, sys_version = "Brainstorm", ""  # sem a versão do Python no cabeçalho Server
+    timeout = 30  # seconds without traffic: a stalled connection does not hold a thread forever
+    server_version, sys_version = "Brainstorm", ""  # no Python version in the Server header
 
     def end_headers(self):
-        # arquivos do app: o navegador sempre confere se mudaram (304 barato) em vez de usar JS antigo do cache;
-        # respostas da API (dados do usuário) não ficam em cache nenhum. Exceção: o anexo entregue com
-        # sucesso (id único, nunca muda) fica 1 h só no cache do próprio navegador, senão cada redesenho
-        # baixaria as imagens de novo; erros (401, 404) nunca ficam em cache e o "Sair" limpa o cache
+        # app files: the browser always revalidates them (cheap 304) instead of using stale cached JS;
+        # API responses (user data) are never cached. Exception: an attachment delivered
+        # successfully (unique id, never changes) is cached for 1 h in the browser only, otherwise every
+        # redraw would download the images again; errors (401, 404) are never cached and "Log out" clears the cache
         path = urlsplit(getattr(self, "path", "")).path
         self.send_header("Cache-Control", getattr(self, "cache_control", None)
                          or ("no-store" if path.startswith("/api/") else "no-cache"))
@@ -72,7 +72,7 @@ class Handler(SimpleHTTPRequestHandler):
         super().do_HEAD()
 
     def list_directory(self, path):
-        self.send_error(404)  # sem listagem de pastas
+        self.send_error(404)  # no directory listing
 
     def do_PUT(self):
         self._foreign_host() or self._foreign_origin() or self._gate("PUT") or self._api("PUT") or self._send(404, {"error": "not found"})
@@ -83,9 +83,9 @@ class Handler(SimpleHTTPRequestHandler):
     def do_DELETE(self):
         self._foreign_host() or self._foreign_origin() or self._gate("DELETE") or self._api("DELETE") or self._send(404, {"error": "not found"})
 
-    # ---- Login (só quando BRAINSTORM_USER/BRAINSTORM_PASSWORD estão definidos) ----
+    # ---- Login (only when BRAINSTORM_USER/BRAINSTORM_PASSWORD are set) ----
     def _gate(self, method):
-        # True = já respondeu: login/logout, ou falta de sessão (401 na API, página de login no resto)
+        # True = already responded: login/logout, or no session (401 on the API, login page for the rest)
         path = urlsplit(self.path).path
         if path == "/api/login" and method == "POST":
             self._login()
@@ -93,8 +93,8 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/logout" and method == "POST":
             self._logout()
             return True
-        # público só se o arquivo que será servido (translate_path desfaz "%2e", ".." e "//") é o mesmo
-        # conferido aqui: /fonts/../app.js não passa
+        # public only if the file that will be served (translate_path resolves "%2e", ".." and "//") is the same
+        # one checked here: /fonts/../app.js does not pass
         public = (path in PUBLIC or path.startswith(PUBLIC_DIRS)) and path == posixpath.normpath(unquote(path)) \
             and self.translate_path(self.path) == os.path.join(self.directory, path[1:])
         if not self.server.auth or public or self._logged_in():
@@ -109,8 +109,8 @@ class Handler(SimpleHTTPRequestHandler):
         return True
 
     def _token(self):
-        # só o nosso cookie: outro cookie malformado no mesmo cabeçalho (localhost divide cookies entre portas)
-        # não derruba a sessão
+        # only our own cookie: another malformed cookie in the same header (localhost shares cookies across ports)
+        # must not break the session
         m = SESSION_RE.search(self.headers.get("Cookie") or "")
         return m and m[1]
 
@@ -126,9 +126,9 @@ class Handler(SimpleHTTPRequestHandler):
         if length is None:
             return
         now = time.time()
-        # a tentativa é reservada (contada como erro) antes de conferir a senha, na mesma trava da
-        # checagem: tentativas simultâneas não passam do limite; acertar zera a contagem. Contagem única
-        # (o app tem um usuário só): por endereço, um processo local trocaria de 127.x.y.z a cada tentativa
+        # the attempt is reserved (counted as a failure) before checking the password, under the same lock as
+        # the check: simultaneous attempts cannot get past the limit; a correct login resets the count. A single
+        # global count (the app has one user): per address, a local process could switch 127.x.y.z on every attempt
         with self.server.login_lock:
             fails = [t for t in self.server.login_fails if now - t < LOGIN_WINDOW]
             locked = len(fails) >= LOGIN_MAX_FAILS
@@ -142,31 +142,31 @@ class Handler(SimpleHTTPRequestHandler):
             body = {}
         user, password = (body.get(k) if isinstance(body, dict) else None for k in ("user", "password"))
         want_user, want_password = self.server.auth
-        # compara os dois sempre e em tempo constante: a resposta não indica qual dos dois errou
+        # always compare both, in constant time: the response does not reveal which one was wrong
         ok = isinstance(user, str) and isinstance(password, str)
-        # surrogatepass: um surrogate solto no JSON vira bytes (e não confere) em vez de derrubar a requisição
+        # surrogatepass: a lone surrogate in the JSON becomes bytes (and fails to match) instead of crashing the request
         ok = hmac.compare_digest((user if ok else "").encode(errors="surrogatepass"), want_user.encode()) & \
             hmac.compare_digest((password if ok else "").encode(errors="surrogatepass"), want_password.encode()) & ok
         if not ok:
-            time.sleep(self.server.login_delay)  # atrasa quem tenta adivinhar (o erro já foi contado)
+            time.sleep(self.server.login_delay)  # slows down guessing (the failure was already counted)
             self._send(401, {"error": "invalid credentials"})
             return
         with self.server.login_lock:
             self.server.login_fails = []
         token = self.server.store.create_session(SESSION_TTL)
-        # HttpOnly: o JavaScript não lê; SameSite=Strict: outros sites não mandam o cookie
+        # HttpOnly: JavaScript cannot read it; SameSite=Strict: other sites do not send the cookie
         self._send(200, {"ok": True}, {"Set-Cookie": f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_TTL}"})
 
     def _logout(self):
         token = self._token()
         if token:
             self.server.store.end_session(token)
-        # Clear-Site-Data: tira do navegador as imagens/anexos guardados em cache durante a sessão
+        # Clear-Site-Data: drops the images/attachments cached in the browser during the session
         self._send(204, None, {"Set-Cookie": f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0",
                                "Clear-Site-Data": '"cache"'})
 
     def _length(self, limit):
-        # tamanho do corpo, ou None (já respondeu). Só dígitos: int() aceitaria "-1", e read(-1) lê sem limite
+        # body size, or None (already responded). Digits only: int() would accept "-1", and read(-1) reads without limit
         raw = self.headers.get("Content-Length") or "0"
         if not re.fullmatch(r"[0-9]+", raw):
             self.close_connection = True
@@ -178,16 +178,16 @@ class Handler(SimpleHTTPRequestHandler):
             return int(raw)
 
     def _foreign_origin(self):
-        # escrita vinda de outra origem (página de outro site aberta no navegador) é recusada:
-        # a origem tem de ser o próprio endereço da página (Host já validado como local)
+        # a write coming from another origin (a page from another site open in the browser) is refused:
+        # the origin must be the page's own address (Host already validated as local)
         if self.headers.get("Origin") in (None, f"http://{self.headers.get('Host')}"):
             return False
         self._send(403, {"error": "forbidden origin"})
         return True
 
     def _foreign_host(self):
-        # bloqueia DNS rebinding: um site externo apontando para 127.0.0.1 chega com outro Host.
-        # Vale qualquer porta: no Docker a porta publicada pode ser outra que a do container.
+        # blocks DNS rebinding: an external site pointing to 127.0.0.1 arrives with a different Host.
+        # Any port is accepted: in Docker the published port may differ from the container's.
         name, sep, port = (self.headers.get("Host") or "").rpartition(":")
         if not sep:
             name, port = self.headers.get("Host") or "", ""
@@ -202,13 +202,13 @@ class Handler(SimpleHTTPRequestHandler):
             self._settings(method, path)
             return True
         if self.server.backup.restoring and method in ("PUT", "POST", "DELETE") and path.startswith(("/api/maps", "/api/folders", "/api/trash")):
-            # restauração em andamento: o salvamento automático da página tenta de novo sozinho
+            # restore in progress: the page autosave retries on its own
             self._send(503, {"error": "restore in progress"}, {"Retry-After": "5"})
             return True
         if path == "/api/trash" or path.startswith("/api/trash/"):
             self._trash(method, path[len("/api/trash"):].strip("/"))
             return True
-        if path == "/api/session" and method == "GET":  # a página sabe se mostra o botão Sair
+        if path == "/api/session" and method == "GET":  # lets the page know whether to show the Log out button
             self._send(200, {"auth": bool(self.server.auth)})
             return True
         if path == "/api/events" and method == "GET":
@@ -254,14 +254,14 @@ class Handler(SimpleHTTPRequestHandler):
             self._send(400, {"error": "invalid map"})
             return
         result, version = self.server.store.put(map_id, body, self.server.history_interval)
-        if result == "trashed":  # apagado em outra aba: não recria por baixo da lixeira
+        if result == "trashed":  # deleted in another tab: do not recreate it behind the trash
             self._send(410, {"error": "document is in the trash"})
         elif result == "conflict":
             self._send(409, {"version": version})
         else:
             self._send(200, {"version": version})
 
-    # ---- Lixeira: o documento continua no banco com a data de exclusão ----
+    # ---- Trash: the document stays in the database with its deletion date ----
     def _trash(self, method, rest):
         store = self.server.store
         if not rest:
@@ -279,7 +279,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send(404, {"error": "not found"})
 
     def _duplicate(self, map_id):
-        # corpo opcional {"suffix": "..."}: o que acrescentar ao título (no idioma da interface); inválido ou ausente = padrão
+        # optional body {"suffix": "..."}: what to append to the title (in the UI language); invalid or missing = default
         responded, body = self._json()
         if responded:
             return
@@ -290,7 +290,7 @@ class Handler(SimpleHTTPRequestHandler):
         self._send(*((201, {"id": new_id}) if new_id else (404, {"error": "not found"})))
 
     def _history(self, method, map_id, sub):
-        # GET /api/maps/<id>/history (lista) e /api/maps/<id>/history/<versão> (conteúdo)
+        # GET /api/maps/<id>/history (list) and /api/maps/<id>/history/<version> (content)
         _, _, version = sub.partition("/")
         if method == "POST" and not version:
             self._label_version(map_id)
@@ -308,7 +308,7 @@ class Handler(SimpleHTTPRequestHandler):
         self._send(*((200, data) if data is not None else (404, {"error": "not found"})))
 
     def _label_version(self, map_id):
-        # corpo opcional {"label": "..."}: dá nome à versão atual; ausente ou vazio = sem nome
+        # optional body {"label": "..."}: names the current version; missing or empty = no name
         length = self._length(MAX_LOGIN_BODY)
         if length is None:
             return
@@ -329,10 +329,10 @@ class Handler(SimpleHTTPRequestHandler):
         self._send(*((201, {"version": version}) if version is not None else (404, {"error": "not found"})))
 
     def _files(self, method, map_id, sub):
-        # /api/maps/<id>/files (POST) e /api/maps/<id>/files/<arquivo> (GET); só de documento ativo
+        # /api/maps/<id>/files (POST) and /api/maps/<id>/files/<file> (GET); active documents only
         folder = self.server.store.files(map_id)
         if method == "POST" and sub == "files":
-            # cabeçalho próprio obrigatório: o navegador faz preflight (que não autorizamos) para outros sites
+            # custom header required: the browser sends a preflight (which we do not authorize) for other sites
             if "X-Filename" not in self.headers:
                 self._send(400, {"error": "missing X-Filename"})
                 return
@@ -375,15 +375,15 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(data)
 
     def _static_stamp(self):
-        # carimbo = partida do servidor + arquivo mais recente de static/ + restaurações feitas
+        # stamp = server start + newest file in static/ + restores done
         try:
             newest = max((p.stat().st_mtime for p in self.server.static_dir.rglob("*") if p.is_file()), default=0)
         except FileNotFoundError:
-            return None  # editor trocando o arquivo neste instante: tenta no próximo ciclo
-        return f"{START}-{newest}-{self.server.backup.restores}"  # restauração também recarrega as abas
+            return None  # an editor is swapping the file right now: try again on the next cycle
+        return f"{START}-{newest}-{self.server.backup.restores}"  # a restore also reloads the tabs
 
     def _events(self):
-        # Server-Sent Events: a página recarrega quando o carimbo muda (static/ editado ou servidor reiniciado)
+        # Server-Sent Events: the page reloads when the stamp changes (static/ edited or server restarted)
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
@@ -395,7 +395,7 @@ class Handler(SimpleHTTPRequestHandler):
                     self.wfile.write(f"data: {stamp}\n\n".encode())
                     last, beat = stamp, time.monotonic()
                 elif time.monotonic() - beat > 15:
-                    self.wfile.write(b": ping\n\n")  # detecta aba fechada e libera a thread
+                    self.wfile.write(b": ping\n\n")  # detects a closed tab and frees the thread
                     beat = time.monotonic()
                 time.sleep(0.5)
         except (BrokenPipeError, ConnectionResetError):
@@ -416,13 +416,13 @@ class Handler(SimpleHTTPRequestHandler):
         self._send(200 if ok else 409, saved)
 
     def _json(self, limit=MAX_LOGIN_BODY):
-        # (respondeu?, corpo): corpo None se não for JSON válido (ver load_json)
+        # (responded?, body): body is None if it is not valid JSON (see load_json)
         length = self._length(limit)
         if length is None:
             return True, None
         return False, load_json(self.rfile.read(length))
 
-    # ---- Configurações (segredos nunca voltam: só o final mascarado) ----
+    # ---- Settings (secrets are never returned: only the masked tail) ----
     def _settings(self, method, path):
         kind, _, rest = path[len("/api/settings/"):].partition("/") if path.startswith("/api/settings/") else ("", "", "")
         if kind == "llm":
@@ -458,7 +458,7 @@ class Handler(SimpleHTTPRequestHandler):
         self._send(200, backup.view())
 
     def _backup_call(self, action, view=False):
-        # backup agora / lista do bucket: síncronos; erro do storage = 502 com a mensagem curta
+        # backup now / bucket listing: synchronous; storage error = 502 with the short message
         try:
             result = action()
         except Busy:
@@ -467,7 +467,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._send(400, {"error": "backup storage is not configured"})
         except (BackupError, S3Error) as e:
             self._send(502, {"error": str(e)})
-        except Exception as e:  # só o tipo: a mensagem poderia ter segredos
+        except Exception as e:  # type only: the message could contain secrets
             print(f"backup call failed: {type(e).__name__}", flush=True)
             self._send(500, {"error": "unexpected error"})
         else:
@@ -491,11 +491,11 @@ class Handler(SimpleHTTPRequestHandler):
             if not valid_llm(body):
                 self._send(400, {"error": "invalid provider settings"})
                 return
-        with self.server.settings_lock:  # ler-mudar-gravar sem outra gravação no meio
+        with self.server.settings_lock:  # read-modify-write with no other write in between
             llm = store.setting("llm") or {"providers": {}}
             if body is None:
                 llm["providers"].pop(pid, None)
-                if llm.get("default") == pid:  # sem chave não fica como padrão
+                if llm.get("default") == pid:  # without a key it cannot stay the default
                     llm.pop("default")
             else:
                 current = llm["providers"].setdefault(pid, {})
@@ -522,11 +522,11 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def valid_llm(body):
-    # key ausente = mantém; vazia não vale (para remover há o DELETE)
+    # missing key = keep it; empty is not valid (use DELETE to remove)
     return (isinstance(body, dict)
             and ("key" not in body or (text_ok(body["key"], 500) and body["key"].strip() != ""))
             and ("model" not in body or text_ok(body["model"], 200))
-            and ("default" not in body or body["default"] is True)  # o padrão só muda escolhendo outro
+            and ("default" not in body or body["default"] is True)  # the default only changes by choosing another one
             and ("baseUrl" not in body or (text_ok(body["baseUrl"], 500)
                                            and (body["baseUrl"] == "" or re.match(r"https?://[^\s/]", body["baseUrl"])))))
 
@@ -538,19 +538,19 @@ def llm_view(pid, p, default=None):
 
 def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: Path | None = None,
                 auth: tuple[str, str] | None = None) -> ThreadingHTTPServer:
-    # banco em <dados>/brainstorm.db; anexos em <dados>/attachments (ou files_dir)
+    # database in <data>/brainstorm.db; attachments in <data>/attachments (or files_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
     store = Store(data_dir / "brainstorm.db", files_dir or data_dir / "attachments")
     if migrated := migrate_legacy(store, data_dir):
-        print(f"{migrated} documentos do formato antigo importados para o banco (backup em {data_dir}/legacy-*)", flush=True)
+        print(f"{migrated} documents from the old format imported into the database (backup in {data_dir}/legacy-*)", flush=True)
     server = ThreadingHTTPServer((host, port), partial(Handler, directory=str(ROOT / "static")))
     server.store = store
-    server.auth = auth  # (usuário, senha) ou None = sem login
+    server.auth = auth  # (user, password) or None = no login
     if auth:
-        store.reset_sessions_if_auth_changed(*auth)  # trocou usuário/senha: todo mundo entra de novo
+        store.reset_sessions_if_auth_changed(*auth)  # user/password changed: everyone has to log in again
     server.login_delay, server.login_fails, server.login_lock = 1.0, [], threading.Lock()
     server.settings_lock = threading.Lock()
-    server.backup = Backup(store)  # a agenda só liga no main() (testes não fazem backup sozinhos)
+    server.backup = Backup(store)  # the schedule only starts in main() (tests never back up on their own)
     server.data_dir = data_dir
     server.static_dir = ROOT / "static"
     server.history_interval = HISTORY_INTERVAL
@@ -558,7 +558,7 @@ def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: P
 
 
 def watch(paths, on_change, interval=1.0):
-    """Chama on_change (uma vez) quando o mtime de algum dos arquivos muda. Roda numa thread daemon."""
+    """Call on_change (once) when the mtime of any of the files changes. Runs in a daemon thread."""
     def loop():
         before = [p.stat().st_mtime for p in paths]
         while True:
@@ -566,7 +566,7 @@ def watch(paths, on_change, interval=1.0):
             try:
                 now = [p.stat().st_mtime for p in paths]
             except FileNotFoundError:
-                continue  # editor salvando (arquivo trocado no meio): tenta de novo
+                continue  # an editor is saving (file swapped midway): try again
             if now != before:
                 on_change()
                 return
@@ -574,12 +574,12 @@ def watch(paths, on_change, interval=1.0):
 
 
 def restart():
-    print("app.py mudou — reiniciando o servidor…", flush=True)
+    print("app.py changed — restarting the server…", flush=True)
     os.execv(sys.executable, [sys.executable, *sys.argv])
 
 
 def load_env(path):
-    """Lê KEY=valor do .env (comentários, aspas e "export" opcionais); variável já definida no ambiente vence."""
+    """Read KEY=value from .env (comments, quotes and "export" are optional); a variable already set in the environment wins."""
     if not path.is_file():
         return
     for line in path.read_text("utf-8").splitlines():
@@ -597,33 +597,33 @@ def loopback(host):
     try:
         return ipaddress.ip_address(host).is_loopback
     except ValueError:
-        return host == "localhost"  # "" (todas as interfaces) e outros nomes: rede
+        return host == "localhost"  # "" (all interfaces) and other names: network
 
 
 def main():
     load_env(ROOT / ".env")
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
-    # BRAINSTORM_HOST/BRAINSTORM_DATA: no Docker, escuta em 0.0.0.0 dentro do container e guarda em /data
-    # BRAINSTORM_FILES: pasta dos anexos (ex.: um disco externo); padrão <dados>/attachments
+    # BRAINSTORM_HOST/BRAINSTORM_DATA: in Docker, listens on 0.0.0.0 inside the container and stores in /data
+    # BRAINSTORM_FILES: attachments folder (e.g. an external disk); default <data>/attachments
     host = os.environ.get("BRAINSTORM_HOST", "127.0.0.1")
     files = os.environ.get("BRAINSTORM_FILES")
     user, password = os.environ.get("BRAINSTORM_USER", ""), os.environ.get("BRAINSTORM_PASSWORD", "")
     if bool(user) != bool(password):
-        sys.exit("Defina BRAINSTORM_USER e BRAINSTORM_PASSWORD juntos (no .env ou no ambiente), ou nenhum dos dois.")
+        sys.exit("Set BRAINSTORM_USER and BRAINSTORM_PASSWORD together (in .env or in the environment), or neither.")
     if password == EXAMPLE_PASSWORD:
-        sys.exit("BRAINSTORM_PASSWORD ainda é a senha de exemplo do .env.example: troque por uma sua.")
+        sys.exit("BRAINSTORM_PASSWORD is still the example password from .env.example: change it to your own.")
     if not user and not loopback(host) and os.environ.get("BRAINSTORM_ALLOW_NO_LOGIN") != "1":
-        sys.exit(f"Sem BRAINSTORM_USER/BRAINSTORM_PASSWORD o app abre sem login, e BRAINSTORM_HOST={host!r} aceita conexões "
-                 "de outras máquinas. Defina o login ou, se só esta máquina alcança a porta (ex.: Docker publicado em "
-                 "127.0.0.1), BRAINSTORM_ALLOW_NO_LOGIN=1.")
+        sys.exit(f"Without BRAINSTORM_USER/BRAINSTORM_PASSWORD the app opens without login, and BRAINSTORM_HOST={host!r} accepts "
+                 "connections from other machines. Set the login or, if only this machine can reach the port (e.g. Docker "
+                 "published on 127.0.0.1), BRAINSTORM_ALLOW_NO_LOGIN=1.")
     if not user:
-        print("Aviso: sem BRAINSTORM_USER/BRAINSTORM_PASSWORD, o app abre sem login.", flush=True)
+        print("Warning: without BRAINSTORM_USER/BRAINSTORM_PASSWORD, the app opens without login.", flush=True)
     server = make_server(Path(os.environ.get("BRAINSTORM_DATA") or ROOT / "data"), port, host,
                          Path(files) if files else None, (user, password) if user else None)
     server.backup.start()
-    # recarrega sozinho ao editar o servidor (HTML/CSS/JS já vêm frescos a cada F5)
+    # reloads itself when the server is edited (HTML/CSS/JS are already fresh on every F5)
     watch([Path(__file__).resolve()], restart)
-    print(f"Abra http://127.0.0.1:{port}")
+    print(f"Open http://127.0.0.1:{port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

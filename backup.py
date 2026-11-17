@@ -1,8 +1,8 @@
-"""Backup no Wasabi (ou outro S3): um .tar.gz por backup com o banco sem segredos + a pasta de anexos.
+"""Backup to Wasabi (or another S3): one .tar.gz per backup with the secret-free database + the attachments folder.
 
-Agenda (thread ligada só pelo main() do app), retenção dos últimos N e restauração. Um lock garante um
-backup/restore por vez. Temporários dentro da pasta de anexos (mesmo disco do que mais pesa), em pastas
-que começam com ponto: o servidor e o próprio backup ignoram (id de documento nunca tem ponto).
+Schedule (a thread started only by the app's main()), retention of the last N, and restore. A lock allows
+one backup/restore at a time. Temporary files live inside the attachments folder (same disk as the heaviest
+data), in dot-prefixed folders: the server and the backup itself ignore them (a document id never has a dot).
 """
 import hashlib
 import json
@@ -22,16 +22,16 @@ from s3 import S3, S3Error
 from store import ID_RE, SCHEMA_VERSION, load_json, migrate, valid_doc
 
 NAME_RE = re.compile(r"brainstorm-\d{4}-\d{2}-\d{2}-\d{6}\.tar\.gz")
-INTERVALS = (6, 12, 24, 168)  # horas
+INTERVALS = (6, 12, 24, 168)  # hours
 DEFAULTS = {"endpoint": "", "region": "", "bucket": "", "prefix": "brainstorm/", "accessKey": "", "secretKey": "",
             "interval": 24, "keep": 14, "enabled": False}
-TICK = 60            # s entre as conferências da agenda
-ERROR_RETRY = 3600   # s de espera depois de um backup automático que falhou
-MARGIN = 100 << 20   # bytes de folga no disco ao extrair um restore
+TICK = 60            # seconds between schedule checks
+ERROR_RETRY = 3600   # seconds to wait after a failed automatic backup
+MARGIN = 100 << 20   # bytes of free-disk margin when extracting a restore
 
 
 class Busy(Exception):
-    """Outro backup/restore em andamento."""
+    """Another backup/restore is in progress."""
 
 
 class NotConfigured(Exception):
@@ -39,11 +39,11 @@ class NotConfigured(Exception):
 
 
 class BackupError(Exception):
-    """Falha com mensagem curta, sem segredos (vai para o status e para a tela)."""
+    """Failure with a short message, no secrets (goes to the status and to the screen)."""
 
 
 def hint(secret):
-    # só o final do segredo, e nem isso se for curto demais (mostraria quase tudo)
+    # only the tail of the secret, and not even that if it is too short (it would reveal almost everything)
     return "…" + secret[-4:] if len(secret) > 8 else "…" if secret else ""
 
 
@@ -52,7 +52,7 @@ def text_ok(v, limit):
 
 
 def clean_config(body):
-    """Configuração do backup validada (secretKey só se veio), ou None se algo não vale."""
+    """Validated backup configuration (secretKey only if it was sent), or None if anything is invalid."""
     if not isinstance(body, dict):
         return None
     cfg = {}
@@ -62,13 +62,13 @@ def clean_config(body):
         cfg[k] = body[k].strip()
     url = urlsplit(cfg["endpoint"])
     try:
-        url.port  # porta que não é número
+        url.port  # a port that is not a number
     except ValueError:
         return None
     cfg["endpoint"] = cfg["endpoint"].rstrip("/")
     if cfg["endpoint"] and not (url.scheme == "https" and url.hostname and "@" not in url.netloc
                                 and url.path in ("", "/") and not url.query and not url.fragment):
-        return None  # só https:// e só o endereço (o bucket vai no caminho)
+        return None  # https:// only, and only the address (the bucket goes in the path)
     if not re.fullmatch(r"([a-z0-9-]{1,40})?", cfg["region"]) or not re.fullmatch(r"([a-z0-9][a-z0-9.-]{1,61}[a-z0-9])?", cfg["bucket"]):
         return None
     if len(cfg["prefix"]) > 200 or cfg["prefix"].startswith("/") or len(cfg["accessKey"]) > 200:
@@ -88,12 +88,12 @@ def configured(cfg):
 
 
 def file_name_ok(name):
-    # o mesmo critério no backup e no restore: o que vai no arquivo sempre volta
+    # the same rule on backup and restore: whatever goes into the archive can always come back
     return bool(name) and not name.startswith(".") and "\\" not in name and name.isprintable()
 
 
 def attachments(files_dir):
-    """[(pasta do documento, [arquivos])]: sem pastas com ponto (temporários) e sem links simbólicos."""
+    """[(document folder, [files])]: no dot folders (temporary) and no symlinks."""
     out = []
     for d in sorted(files_dir.iterdir()) if files_dir.is_dir() else []:
         if ID_RE.fullmatch(d.name) and d.is_dir() and not d.is_symlink():
@@ -102,7 +102,7 @@ def attachments(files_dir):
 
 
 def fingerprint(store):
-    # muda quando algo que vai no backup muda (documento, lixeira, histórico, pastas, anexos)
+    # changes when anything included in the backup changes (document, trash, history, folders, attachments)
     with store._db() as db:
         docs = db.execute("SELECT COUNT(*), MAX(updated), COUNT(deleted), MAX(deleted) FROM docs").fetchone()
         hist = db.execute("SELECT COUNT(*), MAX(saved), COUNT(label) FROM history").fetchone()
@@ -112,8 +112,8 @@ def fingerprint(store):
 
 
 def check_members(tar, free):
-    # só o banco e attachments/<documento>/<arquivo> (arquivos comuns): nada de links, nada fora do lugar;
-    # e nada que, descompactado, não caiba no disco (bomba de gzip)
+    # only the database and attachments/<document>/<file> (regular files): no links, nothing out of place;
+    # and nothing that would not fit on disk once decompressed (gzip bomb)
     if sum(m.size for m in tar.getmembers()) > free - MARGIN:
         raise BackupError("archive too large for the free disk space")
     for m in tar.getmembers():
@@ -127,7 +127,7 @@ def check_members(tar, free):
 
 
 def doc_ok(doc_id, body):
-    # mesma validação da API: o id vai nas rotas da página, o corpo é aberto pelo editor
+    # same validation as the API: the id goes into the page routes, the body is opened by the editor
     return isinstance(doc_id, str) and bool(ID_RE.fullmatch(doc_id)) and valid_doc(load_json(body))
 
 
@@ -138,17 +138,17 @@ def iso(t):
 class Backup:
     def __init__(self, store):
         self.store = store
-        self.lock = threading.Lock()  # um backup/restore por vez (agenda e botões)
-        self.restoring = False        # True: rotas que gravam respondem 503
-        self.restores = 0             # sobe a cada restauração: o /api/events manda as abas recarregarem
+        self.lock = threading.Lock()  # one backup/restore at a time (schedule and buttons)
+        self.restoring = False        # True: routes that write answer 503
+        self.restores = 0             # bumped on every restore: /api/events tells the tabs to reload
         self._recover()
 
     @property
     def _scrub(self):
-        return self.store.db_path.with_name(".backup-scrub.db")  # junto do banco: o segredo não vai para o disco dos anexos
+        return self.store.db_path.with_name(".backup-scrub.db")  # next to the database: the secret does not go to the attachments disk
 
     def _recover(self):
-        """Sobras de execução interrompida: cópia com segredos e anexos que ficaram em .restore-old."""
+        """Leftovers from an interrupted run: the copy with secrets and attachments left in .restore-old."""
         for suffix in ("", "-journal", "-wal", "-shm"):
             with suppress(OSError):
                 Path(f"{self._scrub}{suffix}").unlink()
@@ -164,9 +164,9 @@ class Backup:
         with suppress(OSError):
             old.rmdir()
         if back:
-            print(f"restore interrompido: {back} pasta(s) de anexos devolvida(s)", flush=True)
+            print(f"interrupted restore: {back} attachment folder(s) put back", flush=True)
 
-    # ---- configuração e status (ficam na tabela settings: fora do backup, não voltam num restore) ----
+    # ---- configuration and status (kept in the settings table: outside the backup, not restored) ----
     def config(self):
         return {**DEFAULTS, **(self.store.setting("backup") or {})}
 
@@ -175,7 +175,7 @@ class Backup:
 
     def save_config(self, cfg):
         if "secretKey" not in cfg:
-            cfg["secretKey"] = self.config()["secretKey"]  # ausente = mantém
+            cfg["secretKey"] = self.config()["secretKey"]  # missing = keep
         self.store.set_setting("backup", cfg)
 
     def view(self):
@@ -192,7 +192,7 @@ class Backup:
 
     def _tmp(self, name):
         path = self.store.files_dir / name
-        shutil.rmtree(path, ignore_errors=True)  # sobra de uma execução interrompida
+        shutil.rmtree(path, ignore_errors=True)  # leftover from an interrupted run
         path.mkdir(parents=True)
         return path
 
@@ -209,7 +209,7 @@ class Backup:
         client = self.client(cfg)
         now, status, fp = time.time(), self.status(), fingerprint(self.store)
         if int(now) == int(status.get("lastAttempt") or 0):
-            time.sleep(1)  # o nome tem segundos: dois backups no mesmo segundo sobrescreveriam o anterior
+            time.sleep(1)  # the name has seconds: two backups in the same second would overwrite the previous one
             now = time.time()
         name = f"brainstorm-{datetime.fromtimestamp(now, timezone.utc):%Y-%m-%d-%H%M%S}.tar.gz"
         tmp = self._tmp(".backup-tmp")
@@ -228,7 +228,7 @@ class Backup:
         return name
 
     def _archive(self, tmp):
-        # cópia consistente do banco (backup() do SQLite), sem configurações, sessões e impressão do login
+        # consistent copy of the database (SQLite backup()), without settings, sessions and the login fingerprint
         db_copy, archive = self._scrub, tmp / "backup.tar.gz"
         db_copy.unlink(missing_ok=True)
         try:
@@ -245,15 +245,15 @@ class Backup:
     def _scrubbed_copy(self, db_copy):
         with closing(sqlite3.connect(self.store.db_path)) as src, closing(sqlite3.connect(db_copy)) as dst:
             src.backup(dst)
-            dst.execute("PRAGMA journal_mode=DELETE")  # arquivo único, sem -wal ao lado
+            dst.execute("PRAGMA journal_mode=DELETE")  # a single file, no -wal next to it
             dst.execute("DROP TABLE IF EXISTS settings")
             dst.execute("DELETE FROM sessions")
             dst.execute("DELETE FROM meta WHERE key = 'auth_fingerprint'")
             dst.commit()
-            dst.execute("VACUUM")  # reescreve o arquivo: nada do que foi apagado sobra em página livre
+            dst.execute("VACUUM")  # rewrites the file: nothing that was deleted lingers in a free page
 
     def _backups(self, client, cfg):
-        # só os nossos arquivos, direto no prefixo; o nome tem a data, então ordem alfabética = cronológica
+        # only our own files, directly under the prefix; the name has the date, so alphabetical order = chronological
         prefix = cfg["prefix"]
         found = [o for o in client.list(prefix) if o["key"].startswith(prefix) and NAME_RE.fullmatch(o["key"][len(prefix):])]
         return sorted(found, key=lambda o: o["key"])
@@ -262,7 +262,7 @@ class Backup:
         try:
             for o in self._backups(client, cfg)[:-cfg["keep"]]:
                 client.delete(o["key"])
-        except Exception as e:  # o backup em si deu certo
+        except Exception as e:  # the backup itself succeeded
             return f"retention: {e if isinstance(e, S3Error) else type(e).__name__}"
         return None
 
@@ -271,9 +271,9 @@ class Backup:
         items = self._backups(self.client(cfg), cfg)
         return [{"name": o["key"][len(cfg["prefix"]):], "size": o["size"], "modified": o["modified"]} for o in reversed(items)]
 
-    # ---- restauração ----
+    # ---- restore ----
     def restore(self, name):
-        """Troca tudo pelo backup `name` (só o nome do arquivo, dentro do prefixo). Tudo ou nada."""
+        """Replace everything with backup `name` (just the file name, inside the prefix). All or nothing."""
         if not NAME_RE.fullmatch(name):
             raise ValueError("invalid backup name")
         if not self.lock.acquire(blocking=False):
@@ -282,7 +282,7 @@ class Backup:
         try:
             cfg = self.config()
             client = self.client(cfg)
-            self._run(cfg, prune=False)  # 1. guarda o estado atual (se falhar, não restaura)
+            self._run(cfg, prune=False)  # 1. save the current state (if that fails, do not restore)
             try:
                 tmp = self._tmp(".restore-tmp")
                 archive = tmp / "restore.tar.gz"
@@ -294,7 +294,7 @@ class Backup:
             finally:
                 shutil.rmtree(self.store.files_dir / ".restore-tmp", ignore_errors=True)
             self.restores += 1
-            self._prune(client, cfg)  # erro aqui não desfaz nada; o próximo backup tenta de novo
+            self._prune(client, cfg)  # an error here undoes nothing; the next backup tries again
         finally:
             self.restoring = False
             self.lock.release()
@@ -318,21 +318,21 @@ class Backup:
                 if row and (not str(row[0]).isdigit() or int(row[0]) > SCHEMA_VERSION):
                     raise BackupError("backup is from a newer version of the app")
                 with db:
-                    migrate(db)  # backup antigo: cria as colunas que faltam, como ao abrir o banco
+                    migrate(db)  # old backup: create the missing columns, as when opening the database
                 if not all(doc_ok(*r) for r in db.execute("SELECT id, body FROM docs")):
                     raise BackupError("invalid archive")
         except sqlite3.DatabaseError:
             raise BackupError("invalid archive") from None
 
     def _swap(self, src):
-        """Banco e anexos trocados juntos: o banco só é confirmado depois que os anexos estão no lugar."""
+        """Database and attachments swapped together: the database is only committed once the attachments are in place."""
         files_dir, new_files = self.store.files_dir, src / "attachments"
         old = files_dir / ".restore-old"
         with suppress(OSError):
-            old.rmdir()  # sobra vazia de antes
-        old.mkdir()  # se ainda existe com anexos (desfazer falhou antes), para aqui: nada é apagado
+            old.rmdir()  # empty leftover from before
+        old.mkdir()  # if it still exists with attachments (an earlier undo failed), stop here: nothing is deleted
         db = sqlite3.connect(self.store.db_path, timeout=10, isolation_level=None)
-        moved = []  # (de, para), para desfazer na ordem inversa
+        moved = []  # (from, to), to undo in reverse order
         try:
             db.execute("ATTACH DATABASE ? AS src", (str(src / "brainstorm.db"),))
             db.execute("BEGIN IMMEDIATE")
@@ -340,10 +340,10 @@ class Backup:
                 cols = ", ".join(c[1] for c in db.execute(f"PRAGMA main.table_info({table})"))
                 db.execute(f"DELETE FROM main.{table}")
                 db.execute(f"INSERT INTO main.{table} ({cols}) SELECT {cols} FROM src.{table}")
-            # sessions e settings ficam como estão: não desloga e não perde as chaves
+            # sessions and settings stay as they are: no logout and no lost keys
             db.execute("DELETE FROM main.meta WHERE key != 'auth_fingerprint'")
             db.execute("INSERT INTO main.meta (key, value) SELECT key, value FROM src.meta WHERE key != 'auth_fingerprint'")
-            # anexos: pasta por pasta (a de anexos pode ser um ponto de montagem; tudo no mesmo disco = rename)
+            # attachments: folder by folder (the attachments folder may be a mount point; everything on the same disk = rename)
             for d, _ in attachments(files_dir):
                 os.rename(d, old / d.name)
                 moved.append((d, old / d.name))
@@ -363,9 +363,9 @@ class Backup:
             db.close()
         shutil.rmtree(old, ignore_errors=True)
 
-    # ---- agenda ----
+    # ---- schedule ----
     def tick(self, now=None):
-        """Faz o backup se ligado, configurado, o intervalo passou e algo mudou. Devolve True se tentou."""
+        """Run the backup if enabled, configured, the interval has passed and something changed. Returns True if it tried."""
         cfg, st, now = self.config(), self.status(), now or time.time()
         interval = cfg["interval"] * 3600
         if not (cfg["enabled"] and configured(cfg)) or now - (st.get("lastSuccess") or 0) < interval \
@@ -376,7 +376,7 @@ class Backup:
         try:
             self._run(cfg)
         except BackupError:
-            pass  # já está no status
+            pass  # already recorded in the status
         finally:
             self.lock.release()
         return True
@@ -387,6 +387,6 @@ class Backup:
                 time.sleep(TICK)
                 try:
                     self.tick()
-                except Exception as e:  # a agenda não morre por um erro inesperado
-                    print(f"backup automático falhou: {type(e).__name__}", flush=True)
+                except Exception as e:  # the schedule does not die from an unexpected error
+                    print(f"automatic backup failed: {type(e).__name__}", flush=True)
         threading.Thread(target=loop, daemon=True, name="backup-scheduler").start()

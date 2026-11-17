@@ -1,7 +1,7 @@
-"""Armazenamento do Brainstorm: SQLite (documentos, histórico, lixeira, pastas) + pasta de anexos.
+"""Brainstorm storage: SQLite (documents, history, trash, folders) + attachments folder.
 
-Tudo que não é arquivo anexado fica num único banco (fácil de copiar/arquivar); imagens e anexos
-ficam em <pasta de anexos>/<id do documento>/<arquivo>.
+Everything that is not an attached file lives in a single database (easy to copy/archive); images and
+attachments live in <attachments folder>/<document id>/<file>.
 """
 import hashlib
 import json
@@ -15,8 +15,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-HISTORY_MAX = 50  # versões guardadas por documento
-ID_RE = re.compile(r"[a-z0-9-]{1,64}")  # id de documento e de pasta (sempre com fullmatch)
+HISTORY_MAX = 50  # versions kept per document
+ID_RE = re.compile(r"[a-z0-9-]{1,64}")  # document and folder id (always used with fullmatch)
 MAX_FOLDERS = 2000
 
 SCHEMA = """
@@ -25,36 +25,36 @@ CREATE TABLE IF NOT EXISTS docs (
     type    TEXT NOT NULL,             -- map | board | skill
     title   TEXT NOT NULL,
     version INTEGER NOT NULL,
-    updated REAL NOT NULL,             -- epoch da última gravação
-    deleted REAL,                      -- NULL = ativo; preenchido = na lixeira desde então
-    body    TEXT NOT NULL              -- JSON do documento
+    updated REAL NOT NULL,             -- epoch of the last write
+    deleted REAL,                      -- NULL = active; set = in the trash since then
+    body    TEXT NOT NULL              -- document JSON
 );
 CREATE TABLE IF NOT EXISTS history (
     doc_id  TEXT NOT NULL,
     version INTEGER NOT NULL,
-    saved   REAL NOT NULL,             -- quando essa versão foi gravada
+    saved   REAL NOT NULL,             -- when this version was saved
     body    TEXT NOT NULL,
-    label   TEXT,                      -- NULL = versão automática; preenchido = versão com nome (não é podada)
+    label   TEXT,                      -- NULL = automatic version; set = named version (never pruned)
     PRIMARY KEY (doc_id, version)
 );
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions (
-    token_hash TEXT PRIMARY KEY,       -- sha256 do cookie (o cookie em si não fica guardado)
+    token_hash TEXT PRIMARY KEY,       -- sha256 of the cookie (the cookie itself is never stored)
     expires    REAL NOT NULL
 );
--- configurações com segredos (chaves de LLM, storage do backup): nunca vão para o backup
+-- settings holding secrets (LLM keys, backup storage): never included in the backup
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
-SCHEMA_VERSION = 1  # meta.schema: sobe a cada mudança de tabela (o restore recusa backup de esquema mais novo)
+SCHEMA_VERSION = 1  # meta.schema: bumped on every table change (restore refuses a backup with a newer schema)
 
 EMPTY_FOLDERS = {"version": 0, "folders": [], "place": {}}
 
 
 def migrate(db):
-    """Cria o que falta (tabelas, colunas) e sobe meta.schema; usado ao abrir o banco e no restore."""
+    """Create what is missing (tables, columns) and bump meta.schema; used when opening the database and on restore."""
     db.executescript(SCHEMA)
     if "label" not in [c[1] for c in db.execute("PRAGMA table_info(history)")]:
-        db.execute("ALTER TABLE history ADD COLUMN label TEXT")  # banco criado antes das versões com nome
+        db.execute("ALTER TABLE history ADD COLUMN label TEXT")  # database created before named versions existed
     db.execute("INSERT INTO meta VALUES ('schema', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value "
                "WHERE CAST(meta.value AS INTEGER) < CAST(excluded.value AS INTEGER)", (str(SCHEMA_VERSION),))
 
@@ -72,7 +72,7 @@ def doc_title(body):
 
 
 def doc_size(body):
-    # tópicos do mapa ou elementos do quadro (mostrado no histórico)
+    # map topics or board elements (shown in the history)
     if body.get("type") == "skill":
         return len(body["content"])
     count = lambda n: 1 + sum(count(c) for c in n.get("children", []))
@@ -80,13 +80,13 @@ def doc_size(body):
 
 
 def load_json(raw):
-    """JSON vindo de fora (corpo de requisição, backup, formato antigo) ou None se não vale. Além do JSON
-    inválido, recusa NaN/Infinity (inclusive 1e400; o navegador não lê) e surrogate sozinho ("\\ud800":
-    não vira UTF-8, o banco e a resposta derrubariam a conexão)."""
+    """JSON from outside (request body, backup, old format), or None if it is not acceptable. Besides
+    invalid JSON, rejects NaN/Infinity (including 1e400; the browser cannot read it) and a lone surrogate
+    ("\\ud800": it does not encode to UTF-8, so the database and the response would drop the connection)."""
     try:
         data = json.loads(raw)
         json.dumps(data, ensure_ascii=False, allow_nan=False).encode()
-    except (ValueError, TypeError, RecursionError):  # UnicodeError também é ValueError
+    except (ValueError, TypeError, RecursionError):  # UnicodeError is also a ValueError
         return None
     return data
 
@@ -96,8 +96,8 @@ def valid_tags(tags):
             and all(isinstance(t, str) and 0 < len(t) <= 40 and t == t.strip() for t in tags))
 
 
-# documentos: mapa mental ({root}), quadro de desenho ({type: "board", title, elements})
-# ou skill ({type: "skill", title, tags, content})
+# documents: mind map ({root}), drawing board ({type: "board", title, elements})
+# or skill ({type: "skill", title, tags, content})
 def valid_doc(body):
     if not (isinstance(body, dict) and isinstance(body.get("version"), int)):
         return False
@@ -110,8 +110,8 @@ def valid_doc(body):
             and isinstance(body["root"].get("text", ""), str))
 
 
-# pastas: {version, folders: [{id, name, parent}], place: {id do documento: id da pasta}}
-# (fica fora dos documentos: mover não mexe na versão de um mapa aberto em outra aba)
+# folders: {version, folders: [{id, name, parent}], place: {document id: folder id}}
+# (kept outside the documents: moving does not touch the version of a map open in another tab)
 def valid_folders(body):
     if not (isinstance(body, dict) and isinstance(body.get("version"), int)
             and isinstance(body.get("folders"), list) and len(body["folders"]) <= MAX_FOLDERS
@@ -126,8 +126,8 @@ def valid_folders(body):
         if f["id"] in parents:
             return False
         parents[f["id"]] = f.get("parent")
-    checked = set()  # pastas com o caminho até a raiz já conferido: cada uma é percorrida uma vez só
-    for fid in parents:  # pai precisa existir e não pode haver ciclo (pasta dentro dela mesma)
+    checked = set()  # folders whose path to the root was already checked: each one is walked only once
+    for fid in parents:  # the parent must exist and there can be no cycle (a folder inside itself)
         seen, cur = set(), fid
         while cur is not None and cur not in checked:
             if cur in seen or cur not in parents:
@@ -140,7 +140,7 @@ def valid_folders(body):
 
 
 def _with_id(row, doc_id):
-    # o id vem sempre da linha: um corpo restaurado com outro id faria a página gravar em outra rota
+    # the id always comes from the row: a restored body with another id would make the page save to another route
     if not row:
         return None
     body = json.loads(row["body"])
@@ -153,12 +153,12 @@ class Store:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.files_dir.mkdir(parents=True, exist_ok=True)
         with self._db() as db:
-            db.execute("PRAGMA journal_mode=WAL")  # leituras não esperam gravações
+            db.execute("PRAGMA journal_mode=WAL")  # reads do not wait for writes
             migrate(db)
 
     @contextmanager
     def _db(self):
-        # uma conexão por operação (o servidor atende em várias threads); cada "with" = uma transação
+        # one connection per operation (the server is multithreaded); each "with" = one transaction
         db = sqlite3.connect(self.db_path, timeout=10)
         db.row_factory = sqlite3.Row
         try:
@@ -170,7 +170,7 @@ class Store:
     def files(self, doc_id):
         return self.files_dir / doc_id
 
-    # ---- documentos ----
+    # ---- documents ----
     def get(self, doc_id):
         with self._db() as db:
             row = db.execute("SELECT body FROM docs WHERE id = ? AND deleted IS NULL", (doc_id,)).fetchone()
@@ -180,9 +180,9 @@ class Store:
         return self.get(doc_id) is not None
 
     def put(self, doc_id, body, history_interval):
-        """Grava se body["version"] for a versão atual. Devolve ("ok", nova), ("conflict", atual) ou ("trashed", None)."""
+        """Save if body["version"] is the current version. Returns ("ok", new), ("conflict", current) or ("trashed", None)."""
         with self._db() as db:
-            db.execute("BEGIN IMMEDIATE")  # checagem de versão e gravação sem outra gravação no meio
+            db.execute("BEGIN IMMEDIATE")  # version check and write with no other write in between
             row = db.execute("SELECT version, updated, deleted, body FROM docs WHERE id = ?", (doc_id,)).fetchone()
             if row and row["deleted"] is not None:
                 return "trashed", None
@@ -200,12 +200,12 @@ class Store:
         return "ok", body["version"]
 
     def _snapshot(self, db, doc_id, row, interval):
-        # guarda a versão que vai ser sobrescrita, no máximo uma a cada `interval` s
+        # keep the version about to be overwritten, at most one every `interval` seconds
         last = db.execute("SELECT MAX(saved) FROM history WHERE doc_id = ? AND label IS NULL", (doc_id,)).fetchone()[0]
         if last is not None and time.time() - last < interval:
             return
         db.execute("INSERT INTO history (doc_id, version, saved, body) VALUES (?, ?, ?, ?) ON CONFLICT(doc_id, version) DO NOTHING",
-                   (doc_id, row["version"], row["updated"], row["body"]))  # não apaga o rótulo de uma versão com nome
+                   (doc_id, row["version"], row["updated"], row["body"]))  # does not erase the label of a named version
         db.execute("DELETE FROM history WHERE doc_id = ? AND label IS NULL AND version NOT IN "
                    "(SELECT version FROM history WHERE doc_id = ? AND label IS NULL ORDER BY version DESC LIMIT ?)",
                    (doc_id, doc_id, HISTORY_MAX))
@@ -231,11 +231,11 @@ class Store:
             body["root"]["text"] = f"{body['root'].get('text', '')}{suffix}"
         body["version"] = 0
         if self.files(doc_id).exists():
-            shutil.copytree(self.files(doc_id), self.files(new_id))  # imagens/anexos apontam para o documento
+            shutil.copytree(self.files(doc_id), self.files(new_id))  # images/attachments point to the document
         self.put(new_id, body, 0)
         return new_id
 
-    # ---- lixeira: o documento só ganha a data em "deleted"; histórico e anexos ficam onde estão ----
+    # ---- trash: the document only gets a date in "deleted"; history and attachments stay where they are ----
     def delete(self, doc_id):
         with self._db() as db:
             return db.execute("UPDATE docs SET deleted = ? WHERE id = ? AND deleted IS NULL", (time.time(), doc_id)).rowcount > 0
@@ -258,7 +258,7 @@ class Store:
             shutil.rmtree(self.files(doc_id), ignore_errors=True)
         return gone
 
-    # ---- histórico ----
+    # ---- history ----
     def history(self, doc_id):
         with self._db() as db:
             rows = db.execute("SELECT version, saved, body, label FROM history WHERE doc_id = ? ORDER BY version DESC", (doc_id,)).fetchall()
@@ -268,12 +268,12 @@ class Store:
                 body = json.loads(r["body"])
                 title, nodes = doc_title(body), doc_size(body)
             except (ValueError, KeyError, TypeError, AttributeError, RecursionError):
-                title, nodes = "", 0  # versão malformada não derruba a lista inteira
+                title, nodes = "", 0  # a malformed version does not break the whole list
             out.append({"version": r["version"], "saved": iso(r["saved"]), "title": title, "nodes": nodes, "label": r["label"]})
         return out
 
     def label_version(self, doc_id, label):
-        """Dá nome (None mantém o nome já existente) à versão atual do documento. Devolve a versão ou None se não existe."""
+        """Name the current version of the document (None keeps the existing name). Returns the version, or None if the document does not exist."""
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT version, updated, body FROM docs WHERE id = ? AND deleted IS NULL", (doc_id,)).fetchone()
@@ -289,7 +289,7 @@ class Store:
             row = db.execute("SELECT body FROM history WHERE doc_id = ? AND version = ?", (doc_id, version)).fetchone()
         return _with_id(row, doc_id)
 
-    # ---- sessões de login (sobrevivem a reinícios do servidor) ----
+    # ---- login sessions (they survive server restarts) ----
     @staticmethod
     def _hash(token):
         return hashlib.sha256(token.encode()).hexdigest()
@@ -307,8 +307,8 @@ class Store:
         return bool(row) and row["expires"] > time.time()
 
     def reset_sessions_if_auth_changed(self, user, password):
-        # impressão das credenciais com scrypt (lento) e sal aleatório desta instalação: uma cópia do
-        # banco (ex.: backup externo) não serve para testar senhas rápido. Se mudou, apaga as sessões.
+        # fingerprint of the credentials with scrypt (slow) and a random salt for this installation: a copy of
+        # the database (e.g. an external backup) cannot be used to test passwords quickly. If it changed, drop the sessions.
         with self._db() as db:
             row = db.execute("SELECT value FROM meta WHERE key = 'auth_fingerprint'").fetchone()
             stored = json.loads(row["value"]) if row and row["value"].startswith("{") else None
@@ -323,7 +323,7 @@ class Store:
         with self._db() as db:
             db.execute("DELETE FROM sessions WHERE token_hash = ?", (self._hash(token),))
 
-    # ---- configurações: um JSON por chave ----
+    # ---- settings: one JSON per key ----
     def setting(self, key):
         with self._db() as db:
             row = db.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
@@ -336,14 +336,14 @@ class Store:
             else:
                 db.execute("INSERT OR REPLACE INTO settings VALUES (?, ?)", (key, json.dumps(value, ensure_ascii=False)))
 
-    # ---- pastas: a árvore inteira num JSON (validada pelo servidor) ----
+    # ---- folders: the whole tree in one JSON (validated by the server) ----
     def folders(self):
         with self._db() as db:
             row = db.execute("SELECT value FROM meta WHERE key = 'folders'").fetchone()
         return json.loads(row["value"]) if row else dict(EMPTY_FOLDERS)
 
     def put_folders(self, body):
-        """Grava se a versão bater. Devolve (True, gravado) ou (False, atual)."""
+        """Save if the version matches. Returns (True, saved) or (False, current)."""
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT value FROM meta WHERE key = 'folders'").fetchone()
@@ -355,7 +355,7 @@ class Store:
         return True, body
 
 
-# ---- Migração do formato antigo (um .json por documento) ----
+# ---- Migration from the old format (one .json per document) ----
 def _read_json(file):
     if file.is_symlink():
         return None
@@ -367,17 +367,17 @@ def _read_json(file):
 
 
 def _real_dir(path):
-    # pasta de verdade: link simbólico não é seguido (poderia apontar para fora dos dados)
+    # a real directory: symlinks are not followed (they could point outside the data)
     return path.is_dir() and not path.is_symlink()
 
 
 def migrate_legacy(store: Store, data_dir: Path):
-    """Importa data/*.json, history/, trash/, files/ e folders/ para o banco e a pasta de anexos.
+    """Import data/*.json, history/, trash/, files/ and folders/ into the database and the attachments folder.
 
-    Só entra o que passa na mesma validação da API (id, documento, pastas) e não é link simbólico.
-    Nada é apagado: o formato antigo vai inteiro para data/legacy-<data>/. Pode rodar de novo
-    depois de uma interrupção (INSERT OR IGNORE; anexo já copiado não é copiado de novo).
-    Devolve quantos documentos foram importados (0 se não havia nada antigo).
+    Only what passes the same validation as the API (id, document, folders) and is not a symlink gets in.
+    Nothing is deleted: the old format is moved whole into data/legacy-<date>/. Safe to run again
+    after an interruption (INSERT OR IGNORE; an attachment already copied is not copied again).
+    Returns how many documents were imported (0 if there was nothing old).
     """
     data_dir = Path(data_dir)
     docs = sorted(data_dir.glob("*.json"))
@@ -389,7 +389,7 @@ def migrate_legacy(store: Store, data_dir: Path):
         def add_doc(doc_id, file, deleted):
             body = _read_json(file)
             if not (ID_RE.fullmatch(doc_id) and valid_doc(body)):
-                return False  # id inválido ou corrompido: fica só no backup
+                return False  # invalid id or corrupted: stays in the backup only
             body["id"] = doc_id
             cur = db.execute("INSERT OR IGNORE INTO docs VALUES (?, ?, ?, ?, ?, ?, ?)",
                              (doc_id, doc_type(body), doc_title(body), body["version"], file.stat().st_mtime, deleted,
@@ -409,7 +409,7 @@ def migrate_legacy(store: Store, data_dir: Path):
                 add_history(f.stem, data_dir / "history" / f.stem)
         trash = data_dir / "trash"
         for box in sorted(trash.iterdir()) if _real_dir(trash) else []:
-            # na lixeira com o mesmo id de um documento ativo: fica só no backup
+            # in the trash with the same id as an active document: stays in the backup only
             if _real_dir(box) and (box / "map.json").exists() and add_doc(box.name, box / "map.json", box.stat().st_mtime):
                 imported += 1
                 add_history(box.name, box / "history")
@@ -417,7 +417,7 @@ def migrate_legacy(store: Store, data_dir: Path):
         if valid_folders(tree):
             db.execute("INSERT OR IGNORE INTO meta VALUES ('folders', ?)", (json.dumps(tree, ensure_ascii=False),))
 
-    # anexos: copiados (o original fica no backup); com o banco já gravado, uma interrupção não perde nada
+    # attachments: copied (the original stays in the backup); with the database already written, an interruption loses nothing
     sources = [(d.name, d) for d in (data_dir / "files").iterdir()] if _real_dir(data_dir / "files") else []
     sources += [(b.name, b / "files") for b in trash.iterdir() if _real_dir(b)] if _real_dir(trash) else []
     skip_links = lambda folder, names: [n for n in names if (Path(folder) / n).is_symlink()]
