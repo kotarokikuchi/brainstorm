@@ -430,7 +430,7 @@ class ApiTest(unittest.TestCase):
         key = "sk-ant-segredo-a9F2"
         status, saved = self.req("PUT", "/api/settings/llm/anthropic", {"key": key, "model": "claude-x"})
         self.assertEqual(status, 200)
-        self.assertEqual(saved, {"id": "anthropic", "configured": True, "keyHint": "…a9F2", "model": "claude-x", "baseUrl": ""})
+        self.assertEqual(saved, {"id": "anthropic", "configured": True, "keyHint": "…a9F2", "model": "claude-x", "baseUrl": "", "default": False})
         _, _, raw = self.raw_get("/api/settings/llm")
         self.assertNotIn(b"segredo", raw)
         self.assertNotIn(b"segredo", self.raw_get("/")[2])
@@ -439,6 +439,23 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.server.store.setting("llm")["providers"]["anthropic"]["key"], key)
         self.assertEqual(self.req("DELETE", "/api/settings/llm/anthropic")[0], 204)
         self.assertFalse(self.req("GET", "/api/settings/llm")[1][0]["configured"])
+
+    def test_llm_default_provider(self):
+        defaults = lambda: [p["id"] for p in self.req("GET", "/api/settings/llm")[1] if p["default"]]
+        self.assertEqual(defaults(), [])
+        # sem chave não pode ser o padrão
+        self.assertEqual(self.req("PUT", "/api/settings/llm/openai", {"default": True})[0], 400)
+        self.req("PUT", "/api/settings/llm/openai", {"key": "sk-openai-1111"})
+        self.req("PUT", "/api/settings/llm/deepseek", {"key": "sk-deepseek-2222"})
+        status, saved = self.req("PUT", "/api/settings/llm/openai", {"default": True})
+        self.assertEqual((status, saved["default"]), (200, True))
+        self.assertEqual(defaults(), ["openai"])
+        self.req("PUT", "/api/settings/llm/deepseek", {"default": True})
+        self.assertEqual(defaults(), ["deepseek"])  # um só padrão
+        self.assertEqual(self.req("PUT", "/api/settings/llm/openai", {"default": False})[0], 400)
+        # remover a chave do padrão: fica sem padrão
+        self.req("DELETE", "/api/settings/llm/deepseek")
+        self.assertEqual(defaults(), [])
 
     def test_llm_validation(self):
         for body in ({"key": ""}, {"key": "x" * 501}, {"key": 5}, {"key": "a\nb"}, {"model": "m" * 201},

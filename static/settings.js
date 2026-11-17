@@ -47,13 +47,22 @@ function llmRow(p) {
   const save = el('button', { className: 'primary', textContent: t('common.save') });
   const remove = el('button', { className: 'danger-link', textContent: t('settings.remove'), hidden: !p.configured });
   const badge = el('span', { className: 'settings-badge' + (p.configured ? ' on' : ''), textContent: p.configured ? t('settings.llm.configured') : t('settings.llm.notConfigured') });
-  const li = el('li', { className: 'settings-card settings-grid' },
-    el('div', { className: 'settings-head settings-wide' }, el('strong', { textContent: name }), badge),
+  // LLM padrão: um só, e só entre os que têm chave
+  const radio = el('input', { type: 'radio', name: 'llm-default', checked: !!p.default, disabled: !p.configured });
+  const pick = el('label', { className: 'llm-default', title: p.configured ? '' : t('settings.llm.defaultNeedsKey') }, radio, el('span', { textContent: t('settings.llm.default') }));
+  const li = el('li', { className: 'settings-card settings-grid' + (p.default ? ' is-default' : '') },
+    el('div', { className: 'settings-head settings-wide' }, el('strong', { textContent: name }), el('span', { className: 'settings-head-end' }, pick, badge)),
     el('label', {}, el('span', { textContent: t('settings.llm.key') }), key),
     el('label', {}, el('span', { textContent: t('settings.llm.model') }), model));
   li.dataset.id = p.id;
   if (p.id === 'custom') li.append(el('label', { className: 'settings-wide' }, el('span', { textContent: t('settings.llm.baseUrl') }), base));
   li.append(el('div', { className: 'settings-actions settings-wide' }, save, remove, msg));
+  radio.onchange = async () => {
+    const r = await call('PUT', `/api/settings/llm/${p.id}`, { default: true });
+    if (!r.ok) { say(msg, errorText(r), true); radio.checked = false; return; }
+    await loadLlm();  // os outros cartões perdem a marca
+    say($(`#llm-list [data-id="${p.id}"] .settings-msg`), t('settings.llm.defaultSaved', { name }));
+  };
   save.onclick = async () => {
     const body = { model: model.value.trim(), ...(p.id === 'custom' ? { baseUrl: base.value.trim() } : {}), ...(key.value.trim() ? { key: key.value } : {}) };
     const r = await call('PUT', `/api/settings/llm/${p.id}`, body);

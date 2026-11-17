@@ -1660,6 +1660,13 @@ assert.deepEqual(await ev(`(() => { const r = ${llmRow}, k = r.querySelector('in
   ['', true, 'Salvo.', 'Chave salva'], 'salvar a chave mostra só a máscara');
 assert.equal(await ev(`document.documentElement.outerHTML.includes('segredo')`), false, 'a chave não fica na página');
 const llmApi = await (await fetch(BASE + '/api/settings/llm')).text();
+// LLM padrão: radio só vale para quem tem chave e marca um só
+assert.deepEqual(await ev(`[...document.querySelectorAll('#llm-list input[name=llm-default]')].map(r => r.disabled)`),
+  [true, false, true, true, true, true], 'só o provedor com chave pode ser o padrão');
+await ev(`${llmRow}.querySelector('input[name=llm-default]').click()`); await sleep(1000);
+assert.deepEqual(await ev(`[[...document.querySelectorAll('#llm-list input[name=llm-default]:checked')].map(r => r.closest('li').dataset.id), document.querySelector('#llm-list li.is-default')?.dataset.id]`),
+  [['openai'], 'openai'], 'escolher o padrão marca o cartão');
+assert.equal((await (await fetch(BASE + '/api/settings/llm')).json()).find(p => p.default)?.id, 'openai', 'o padrão fica salvo no servidor');
 assert.ok(!llmApi.includes('segredo') && llmApi.includes('…WXYZ'), 'a API só devolve a máscara');
 await ev(`document.querySelector('#settings-menu-btn').click(); document.querySelector('#settings-backup-btn').click()`); await sleep(1000);
 assert.deepEqual(await ev(`[location.hash, document.querySelector('#settings-llm').hidden, document.querySelector('#settings-backup').hidden, document.querySelector('#backup-run').disabled]`),
