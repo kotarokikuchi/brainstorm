@@ -79,7 +79,6 @@ export default {
   'trash.deletedAt': 'eliminado el {date}',  // {date}: fecha y hora ya formateadas
   'trash.purge': 'Eliminar para siempre',  // botón: borrado definitivo
   'trash.purgeConfirm': '¿Eliminar para siempre? No se puede deshacer.',
-  'trash.restoreConflict': 'Ya existe un mapa con ese identificador; no se pudo restaurar.',
 
   // ---- Historial de versiones ----
   'history.title': 'Historial de versiones',  // sugerencia del botón y título del panel

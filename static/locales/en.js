@@ -79,7 +79,6 @@ export default {
   'trash.deletedAt': 'deleted {date}',  // {date}: date and time, already formatted
   'trash.purge': 'Delete forever',  // button: permanent deletion
   'trash.purgeConfirm': 'Delete forever? This can’t be undone.',
-  'trash.restoreConflict': 'A map with this ID already exists; couldn’t restore it.',
 
   // ---- Version history ----
   'history.title': 'Version history',  // button tooltip and panel title

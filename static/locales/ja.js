@@ -79,7 +79,6 @@ export default {
   'trash.deletedAt': '{date} に削除',  // {date}: date and time, already formatted
   'trash.purge': '完全に削除',  // button: permanent deletion
   'trash.purgeConfirm': '完全に削除しますか？この操作は元に戻せません。',
-  'trash.restoreConflict': '同じ ID のマップがすでに存在するため、復元できませんでした。',
 
   // ---- Version history ----
   'history.title': 'バージョン履歴',  // button tooltip and panel title

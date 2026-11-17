@@ -79,7 +79,6 @@ export default {
   'trash.deletedAt': 'apagado em {date}',  // {date}: data e hora já formatadas
   'trash.purge': 'Apagar de vez',  // botão: exclusão definitiva
   'trash.purgeConfirm': 'Apagar de vez? Isso não pode ser desfeito.',
-  'trash.restoreConflict': 'Já existe um mapa com esse identificador; não foi possível restaurar.',
 
   // ---- Histórico de versões ----
   'history.title': 'Histórico de versões',  // dica do botão e título do painel

@@ -445,8 +445,7 @@ $('#new-folder').onclick = async () => {
 $('#trash-list').addEventListener('click', async (e) => {
   const d = e.target.closest('button')?.dataset;
   if (d?.restore) {
-    const r = await fetch(`/api/trash/${d.restore}/restore`, { method: 'POST' });
-    if (r.status === 409) alert(t('trash.restoreConflict'));
+    await fetch(`/api/trash/${d.restore}/restore`, { method: 'POST' });
   } else if (d?.purge) {
     if (!confirm(t('trash.purgeConfirm'))) return;
     await fetch(`/api/trash/${d.purge}`, { method: 'DELETE' });
