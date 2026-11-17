@@ -1653,7 +1653,7 @@ await ev(`(() => { const s = document.querySelector('#search'); s.value = ''; s.
 await ev(`location.hash = '#/'`); await sleep(500);
 await ev(`document.querySelector('#settings-menu-btn').click(); document.querySelector('#settings-llm-btn').click()`); await sleep(1000);
 assert.deepEqual(await ev(`[location.hash, document.body.dataset.view, document.querySelector('#settings-llm').hidden, document.querySelector('#settings-backup').hidden, document.querySelector('#settings-menu').hidden, document.querySelectorAll('#llm-list li').length]`),
-  ['#/settings/llm', 'settings', false, true, true, 5], 'Configurar LLM abre a tela com os provedores');
+  ['#/settings/llm', 'settings', false, true, true, 6], 'Configurar LLM abre a tela com os provedores');
 const llmRow = `document.querySelector('#llm-list li[data-id="openai"]')`;
 await ev(`(() => { const r = ${llmRow}; r.querySelector('input[type=password]').value = 'sk-e2e-segredo-WXYZ'; r.querySelector('button.primary').click(); })()`); await sleep(800);
 assert.deepEqual(await ev(`(() => { const r = ${llmRow}, k = r.querySelector('input[type=password]'); return [k.value, k.placeholder.includes('…WXYZ'), r.querySelector('.settings-msg').textContent, r.querySelector('.settings-badge').textContent]; })()`),
