@@ -438,6 +438,30 @@ class ApiTest(unittest.TestCase):
                          "http://localhost:11434/v1")
         self.assertEqual(self.req("PUT", "/api/settings/llm/openai", {"key": "short"})[1]["keyHint"], "…", "chave curta não mostra o final")
 
+    # ---- Configurações: backup ----
+    BACKUP = {"endpoint": "https://s3.eu-central-2.wasabisys.com", "region": "eu-central-2", "bucket": "meu-bucket",
+              "prefix": "brainstorm/", "accessKey": "AKIDEXEMPLO", "secretKey": "segredo-do-storage-x9Z1",
+              "interval": 24, "keep": 14, "enabled": True}
+
+    def test_backup_settings_never_return_the_secret(self):
+        status, view = self.req("GET", "/api/settings/backup")
+        self.assertEqual((status, view["configured"], view["prefix"], view["interval"], view["keep"]), (200, False, "brainstorm/", 24, 14))
+        status, view = self.req("PUT", "/api/settings/backup", self.BACKUP)
+        self.assertEqual(status, 200)
+        self.assertNotIn("secretKey", view)
+        self.assertEqual((view["secretHint"], view["configured"], view["accessKey"]), ("…x9Z1", True, "AKIDEXEMPLO"))
+        self.assertNotIn(b"segredo-do-storage", self.raw_get("/api/settings/backup")[2])
+        keep = {k: v for k, v in self.BACKUP.items() if k != "secretKey"}
+        self.assertEqual(self.req("PUT", "/api/settings/backup", {**keep, "keep": 3})[1]["secretHint"], "…x9Z1", "sem secretKey: mantém")
+        self.assertEqual(self.server.backup.config()["secretKey"], "segredo-do-storage-x9Z1")
+        self.assertEqual(self.req("PUT", "/api/settings/backup", {**self.BACKUP, "endpoint": "http://s3.wasabisys.com"})[0], 400, "só https")
+        self.assertEqual(self.req("PUT", "/api/settings/backup", raw=b"nope")[0], 400)
+
+    def test_backup_without_storage_is_400(self):
+        self.assertEqual(self.req("POST", "/api/backup/run")[0], 400)
+        self.assertEqual(self.req("GET", "/api/backup/list")[0], 400)
+        self.assertEqual(self.req("GET", "/api/backup/run")[0], 404)
+
     def test_static_files_are_revalidated(self):
         # sem isso o navegador reaproveita JS antigo (cache heurístico) depois de uma atualização
         status, headers, _ = self.raw_get("/app.js")

@@ -14,6 +14,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from backup import Backup, BackupError, Busy, NotConfigured, clean_config, hint, text_ok
+from s3 import S3Error
 from store import ID_RE, Store, migrate_legacy, valid_doc, valid_folders
 
 ROOT = Path(__file__).resolve().parent
@@ -424,8 +426,39 @@ class Handler(SimpleHTTPRequestHandler):
         kind, _, rest = path[len("/api/settings/"):].partition("/") if path.startswith("/api/settings/") else ("", "", "")
         if kind == "llm":
             self._llm(method, rest)
+        elif kind == "backup" and not rest and method in ("GET", "PUT"):
+            self._backup_config(method)
+        elif path in ("/api/backup/run", "/api/backup/list") and method == ("POST" if path.endswith("run") else "GET"):
+            self._backup_call(self.server.backup.run if path.endswith("run") else self.server.backup.list)
         else:
             self._send(404, {"error": "not found"})
+
+    def _backup_config(self, method):
+        backup = self.server.backup
+        if method == "PUT":
+            responded, body = self._json()
+            if responded:
+                return
+            cfg = clean_config(body)
+            if cfg is None:
+                self._send(400, {"error": "invalid backup settings"})
+                return
+            with self.server.settings_lock:
+                backup.save_config(cfg)
+        self._send(200, backup.view())
+
+    def _backup_call(self, action):
+        # backup agora / lista do bucket: síncronos; erro do storage = 502 com a mensagem curta
+        try:
+            result = action()
+        except Busy:
+            self._send(409, {"error": "a backup or restore is already running"})
+        except NotConfigured:
+            self._send(400, {"error": "backup storage is not configured"})
+        except (BackupError, S3Error) as e:
+            self._send(502, {"error": str(e)})
+        else:
+            self._send(200, self.server.backup.view() if isinstance(result, str) else result)
 
     def _llm(self, method, pid):
         store = self.server.store
@@ -467,15 +500,6 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.write(data)
 
 
-def hint(secret):
-    # só o final do segredo, e nem isso se for curto demais (mostraria quase tudo)
-    return "…" + secret[-4:] if len(secret) > 8 else "…" if secret else ""
-
-
-def text_ok(v, limit):
-    return isinstance(v, str) and len(v) <= limit and v.isprintable()
-
-
 def valid_llm(body):
     # key ausente = mantém; vazia não vale (para remover há o DELETE)
     return (isinstance(body, dict)
@@ -504,6 +528,7 @@ def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: P
         store.reset_sessions_if_auth_changed(*auth)  # trocou usuário/senha: todo mundo entra de novo
     server.login_delay, server.login_fails, server.login_lock = 1.0, [], threading.Lock()
     server.settings_lock = threading.Lock()
+    server.backup = Backup(store)  # a agenda só liga no main() (testes não fazem backup sozinhos)
     server.data_dir = data_dir
     server.static_dir = ROOT / "static"
     server.history_interval = HISTORY_INTERVAL
@@ -560,6 +585,7 @@ def main():
         print("Aviso: sem BRAINSTORM_USER/BRAINSTORM_PASSWORD, o app abre sem login.", flush=True)
     server = make_server(Path(os.environ.get("BRAINSTORM_DATA") or ROOT / "data"), port, host,
                          Path(files) if files else None, (user, password) if user else None)
+    server.backup.start()
     # recarrega sozinho ao editar o servidor (HTML/CSS/JS já vêm frescos a cada F5)
     watch([Path(__file__).resolve()], restart)
     print(f"Abra http://127.0.0.1:{port}")
