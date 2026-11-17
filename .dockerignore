@@ -1,0 +1,7 @@
+.git
+data
+docs
+tests
+test_app.py
+__pycache__
+.superpowers

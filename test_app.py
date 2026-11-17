@@ -94,6 +94,11 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(list(self.data.iterdir()), [])
         port = self.server.server_address[1]
         self.assertEqual(self.req("GET", "/api/maps", headers={"Host": f"localhost:{port}"})[0], 200)
+        # porta publicada diferente (Docker): o nome local é o que importa
+        self.assertEqual(self.req("GET", "/api/maps", headers={"Host": "127.0.0.1:8080"})[0], 200)
+        self.assertEqual(self.req("GET", "/api/maps", headers={"Host": "localhost"})[0], 200)
+        for evil in ("localhost.evil.com:80", "127.0.0.1.evil.com", "localhost:80x", "evil.com:127.0.0.1"):
+            self.assertEqual(self.req("GET", "/api/maps", headers={"Host": evil})[0], 403, evil)
 
     def test_upload_image_is_served_inline(self):
         self.make_map()
@@ -141,6 +146,11 @@ class ApiTest(unittest.TestCase):
         port = self.server.server_address[1]
         ok = {"X-Filename": "a.png", "Origin": f"http://127.0.0.1:{port}"}
         self.assertEqual(self.req("POST", "/api/maps/abc/files", raw=b"x", headers=ok)[0], 201)
+        # a origem precisa ser o próprio endereço da página (outra porta local também é outro site)
+        other = {"X-Filename": "a.png", "Origin": "http://localhost:3000"}
+        self.assertEqual(self.req("POST", "/api/maps/abc/files", raw=b"x", headers=other)[0], 403)
+        docker = {"X-Filename": "a.png", "Host": "localhost:8080", "Origin": "http://localhost:8080"}
+        self.assertEqual(self.req("POST", "/api/maps/abc/files", raw=b"x", headers=docker)[0], 201)
         self.assertFalse((self.data / "files" / "zzz").exists())
         self.assertEqual(self.upload("zzz", "a.png", b"x")[0], 404, "mapa inexistente")
 
