@@ -1,6 +1,6 @@
 # Brainstorm
 
-Mapas mentais e quadros de desenho para uso pessoal, rodando na sua máquina.
+Mapas mentais, quadros de desenho e skills (textos Markdown para LLMs, com preview, tags e versões nomeadas) para uso pessoal, rodando na sua máquina.
 
 ## Rodar com Docker
 
@@ -91,6 +91,6 @@ Variáveis opcionais: `BRAINSTORM_HOST` (padrão `127.0.0.1`), `BRAINSTORM_DATA`
 
 ```bash
 python -m unittest test_app        # servidor
-node --test tests/*.test.mjs       # lógica dos mapas, quadros e pastas
+node --test tests/*.test.mjs       # lógica dos mapas, quadros, skills e pastas
 node tests/e2e.mjs                 # ponta a ponta no Chrome headless (~2 min)
 ```
