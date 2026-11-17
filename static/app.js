@@ -4,7 +4,7 @@ import {
 } from './model.js';
 import { folderOf, childFolders, folderPath, removeFolder, placeDoc, subtree, moveFolder, folderOptions, sortItems, searchItems } from './folders.js';
 import { initBoard, openBoard, closeBoard, currentBoard, newBoard, boardSvg, boardPlace, renameBoard } from './board.js';
-import { initSkill, openSkill, closeSkill, currentSkill, newSkill, renameSkill } from './skill.js';
+import { initSkill, openSkill, closeSkill, currentSkill, newSkill, renameSkill, skillPlace } from './skill.js';
 import { LANGS, lang, setLang, t, applyI18n, fmtDateTime } from './i18n.js';
 
 const $ = (s) => document.querySelector(s);
@@ -43,13 +43,14 @@ const api = (method, path = '', body) => fetch('/api/maps' + path, {
 const PLACE = 'galho:place:';
 function savePlace() {
   const board = currentBoard(), id = map?.id ?? board?.id ?? currentSkill()?.id;
-  const place = map ? { view: { ...view }, selected, focusId, outlineOn } : board ? boardPlace() : null;
+  const place = map ? { view: { ...view }, selected, focusId, outlineOn } : board ? boardPlace() : currentSkill() ? skillPlace() : null;
   try { if (id) localStorage.setItem(PLACE + id, JSON.stringify(place)); } catch { /* armazenamento bloqueado: só não lembra */ }
 }
 function loadPlace(id) {
   try {
     const p = JSON.parse(localStorage.getItem(PLACE + id));
     const v = p?.view;
+    if (p?.mode) return p;  // skill: modo, rolagem e cursor
     return v && [v.x, v.y, v.k].every(Number.isFinite) && v.k > 0 ? p : null;
   } catch { return null; }
 }
@@ -483,7 +484,7 @@ async function openMap(id) {
     return;
   }
   map = await r.json();
-  if (map.type === 'board') { map = null; location.hash = `#/board/${id}`; return; }  // endereço antigo de quadro
+  if (map.type !== 'map') { const type = map.type; map = null; location.hash = `#/${type}/${id}`; return; }  // endereço antigo de quadro ou skill
   history = new History();
   selected = map.root.id;
   toolbarOn = false;
@@ -2220,7 +2221,7 @@ $('#branch-layout-row').addEventListener('click', (e) => {
 });
 
 // ---------- Skills (Markdown) ----------
-initSkill({ api, setStatus, scheduleSave, resetSave: () => { if (conflict) dirty = false; conflict = false; } });
+initSkill({ api, setStatus, scheduleSave, flushSave, loadPlace, resetSave: () => { if (conflict) dirty = false; conflict = false; } });
 
 // ---------- Quadros (lousa) ----------
 initBoard({

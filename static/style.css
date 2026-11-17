@@ -380,3 +380,63 @@ body:not([data-view="list"]) .top-menus { padding-right: 12px; border-right: 1px
 .top-menu-btn .chev { width: 14px; height: 14px; color: var(--muted); }
 .top-menu-pop { top: calc(100% + 6px); left: 0; min-width: 200px; z-index: 30; }
 .crumb-kind { color: inherit; }
+
+/* ---------- Skill (editor Markdown) ---------- */
+#skill-view { height: calc(100% - 52px); display: flex; flex-direction: column; background: #fff; }
+.skill-bar, .skill-tags { display: flex; align-items: center; gap: 8px; padding: 8px 16px; flex-wrap: wrap; }
+.skill-bar { border-bottom: 1px solid var(--line); }
+.skill-bar button, .skill-diff-bar button { font-size: 13px; }
+.skill-modes { width: auto; }
+.skill-modes button { flex: none; padding: 5px 12px; }
+.skill-spacer { flex: 1; }
+#skill-versions-btn.active { background: #e8eefe; border-color: var(--accent); color: var(--accent); }
+.skill-tags { border-bottom: 1px solid var(--line); gap: 6px; }
+.skill-tags > span { display: contents; }
+.skill-tag { display: inline-flex; align-items: center; gap: 2px; background: #e8eefe; color: var(--accent); border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 13px; }
+.skill-tag button { border: none; background: transparent; color: inherit; padding: 0 6px; font-size: 16px; line-height: 1; border-radius: 999px; }
+#skill-tag-input { border: none; outline: none; font: inherit; font-size: 13px; min-width: 120px; flex: 1; background: transparent; }
+.skill-main { flex: 1; display: flex; min-height: 0; }
+.skill-body { flex: 1; display: flex; min-width: 0; min-height: 0; position: relative; }
+#skill-text { flex: 1; min-width: 0; resize: none; border: none; outline: none; padding: 20px 24px; font: 14px/1.6 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; color: var(--ink); background: #fff; tab-size: 2; }
+#skill-preview, #skill-diff { flex: 1; min-width: 0; overflow: auto; padding: 20px 24px; border-left: 1px solid var(--line); }
+#skill-view[data-mode="edit"] #skill-preview, #skill-view[data-mode="preview"] #skill-text { display: none; }
+#skill-view[data-mode="preview"] #skill-preview, #skill-view[data-mode="preview"] #skill-diff { border-left: none; }
+#skill-view.comparing #skill-preview { display: none; }
+#skill-view.comparing[data-mode="preview"] #skill-text { display: none; }
+#skill-diff[hidden] { display: none; }
+.skill-diff-bar { margin-bottom: 12px; }
+.diff-line { display: flex; white-space: pre-wrap; word-break: break-word; font: 13px/1.5 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; padding: 0 8px 0 0; }
+.diff-line code { font: inherit; white-space: pre-wrap; }
+.diff-line span { flex: 0 0 24px; text-align: center; color: var(--muted); user-select: none; }
+.diff-line.add { background: #e6f7ea; }
+.diff-line.del { background: #fdeaea; }
+.diff-line.add span { color: #1a7f37; }
+.diff-line.del span { color: var(--danger); }
+.skill-diff-msg { color: var(--muted); }
+#skill-versions { width: 300px; flex: none; overflow: auto; border-left: 1px solid var(--line); padding: 8px; background: #fbfbfe; }
+#skill-versions[hidden] { display: none; }
+#skill-versions ul { list-style: none; margin: 0; padding: 0; }
+#skill-versions li { display: flex; align-items: center; gap: 4px; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+#skill-versions li div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#skill-versions li small { color: var(--muted); }
+#skill-versions li button { padding: 3px 8px; font-size: 12px; }
+#skill-no-versions { color: var(--muted); padding: 8px; margin: 0; }
+@media (max-width: 800px) { #skill-versions { position: absolute; right: 0; top: 0; bottom: 0; z-index: 2; box-shadow: 0 4px 18px #1d1d2b1f; } .skill-main { position: relative; } }
+
+.markdown { max-width: 760px; font-size: 15px; line-height: 1.65; overflow-wrap: anywhere; }
+#skill-view[data-mode="preview"] .markdown { margin: 0 auto; }
+.markdown > :first-child { margin-top: 0; }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4 { line-height: 1.25; margin: 1.4em 0 .5em; }
+.markdown h1 { font-size: 1.7em; } .markdown h2 { font-size: 1.35em; border-bottom: 1px solid var(--line); padding-bottom: .2em; } .markdown h3 { font-size: 1.15em; }
+.markdown p, .markdown ul, .markdown ol, .markdown pre, .markdown table, .markdown blockquote { margin: 0 0 1em; }
+.markdown ul, .markdown ol { padding-left: 1.6em; }
+.markdown code { font: .9em ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; background: #f1f0f7; border-radius: 4px; padding: .1em .35em; }
+.markdown pre { background: #f6f5fb; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow: auto; }
+.markdown pre code { background: none; padding: 0; font-size: 13px; line-height: 1.5; }
+.markdown blockquote { border-left: 4px solid var(--line); padding: 0 1em; color: var(--muted); }
+.markdown table { border-collapse: collapse; display: block; overflow: auto; }
+.markdown th, .markdown td { border: 1px solid var(--line); padding: 6px 12px; }
+.markdown th { background: #f6f5fb; }
+.markdown hr { border: none; border-top: 1px solid var(--line); margin: 1.5em 0; }
+.markdown a { color: var(--accent); }
+.markdown img { max-width: 100%; }

@@ -52,7 +52,7 @@ export default {
   'list.newFolder': 'Nueva carpeta',  // botón
   'list.newBoard': 'Nueva pizarra',  // botón
   'list.newMap': 'Nuevo mapa',  // botón
-  'list.searchPlaceholder': 'Buscar mapas, pizarras y carpetas',  // texto de ejemplo del campo de búsqueda
+  'list.searchPlaceholder': 'Buscar mapas, pizarras, skills y carpetas',  // texto de ejemplo del campo de búsqueda
   'list.sortBy': 'Ordenar',  // sugerencia del selector de orden
   'list.sortRecent': 'Modificados recientemente',
   'list.sortOldest': 'Modificados hace más tiempo',
@@ -346,4 +346,18 @@ export default {
   'doc.trashConfirmSkill': '¿Mover el skill "{title}" a la papelera?',
   'list.createSkillError': 'No se pudo crear el skill.',
   'skill.template': '# {title}\n\n## Cuándo usar\n\n## Instrucciones\n',
+  'skill.edit': 'Editar',
+  'skill.split': 'Dividir',
+  'skill.preview': 'Vista previa',
+  'skill.saveVersion': 'Guardar versión',
+  'skill.versions': 'Versiones',
+  'skill.versionLabelPrompt': 'Nombre de la versión (opcional):',
+  'skill.versionSaved': 'Versión guardada',
+  'skill.compare': 'Comparar',
+  'skill.closeCompare': 'Cerrar comparación',
+  'skill.diffTooLarge': 'Texto demasiado grande para comparar.',
+  'skill.chars': '{n} caracteres',
+  'skill.addTag': 'Añadir etiqueta',
+  'skill.removeTag': 'Quitar etiqueta {tag}',
+  'skill.noVersions': 'Aún no hay versiones.',
 };

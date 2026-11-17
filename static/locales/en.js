@@ -52,7 +52,7 @@ export default {
   'list.newFolder': 'New folder',  // button
   'list.newBoard': 'New board',  // button
   'list.newMap': 'New map',  // button
-  'list.searchPlaceholder': 'Search maps, boards and folders',  // placeholder of the search field
+  'list.searchPlaceholder': 'Search maps, boards, skills and folders',  // placeholder of the search field
   'list.sortBy': 'Sort',  // tooltip of the sort selector
   'list.sortRecent': 'Recently modified',
   'list.sortOldest': 'Least recently modified',
@@ -346,4 +346,18 @@ export default {
   'doc.trashConfirmSkill': 'Move the skill "{title}" to the trash?',
   'list.createSkillError': 'Couldn’t create the skill.',
   'skill.template': '# {title}\n\n## When to use\n\n## Instructions\n',
+  'skill.edit': 'Edit',
+  'skill.split': 'Split',
+  'skill.preview': 'Preview',
+  'skill.saveVersion': 'Save version',
+  'skill.versions': 'Versions',
+  'skill.versionLabelPrompt': 'Version name (optional):',
+  'skill.versionSaved': 'Version saved',
+  'skill.compare': 'Compare',
+  'skill.closeCompare': 'Close comparison',
+  'skill.diffTooLarge': 'Text too large to compare.',
+  'skill.chars': '{n} characters',
+  'skill.addTag': 'Add tag',
+  'skill.removeTag': 'Remove tag {tag}',
+  'skill.noVersions': 'No versions yet.',
 };

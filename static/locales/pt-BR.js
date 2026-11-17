@@ -52,7 +52,7 @@ export default {
   'list.newFolder': 'Nova pasta',  // botão
   'list.newBoard': 'Novo quadro',  // botão
   'list.newMap': 'Novo mapa',  // botão
-  'list.searchPlaceholder': 'Buscar mapas, quadros e pastas',  // texto de exemplo do campo de busca
+  'list.searchPlaceholder': 'Buscar mapas, quadros, skills e pastas',  // texto de exemplo do campo de busca
   'list.sortBy': 'Ordenar',  // dica do seletor de ordenação
   'list.sortRecent': 'Modificados recentemente',
   'list.sortOldest': 'Modificados há mais tempo',
@@ -346,4 +346,18 @@ export default {
   'doc.trashConfirmSkill': 'Mover o skill "{title}" para a lixeira?',
   'list.createSkillError': 'Não foi possível criar o skill.',
   'skill.template': '# {title}\n\n## Quando usar\n\n## Instruções\n',
+  'skill.edit': 'Editar',
+  'skill.split': 'Dividir',
+  'skill.preview': 'Preview',
+  'skill.saveVersion': 'Salvar versão',
+  'skill.versions': 'Versões',
+  'skill.versionLabelPrompt': 'Nome da versão (opcional):',
+  'skill.versionSaved': 'Versão salva',
+  'skill.compare': 'Comparar',
+  'skill.closeCompare': 'Fechar comparação',
+  'skill.diffTooLarge': 'Texto grande demais para comparar.',
+  'skill.chars': '{n} caracteres',
+  'skill.addTag': 'Adicionar tag',
+  'skill.removeTag': 'Remover tag {tag}',
+  'skill.noVersions': 'Nenhuma versão ainda.',
 };

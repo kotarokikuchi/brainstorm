@@ -121,7 +121,7 @@
       <h1 id="list-title" data-i18n="list.root">Meus mapas</h1>
     </div>
     <div class="list-tools">
-      <label class="search"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg><input id="search" type="search" data-i18n-placeholder="list.searchPlaceholder" placeholder="Buscar mapas, quadros e pastas" autocomplete="off"></label>
+      <label class="search"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg><input id="search" type="search" data-i18n-placeholder="list.searchPlaceholder" placeholder="Buscar mapas, quadros, skills e pastas" autocomplete="off"></label>
       <label class="sort" data-i18n-title="list.sortBy" title="Ordenar"><svg viewBox="0 0 24 24"><use href="#i-arrows-sort"/></svg><select id="sort">
         <option value="recent" data-i18n="list.sortRecent">Modificados recentemente</option>
         <option value="oldest" data-i18n="list.sortOldest">Modificados há mais tempo</option>
@@ -317,7 +317,36 @@
     </div>
   </section>
 
-  <section id="skill-view"></section>
+  <section id="skill-view" data-mode="split">
+    <div class="skill-bar">
+      <div class="seg skill-modes">
+        <button data-mode="edit" data-i18n="skill.edit">Editar</button>
+        <button data-mode="split" data-i18n="skill.split">Dividir</button>
+        <button data-mode="preview" data-i18n="skill.preview">Preview</button>
+      </div>
+      <span class="skill-spacer"></span>
+      <button id="skill-save-version" data-i18n="skill.saveVersion">Salvar versão</button>
+      <button id="skill-versions-btn" data-i18n="skill.versions">Versões</button>
+    </div>
+    <div class="skill-tags">
+      <span id="skill-tag-list"></span>
+      <input id="skill-tag-input" maxlength="40" autocomplete="off" data-i18n-placeholder="skill.addTag" data-i18n-aria-label="skill.addTag" placeholder="Adicionar tag" aria-label="Adicionar tag">
+    </div>
+    <div class="skill-main">
+      <div class="skill-body">
+        <textarea id="skill-text" spellcheck="false"></textarea>
+        <article id="skill-preview" class="markdown"></article>
+        <div id="skill-diff" hidden>
+          <div class="skill-diff-bar"><button id="skill-close-compare" data-i18n="skill.closeCompare">Fechar comparação</button></div>
+          <div id="skill-diff-lines"></div>
+        </div>
+      </div>
+      <aside id="skill-versions" hidden>
+        <p id="skill-no-versions" data-i18n="skill.noVersions" hidden>Nenhuma versão ainda.</p>
+        <ul id="skill-version-list"></ul>
+      </aside>
+    </div>
+  </section>
   <section id="board-view">
     <svg id="board-canvas"><g id="board-root"></g></svg>
     <div id="board-tools" class="card">

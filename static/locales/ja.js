@@ -52,7 +52,7 @@ export default {
   'list.newFolder': '新規フォルダ',  // button
   'list.newBoard': '新規ボード',  // button
   'list.newMap': '新規マップ',  // button
-  'list.searchPlaceholder': 'マップ、ボード、フォルダを検索',  // placeholder of the search field
+  'list.searchPlaceholder': 'マップ、ボード、スキル、フォルダを検索',  // placeholder of the search field
   'list.sortBy': '並べ替え',  // tooltip of the sort selector
   'list.sortRecent': '更新日時（新しい順）',  // "modified recently first"
   'list.sortOldest': '更新日時（古い順）',  // "modified longest ago first"
@@ -346,4 +346,18 @@ export default {
   'doc.trashConfirmSkill': 'スキル「{title}」をゴミ箱に移動しますか？',
   'list.createSkillError': 'スキルを作成できませんでした。',
   'skill.template': '# {title}\n\n## 使うタイミング\n\n## 手順\n',
+  'skill.edit': '編集',
+  'skill.split': '分割',
+  'skill.preview': 'プレビュー',
+  'skill.saveVersion': 'バージョンを保存',
+  'skill.versions': 'バージョン',
+  'skill.versionLabelPrompt': 'バージョン名（任意）：',
+  'skill.versionSaved': 'バージョンを保存しました',
+  'skill.compare': '比較',
+  'skill.closeCompare': '比較を閉じる',
+  'skill.diffTooLarge': 'テキストが大きすぎて比較できません。',
+  'skill.chars': '{n} 文字',
+  'skill.addTag': 'タグを追加',
+  'skill.removeTag': 'タグ {tag} を削除',
+  'skill.noVersions': 'バージョンはまだありません。',
 };
