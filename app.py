@@ -144,8 +144,9 @@ class Handler(SimpleHTTPRequestHandler):
         want_user, want_password = self.server.auth
         # compara os dois sempre e em tempo constante: a resposta não indica qual dos dois errou
         ok = isinstance(user, str) and isinstance(password, str)
-        ok = hmac.compare_digest((user if ok else "").encode(), want_user.encode()) & \
-            hmac.compare_digest((password if ok else "").encode(), want_password.encode()) & ok
+        # surrogatepass: um surrogate solto no JSON vira bytes (e não confere) em vez de derrubar a requisição
+        ok = hmac.compare_digest((user if ok else "").encode(errors="surrogatepass"), want_user.encode()) & \
+            hmac.compare_digest((password if ok else "").encode(errors="surrogatepass"), want_password.encode()) & ok
         if not ok:
             time.sleep(self.server.login_delay)  # atrasa quem tenta adivinhar (o erro já foi contado)
             self._send(401, {"error": "invalid credentials"})
