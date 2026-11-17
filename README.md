@@ -121,3 +121,8 @@ node tests/e2e.mjs                  # ponta a ponta no Chrome headless (~4 min)
 ```
 
 Os testes em Node pedem o Node 22 ou mais novo; o `e2e` também precisa do `google-chrome` no PATH.
+
+## Licença
+
+[MIT](LICENSE). Os ícones ([Tabler Icons](static/LICENSE-tabler-icons.txt), MIT) e a fonte
+[Kalam](static/fonts/LICENSE-kalam.txt) (SIL Open Font License) seguem as licenças próprias.
