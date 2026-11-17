@@ -5,7 +5,7 @@ services:
     # só na sua máquina (127.0.0.1): ninguém na rede acessa. O app fala HTTP puro: para usar de outra
     # máquina, túnel SSH ou proxy reverso com TLS; nunca troque para 0.0.0.0
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8080:8000"
     # seus mapas, quadros, anexos, histórico e lixeira continuam na pasta ./data
     volumes:
       - ./data:/data
