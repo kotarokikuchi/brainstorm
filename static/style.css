@@ -364,3 +364,13 @@ body.presenting #canvas { cursor: default; }
 body:not([data-view="list"]) .topbar .new-buttons { display: none; }
 body[data-view="list"] .topbar .new-buttons { margin-left: auto; }
 .login-card #lang { display: block; margin: 18px auto 0; color: var(--muted); }
+
+/* menus Mapas / Quadros no topo */
+.top-menus { display: flex; gap: 2px; }
+.top-menu { position: relative; }
+.top-menu-btn { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; padding: 6px 8px; font-weight: 600; color: var(--ink); }
+.top-menu-btn:hover { background: #f0f0f6; }
+.top-menu-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.top-menu-btn .chev { width: 14px; height: 14px; color: var(--muted); }
+.top-menu-pop { top: calc(100% + 6px); left: 0; min-width: 200px; z-index: 30; }
+.crumb-kind { color: inherit; }

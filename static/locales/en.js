@@ -25,6 +25,10 @@ export default {
   'topbar.docOptions': 'Map options',  // tooltip of the "…" button next to the title (also used for boards)
   'topbar.present': 'Present',  // tooltip: presentation mode
   'topbar.logout': 'Log out',  // tooltip: end the session
+  'topbar.maps': 'Maps',
+  'topbar.boards': 'Boards',
+  'topbar.listMaps': 'All maps',
+  'topbar.listBoards': 'All boards',
 
   // ---- Autosave status (text at the top) ----
   'status.saved': 'Saved',
@@ -55,6 +59,8 @@ export default {
   'list.sortAz': 'Name (A–Z)',
   'list.sortZa': 'Name (Z–A)',
   'list.empty': 'No maps yet. Create your first one.',
+  'list.noMaps': 'No maps yet.',
+  'list.noBoards': 'No boards yet.',
   'list.emptyFolder': 'This folder is empty.',
   'list.searchNoResults': 'No results for “{query}”.',
   'list.createMapError': 'Couldn’t create the map.',

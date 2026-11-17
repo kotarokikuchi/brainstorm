@@ -25,6 +25,10 @@ export default {
   'topbar.docOptions': 'マップのオプション',  // tooltip of the "…" button next to the title (also for boards)
   'topbar.present': 'プレゼンテーション',  // tooltip: presentation mode
   'topbar.logout': 'ログアウト',  // tooltip: end the session
+  'topbar.maps': 'マップ',
+  'topbar.boards': 'ボード',
+  'topbar.listMaps': 'マップ一覧',
+  'topbar.listBoards': 'ボード一覧',
 
   // ---- Autosave status (text in the top bar) ----
   'status.saved': '保存済み',
@@ -55,6 +59,8 @@ export default {
   'list.sortAz': '名前（A–Z）',
   'list.sortZa': '名前（Z–A）',
   'list.empty': 'マップはまだありません。最初のマップを作成しましょう。',
+  'list.noMaps': 'マップはまだありません。',
+  'list.noBoards': 'ボードはまだありません。',
   'list.emptyFolder': 'このフォルダは空です。',
   'list.searchNoResults': '「{query}」に一致する項目はありません。',
   'list.createMapError': 'マップを作成できませんでした。',
