@@ -12,7 +12,7 @@ const openA = u => `<a href="${u}" target="_blank" rel="noopener noreferrer">`;
 function fmt(t, stash) {
   const keep = h => `\0${stash.push(h) - 1}\0`;
   t = t.replace(/`([^`]+)`/g, (_, c) => keep(`<code>${c}</code>`));
-  t = t.replace(/!?\[([^\][]*)\]\(([^)]*)\)/g, (_, label, url) => {
+  t = t.replace(/!?\[([^\][]*)\]\(([^)\n]{0,500})\)/g, (_, label, url) => {
     const u = safeUrl(url);
     return (u === null ? '' : keep(openA(u))) + fmt(label, stash) + (u === null ? '' : keep('</a>'));
   });

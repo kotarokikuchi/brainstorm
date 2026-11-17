@@ -355,6 +355,7 @@ export default {
   'skill.versionSaved': 'Version saved',
   'skill.compare': 'Compare',
   'skill.closeCompare': 'Close comparison',
+  'skill.restoreConfirm': 'Restore this version? The current text stays saved in the history.',
   'skill.diffTooLarge': 'Text too large to compare.',
   'skill.chars': '{n} characters',
   'skill.addTag': 'Add tag',

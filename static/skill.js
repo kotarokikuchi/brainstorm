@@ -47,7 +47,7 @@ function renderTags() {
 
 function addTag(raw) {
   if (!skill) return;
-  const tag = raw.trim().toLowerCase().slice(0, 40).trim();
+  const tag = raw.replace(/[\x00-\x1f\x7f]/g, '').trim().toLowerCase().slice(0, 40).trim();
   if (!tag || skill.tags.includes(tag) || skill.tags.length >= 30) return;
   skill.tags.push(tag);
   renderTags();
@@ -143,10 +143,16 @@ function bind() {
   $('#skill-version-list').addEventListener('click', async (e) => {
     const v = e.target.closest('[data-compare], [data-restore]');
     if (!v || !skill) return;
-    if (v.dataset.restore && !confirm(t('history.restoreConfirm'))) return;
+    if (v.dataset.restore && !confirm(t('skill.restoreConfirm'))) return;
+    const doc = skill;
     const old = await versionBody(v.dataset.compare ?? v.dataset.restore);
-    if (!old) return;
+    if (!old || skill !== doc) return;
     if (v.dataset.restore) {
+      // guarda o texto atual no histórico (sem respeitar o intervalo) antes de sobrescrever
+      await deps.flushSave();
+      if (skill !== doc) return;
+      const h = await deps.api('POST', `/${doc.id}/history`, {});
+      if (!h.ok || skill !== doc) return;
       skill.content = old.content ?? '';
       skill.tags = old.tags ?? [];
       skill.title = old.title ?? skill.title;
@@ -182,7 +188,7 @@ export async function openSkill(id) {
     return;
   }
   const doc = await r.json();
-  if (doc.type !== 'skill') { location.hash = `#/${doc.type}/${id}`; return; }
+  if (doc.type !== 'skill') { location.hash = `#/${doc.type ?? 'map'}/${id}`; return; }
   if (!bound) bind();
   skill = doc;
   skill.tags ??= [];

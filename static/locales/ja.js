@@ -355,6 +355,7 @@ export default {
   'skill.versionSaved': 'バージョンを保存しました',
   'skill.compare': '比較',
   'skill.closeCompare': '比較を閉じる',
+  'skill.restoreConfirm': 'このバージョンを復元しますか？現在のテキストは履歴に保存されます。',
   'skill.diffTooLarge': 'テキストが大きすぎて比較できません。',
   'skill.chars': '{n} 文字',
   'skill.addTag': 'タグを追加',

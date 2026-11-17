@@ -82,3 +82,9 @@ test('diffLines', () => {
   const big = Array(2001).fill('x').join('\n');
   assert.equal(diffLines(big, big), null);
 });
+
+test('unclosed link opener stays linear', () => {
+  const t0 = performance.now();
+  r('[a]('.repeat(25000));
+  assert.ok(performance.now() - t0 < 200);
+});

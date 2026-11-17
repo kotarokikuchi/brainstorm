@@ -355,6 +355,7 @@ export default {
   'skill.versionSaved': 'Versión guardada',
   'skill.compare': 'Comparar',
   'skill.closeCompare': 'Cerrar comparación',
+  'skill.restoreConfirm': '¿Restaurar esta versión? El texto actual queda guardado en el historial.',
   'skill.diffTooLarge': 'Texto demasiado grande para comparar.',
   'skill.chars': '{n} caracteres',
   'skill.addTag': 'Añadir etiqueta',
