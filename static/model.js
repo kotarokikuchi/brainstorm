@@ -546,6 +546,9 @@ export function wrapLines(text, maxW, widthOf) {
   return lines;
 }
 
+// tamanho de arquivo legível (anexos, backups)
+export const fmtSize = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+
 // ---- Link (URL) no nó ----
 // só http(s); sem esquema vira https://; qualquer outro esquema (javascript:, data:...) é recusado
 export function safeUrl(input) {

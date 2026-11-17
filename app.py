@@ -14,6 +14,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from backup import NAME_RE, Backup, BackupError, Busy, NotConfigured, clean_config, hint, text_ok
+from s3 import S3Error
 from store import ID_RE, Store, migrate_legacy, valid_doc, valid_folders
 
 ROOT = Path(__file__).resolve().parent
@@ -35,6 +37,7 @@ LOGIN_MAX_FAILS, LOGIN_WINDOW = 10, 600
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
        "font-src 'self' data:; connect-src 'self' blob: data:; object-src 'none'; base-uri 'none'; "
        "form-action 'self'; frame-ancestors 'none'")
+LLM_PROVIDERS = ("anthropic", "openai", "gemini", "openrouter", "custom")  # custom = compatível com OpenAI (baseUrl)
 INLINE = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 
 
@@ -192,6 +195,13 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _api(self, method):
         path = urlsplit(self.path).path
+        if path.startswith(("/api/settings/", "/api/backup/")):
+            self._settings(method, path)
+            return True
+        if self.server.backup.restoring and method in ("PUT", "POST", "DELETE") and path.startswith(("/api/maps", "/api/folders", "/api/trash")):
+            # restauração em andamento: o salvamento automático da página tenta de novo sozinho
+            self._send(503, {"error": "restore in progress"}, {"Retry-After": "5"})
+            return True
         if path == "/api/trash" or path.startswith("/api/trash/"):
             self._trash(method, path[len("/api/trash"):].strip("/"))
             return True
@@ -371,12 +381,12 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(data)
 
     def _static_stamp(self):
-        # carimbo = partida do servidor + arquivo mais recente de static/
+        # carimbo = partida do servidor + arquivo mais recente de static/ + restaurações feitas
         try:
             newest = max((p.stat().st_mtime for p in self.server.static_dir.rglob("*") if p.is_file()), default=0)
         except FileNotFoundError:
             return None  # editor trocando o arquivo neste instante: tenta no próximo ciclo
-        return f"{START}-{newest}"
+        return f"{START}-{newest}-{self.server.backup.restores}"  # restauração também recarrega as abas
 
     def _events(self):
         # Server-Sent Events: a página recarrega quando o carimbo muda (static/ editado ou servidor reiniciado)
@@ -414,6 +424,94 @@ class Handler(SimpleHTTPRequestHandler):
         ok, saved = self.server.store.put_folders(body)
         self._send(200 if ok else 409, saved)
 
+    def _json(self, limit=MAX_LOGIN_BODY):
+        # (respondeu?, corpo): corpo None se não for JSON válido
+        length = self._length(limit)
+        if length is None:
+            return True, None
+        try:
+            return False, json.loads(self.rfile.read(length))
+        except (ValueError, RecursionError):
+            return False, None
+
+    # ---- Configurações (segredos nunca voltam: só o final mascarado) ----
+    def _settings(self, method, path):
+        kind, _, rest = path[len("/api/settings/"):].partition("/") if path.startswith("/api/settings/") else ("", "", "")
+        if kind == "llm":
+            self._llm(method, rest)
+        elif kind == "backup" and not rest and method in ("GET", "PUT"):
+            self._backup_config(method)
+        elif path == "/api/backup/restore" and method == "POST":
+            responded, body = self._json()
+            if responded:
+                return
+            name = body.get("name") if isinstance(body, dict) else None
+            if not (isinstance(name, str) and NAME_RE.fullmatch(name)):
+                self._send(400, {"error": "invalid backup name"})
+                return
+            self._backup_call(lambda: self.server.backup.restore(name), view=True)
+        elif path in ("/api/backup/run", "/api/backup/list") and method == ("POST" if path.endswith("run") else "GET"):
+            self._backup_call(self.server.backup.run if path.endswith("run") else self.server.backup.list, path.endswith("run"))
+        else:
+            self._send(404, {"error": "not found"})
+
+    def _backup_config(self, method):
+        backup = self.server.backup
+        if method == "PUT":
+            responded, body = self._json()
+            if responded:
+                return
+            cfg = clean_config(body)
+            if cfg is None:
+                self._send(400, {"error": "invalid backup settings"})
+                return
+            with self.server.settings_lock:
+                backup.save_config(cfg)
+        self._send(200, backup.view())
+
+    def _backup_call(self, action, view=False):
+        # backup agora / lista do bucket: síncronos; erro do storage = 502 com a mensagem curta
+        try:
+            result = action()
+        except Busy:
+            self._send(409, {"error": "a backup or restore is already running"})
+        except NotConfigured:
+            self._send(400, {"error": "backup storage is not configured"})
+        except (BackupError, S3Error) as e:
+            self._send(502, {"error": str(e)})
+        except Exception as e:  # só o tipo: a mensagem poderia ter segredos
+            print(f"backup call failed: {type(e).__name__}", flush=True)
+            self._send(500, {"error": "unexpected error"})
+        else:
+            self._send(200, self.server.backup.view() if view else result)
+
+    def _llm(self, method, pid):
+        store = self.server.store
+        if method == "GET" and not pid:
+            providers = (store.setting("llm") or {}).get("providers", {})
+            self._send(200, [llm_view(p, providers.get(p, {})) for p in LLM_PROVIDERS])
+            return
+        if pid not in LLM_PROVIDERS or method not in ("PUT", "DELETE"):
+            self._send(404, {"error": "not found"})
+            return
+        body = None
+        if method == "PUT":
+            responded, body = self._json()
+            if responded:
+                return
+            if not valid_llm(body):
+                self._send(400, {"error": "invalid provider settings"})
+                return
+        with self.server.settings_lock:  # ler-mudar-gravar sem outra gravação no meio
+            llm = store.setting("llm") or {"providers": {}}
+            if body is None:
+                llm["providers"].pop(pid, None)
+            else:
+                current = llm["providers"].setdefault(pid, {})
+                current.update({k: v.strip() for k, v in body.items() if k in ("key", "model", "baseUrl")})
+            store.set_setting("llm", llm)
+        self._send(*((204, None) if body is None else (200, llm_view(pid, llm["providers"][pid]))))
+
     def _send(self, status, payload, headers=None):
         data = b"" if payload is None else json.dumps(payload, ensure_ascii=False).encode()
         self.send_response(status)
@@ -425,6 +523,20 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(data)
+
+
+def valid_llm(body):
+    # key ausente = mantém; vazia não vale (para remover há o DELETE)
+    return (isinstance(body, dict)
+            and ("key" not in body or (text_ok(body["key"], 500) and body["key"].strip() != ""))
+            and ("model" not in body or text_ok(body["model"], 200))
+            and ("baseUrl" not in body or (text_ok(body["baseUrl"], 500)
+                                           and (body["baseUrl"] == "" or re.match(r"https?://[^\s/]", body["baseUrl"])))))
+
+
+def llm_view(pid, p):
+    return {"id": pid, "configured": bool(p.get("key")), "keyHint": hint(p.get("key", "")),
+            "model": p.get("model", ""), "baseUrl": p.get("baseUrl", "")}
 
 
 def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: Path | None = None,
@@ -440,6 +552,8 @@ def make_server(data_dir: Path, port: int, host: str = "127.0.0.1", files_dir: P
     if auth:
         store.reset_sessions_if_auth_changed(*auth)  # trocou usuário/senha: todo mundo entra de novo
     server.login_delay, server.login_fails, server.login_lock = 1.0, [], threading.Lock()
+    server.settings_lock = threading.Lock()
+    server.backup = Backup(store)  # a agenda só liga no main() (testes não fazem backup sozinhos)
     server.data_dir = data_dir
     server.static_dir = ROOT / "static"
     server.history_interval = HISTORY_INTERVAL
@@ -496,6 +610,7 @@ def main():
         print("Aviso: sem BRAINSTORM_USER/BRAINSTORM_PASSWORD, o app abre sem login.", flush=True)
     server = make_server(Path(os.environ.get("BRAINSTORM_DATA") or ROOT / "data"), port, host,
                          Path(files) if files else None, (user, password) if user else None)
+    server.backup.start()
     # recarrega sozinho ao editar o servidor (HTML/CSS/JS já vêm frescos a cada F5)
     watch([Path(__file__).resolve()], restart)
     print(f"Abra http://127.0.0.1:{port}")

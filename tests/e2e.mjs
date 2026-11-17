@@ -1648,6 +1648,36 @@ assert.ok(await ev(`document.querySelectorAll('#maps li.skill').length`) >= 1, '
 assert.ok((await ev(`[...document.querySelectorAll('#maps li.skill a')].map(a => a.getAttribute('href'))`)).includes('#/skill/' + skId), 'o item achado é o skill criado');
 await ev(`(() => { const s = document.querySelector('#search'); s.value = ''; s.dispatchEvent(new Event('input')); })()`);
 
+// configurações: o menu abre as duas telas; salvar a chave mostra só a máscara; região do Wasabi preenche o endpoint;
+// o segredo do storage não volta (endpoint local fechado: nada sai para a internet)
+await ev(`location.hash = '#/'`); await sleep(500);
+await ev(`document.querySelector('#settings-menu-btn').click(); document.querySelector('#settings-llm-btn').click()`); await sleep(1000);
+assert.deepEqual(await ev(`[location.hash, document.body.dataset.view, document.querySelector('#settings-llm').hidden, document.querySelector('#settings-backup').hidden, document.querySelector('#settings-menu').hidden, document.querySelectorAll('#llm-list li').length]`),
+  ['#/settings/llm', 'settings', false, true, true, 5], 'Configurar LLM abre a tela com os provedores');
+const llmRow = `document.querySelector('#llm-list li[data-id="openai"]')`;
+await ev(`(() => { const r = ${llmRow}; r.querySelector('input[type=password]').value = 'sk-e2e-segredo-WXYZ'; r.querySelector('button.primary').click(); })()`); await sleep(800);
+assert.deepEqual(await ev(`(() => { const r = ${llmRow}, k = r.querySelector('input[type=password]'); return [k.value, k.placeholder.includes('…WXYZ'), r.querySelector('.settings-msg').textContent, r.querySelector('.settings-badge').textContent]; })()`),
+  ['', true, 'Salvo.', 'Chave salva'], 'salvar a chave mostra só a máscara');
+assert.equal(await ev(`document.documentElement.outerHTML.includes('segredo')`), false, 'a chave não fica na página');
+const llmApi = await (await fetch(BASE + '/api/settings/llm')).text();
+assert.ok(!llmApi.includes('segredo') && llmApi.includes('…WXYZ'), 'a API só devolve a máscara');
+await ev(`document.querySelector('#settings-menu-btn').click(); document.querySelector('#settings-backup-btn').click()`); await sleep(1000);
+assert.deepEqual(await ev(`[location.hash, document.querySelector('#settings-llm').hidden, document.querySelector('#settings-backup').hidden, document.querySelector('#backup-run').disabled]`),
+  ['#/settings/backup', true, false, true], 'Configurar backup abre a tela; sem storage não dá para fazer backup');
+await ev(`(() => { const r = document.querySelector('#backup-region'); r.value = 'eu-central-2'; r.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+assert.equal(await ev(`document.querySelector('#backup-endpoint').value`), 'https://s3.eu-central-2.wasabisys.com', 'região preenche o endpoint');
+const fillBackup = (endpoint) => ev(`(() => { const v = { '#backup-endpoint': '${endpoint}', '#backup-bucket': 'e2e-bucket', '#backup-access': 'AKE2E', '#backup-secret': 'segredo-storage-QRST' };
+  for (const [s, x] of Object.entries(v)) document.querySelector(s).value = x;
+  document.querySelector('#backup-form').requestSubmit(); })()`);
+await fillBackup('http://127.0.0.1:9'); await sleep(800);
+assert.match(await ev(`document.querySelector('#backup-msg').textContent`), /https:\/\//, 'endpoint sem https é recusado');
+await fillBackup('https://127.0.0.1:9'); await sleep(1500);
+assert.deepEqual(await ev(`[document.querySelector('#backup-msg').textContent, document.querySelector('#backup-secret').value, document.querySelector('#backup-secret').placeholder.includes('…QRST'), document.querySelector('#backup-run').disabled]`),
+  ['Configuração salva.', '', true, false], 'salvar mostra só o final do segredo');
+const backupApi = await (await fetch(BASE + '/api/settings/backup')).text();
+assert.ok(!backupApi.includes('segredo-storage') && backupApi.includes('…QRST'), 'a API do backup só devolve a máscara');
+assert.match(await ev(`document.querySelector('#backup-list-msg').textContent`), /^Erro: network error/, 'storage fora do ar aparece na lista');
+
 // Sair: encerra a sessão e volta para a página de login
 await ev(`location.hash = '#/'`); await sleep(800);
 assert.equal(await ev(`!document.querySelector('#logout-btn').hidden`), true, 'botão Sair aparece com login ativo');

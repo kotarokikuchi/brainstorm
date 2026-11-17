@@ -1,10 +1,11 @@
 import {
   PALETTE, uid, newMap, branchToText, textToBranches, findNode, addChild, addSibling, removeNode, commitText,
-  History, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, toMarkdown, slides, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines, isHex, hexColor, sanitizeBranch, FILE_ID,
+  History, fmtSize, layout, edgePath, navigate, moveNode, dropTarget, addLink, removeLink, linkPath, linkHandle, pasteBranch, safeUrl, sideToward, indentNode, outdentNode, branchColor, toMarkdown, slides, cloudPath, branchBounds, MARKERS, markerShape, safeColor, wrapLines, isHex, hexColor, sanitizeBranch, FILE_ID,
 } from './model.js';
 import { folderOf, childFolders, folderPath, removeFolder, placeDoc, subtree, moveFolder, folderOptions, sortItems, searchItems } from './folders.js';
 import { initBoard, openBoard, closeBoard, currentBoard, newBoard, boardSvg, boardPlace, renameBoard } from './board.js';
 import { initSkill, openSkill, closeSkill, currentSkill, newSkill, renameSkill, skillPlace } from './skill.js';
+import { openSettings } from './settings.js';
 import { LANGS, lang, setLang, t, applyI18n, fmtDateTime } from './i18n.js';
 
 const $ = (s) => document.querySelector(s);
@@ -170,6 +171,8 @@ async function route() {
   }
   closeBoard();
   closeSkill();
+  const settings = location.hash.match(/^#\/settings\/(llm|backup)$/)?.[1];
+  if (settings) { map = null; $('.brand').href = '#/'; openSettings(settings); return; }
   if (m) { await loadTree(); $('.brand').href = folderHref(folderOf(tree, m[2])); }  // voltar cai na pasta do documento
   searchInput.value = '';  // navegar (abrir pasta, voltar) limpa a busca
   if (m?.[1] === 'board') { map = null; openBoard(m[2]); } else if (m?.[1] === 'skill') { map = null; openSkill(m[2]); } else if (m) openMap(m[2]);
@@ -1436,7 +1439,7 @@ document.addEventListener('pointerdown', (e) => {
 }, true);
 
 // menus do topo: um aberto por vez; clicar de novo no botão fecha
-const topPops = () => [$('#export-menu'), $('#history-panel'), $('#map-menu'), $('#maps-menu'), $('#boards-menu'), $('#skills-menu')];
+const topPops = () => [$('#export-menu'), $('#history-panel'), $('#map-menu'), $('#maps-menu'), $('#boards-menu'), $('#skills-menu'), $('#settings-menu')];
 function toggleTop(pop) {
   const show = pop.hidden;
   for (const p of topPops()) p.hidden = true;
@@ -1450,7 +1453,10 @@ $('#list-maps').onclick = () => { location.hash = '#/maps'; };
 $('#list-boards').onclick = () => { location.hash = '#/boards'; };
 $('#skills-menu-btn').onclick = () => toggleTop($('#skills-menu'));
 $('#list-skills').onclick = () => { location.hash = '#/skills'; };
-for (const m of [$('#maps-menu'), $('#boards-menu'), $('#skills-menu')]) m.addEventListener('click', (e) => { if (e.target.closest('button')) m.hidden = true; });
+$('#settings-menu-btn').onclick = () => toggleTop($('#settings-menu'));
+$('#settings-llm-btn').onclick = () => { location.hash = '#/settings/llm'; };
+$('#settings-backup-btn').onclick = () => { location.hash = '#/settings/backup'; };
+for (const m of [$('#maps-menu'), $('#boards-menu'), $('#skills-menu'), $('#settings-menu')]) m.addEventListener('click', (e) => { if (e.target.closest('button')) m.hidden = true; });
 
 // ---------- Curvar ligações ----------
 let bending = null;  // {link, a, b, pushed} enquanto arrasta o ponto de controle
@@ -1721,7 +1727,6 @@ function drawAttachBadge(b, n) {
   });
 }
 
-const fmtSize = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
 function fillAttachList(n) {
   const items = (n.attachments ?? []).map((a, i) => {

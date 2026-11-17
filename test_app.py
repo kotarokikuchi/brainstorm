@@ -407,6 +407,80 @@ class ApiTest(unittest.TestCase):
         self.assertIsNone(store.label_version("nope", "x"))
         self.assertEqual(store.history("abc")[0]["label"], "x")
 
+    def test_schema_version_and_settings(self):
+        store = self.server.store
+        with store._db() as db:
+            self.assertEqual(db.execute("SELECT value FROM meta WHERE key = 'schema'").fetchone()[0], "1")
+            db.execute("UPDATE meta SET value = '7' WHERE key = 'schema'")
+        Store(store.db_path, store.files_dir)  # abrir de novo não baixa a versão
+        with store._db() as db:
+            self.assertEqual(db.execute("SELECT value FROM meta WHERE key = 'schema'").fetchone()[0], "7")
+        self.assertIsNone(store.setting("x"))
+        store.set_setting("x", {"a": "ç"})
+        self.assertEqual(store.setting("x"), {"a": "ç"})
+        store.set_setting("x", None)
+        self.assertIsNone(store.setting("x"))
+
+    # ---- Configurações: chaves de LLM ----
+    def test_llm_key_never_comes_back(self):
+        status, items = self.req("GET", "/api/settings/llm")
+        self.assertEqual(status, 200)
+        self.assertEqual([p["id"] for p in items], ["anthropic", "openai", "gemini", "openrouter", "custom"])
+        self.assertFalse(any(p["configured"] for p in items))
+        key = "sk-ant-segredo-a9F2"
+        status, saved = self.req("PUT", "/api/settings/llm/anthropic", {"key": key, "model": "claude-x"})
+        self.assertEqual(status, 200)
+        self.assertEqual(saved, {"id": "anthropic", "configured": True, "keyHint": "…a9F2", "model": "claude-x", "baseUrl": ""})
+        _, _, raw = self.raw_get("/api/settings/llm")
+        self.assertNotIn(b"segredo", raw)
+        self.assertNotIn(b"segredo", self.raw_get("/")[2])
+        # sem "key": mantém a chave atual e só troca o modelo
+        self.assertEqual(self.req("PUT", "/api/settings/llm/anthropic", {"model": "outro"})[1]["keyHint"], "…a9F2")
+        self.assertEqual(self.server.store.setting("llm")["providers"]["anthropic"]["key"], key)
+        self.assertEqual(self.req("DELETE", "/api/settings/llm/anthropic")[0], 204)
+        self.assertFalse(self.req("GET", "/api/settings/llm")[1][0]["configured"])
+
+    def test_llm_validation(self):
+        for body in ({"key": ""}, {"key": "x" * 501}, {"key": 5}, {"key": "a\nb"}, {"model": "m" * 201},
+                     {"baseUrl": "ftp://x"}, {"baseUrl": "javascript:alert(1)"}, {"baseUrl": "http://" + "x" * 500}, []):
+            self.assertEqual(self.req("PUT", "/api/settings/llm/custom", body)[0], 400, body)
+        self.assertEqual(self.req("PUT", "/api/settings/llm/nope", {"key": "k"})[0], 404)
+        self.assertEqual(self.req("DELETE", "/api/settings/llm/nope")[0], 404)
+        self.assertEqual(self.req("PUT", "/api/settings/llm/custom", {"key": "k" * 20, "baseUrl": "http://localhost:11434/v1"})[1]["baseUrl"],
+                         "http://localhost:11434/v1")
+        self.assertEqual(self.req("PUT", "/api/settings/llm/openai", {"key": "short"})[1]["keyHint"], "…", "chave curta não mostra o final")
+
+    # ---- Configurações: backup ----
+    BACKUP = {"endpoint": "https://s3.eu-central-2.wasabisys.com", "region": "eu-central-2", "bucket": "meu-bucket",
+              "prefix": "brainstorm/", "accessKey": "AKIDEXEMPLO", "secretKey": "segredo-do-storage-x9Z1",
+              "interval": 24, "keep": 14, "enabled": True}
+
+    def test_backup_settings_never_return_the_secret(self):
+        status, view = self.req("GET", "/api/settings/backup")
+        self.assertEqual((status, view["configured"], view["prefix"], view["interval"], view["keep"]), (200, False, "brainstorm/", 24, 14))
+        status, view = self.req("PUT", "/api/settings/backup", self.BACKUP)
+        self.assertEqual(status, 200)
+        self.assertNotIn("secretKey", view)
+        self.assertEqual((view["secretHint"], view["configured"], view["accessKey"]), ("…x9Z1", True, "AKIDEXEMPLO"))
+        self.assertNotIn(b"segredo-do-storage", self.raw_get("/api/settings/backup")[2])
+        keep = {k: v for k, v in self.BACKUP.items() if k != "secretKey"}
+        self.assertEqual(self.req("PUT", "/api/settings/backup", {**keep, "keep": 3})[1]["secretHint"], "…x9Z1", "sem secretKey: mantém")
+        self.assertEqual(self.server.backup.config()["secretKey"], "segredo-do-storage-x9Z1")
+        self.assertEqual(self.req("PUT", "/api/settings/backup", {**self.BACKUP, "endpoint": "http://s3.wasabisys.com"})[0], 400, "só https")
+        self.assertEqual(self.req("PUT", "/api/settings/backup", raw=b"nope")[0], 400)
+
+    def test_backup_without_storage_is_400(self):
+        self.assertEqual(self.req("POST", "/api/backup/run")[0], 400)
+        self.assertEqual(self.req("GET", "/api/backup/list")[0], 400)
+        self.assertEqual(self.req("GET", "/api/backup/run")[0], 404)
+
+    def test_restore_name_must_be_one_of_our_backups(self):
+        self.server.store.set_setting("backup", self.BACKUP)
+        for name in ("../brainstorm-2026-01-01-000000.tar.gz", "brainstorm-2026-01-01-000000.tar.gz/../x", "x/brainstorm-2026-01-01-000000.tar.gz",
+                     "brainstorm-2026-01-01-0000.tar.gz", "brainstorm-2026-01-01-000000.tar.gz\n", 5, None):
+            self.assertEqual(self.req("POST", "/api/backup/restore", {"name": name})[0], 400, name)
+        self.assertEqual(self.req("POST", "/api/backup/restore", raw=b"[]")[0], 400)
+
     def test_static_files_are_revalidated(self):
         # sem isso o navegador reaproveita JS antigo (cache heurístico) depois de uma atualização
         status, headers, _ = self.raw_get("/app.js")
@@ -676,6 +750,19 @@ class AuthTest(unittest.TestCase):
         self.assertEqual(self.call("GET", "/login.js")[0], 200)
         c = self.cookie()
         self.assertEqual(self.call("GET", "/fonts/../app.js", cookie=c)[0], 200, "com sessão, continua servindo")
+
+    def test_settings_need_login_and_same_origin(self):
+        for method, path in (("GET", "/api/settings/llm"), ("PUT", "/api/settings/llm/openai"), ("DELETE", "/api/settings/llm/openai"),
+                             ("GET", "/api/settings/backup"), ("PUT", "/api/settings/backup"), ("POST", "/api/backup/run"),
+                             ("GET", "/api/backup/list"), ("POST", "/api/backup/restore")):
+            self.assertEqual(self.call(method, path, {"key": "k" * 20} if method != "GET" else None)[0], 401, path)
+        c = self.cookie()
+        evil = {"Origin": "http://evil.example"}
+        for method, path in (("PUT", "/api/settings/llm/openai"), ("DELETE", "/api/settings/llm/openai"), ("PUT", "/api/settings/backup"),
+                             ("POST", "/api/backup/run"), ("POST", "/api/backup/restore")):
+            self.assertEqual(self.call(method, path, {"key": "k" * 20}, cookie=c, headers=evil)[0], 403, path)
+        self.assertIsNone(self.server.store.setting("llm"))
+        self.assertEqual(self.call("PUT", "/api/settings/llm/openai", {"key": "k" * 20}, cookie=c)[0], 200)
 
     def test_head_goes_through_the_same_checks(self):
         self.assertEqual(self.call("HEAD", "/app.js")[0], 302)
