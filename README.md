@@ -6,6 +6,107 @@ versions) for personal use, running on your own machine.
 No dependencies: the server is Python's standard library plus SQLite, and the frontend is plain
 JavaScript. The interface is available in English, Portuguese (Brazil), Spanish and Japanese.
 
+## Features
+
+### Documents and folders
+
+![Document list with folders, tags, search and sorting](screenshots/list.png)
+
+The home page lists everything you have: mind maps, boards and skills, organised in folders and
+subfolders.
+
+- **Folders:** create, rename in place, move (menu or drag and drop) and delete; documents inside a
+  deleted folder move up one level.
+- **Search and sort:** search by name (and by tag, for skills) across all folders, the trash
+  included; sort by last modified or by name.
+- **Maps ▾ / Boards ▾ / Skills ▾:** each top menu lists every document of that kind, with the folder
+  it lives in, and creates a new one in the folder you have open.
+- **Duplicate, trash and restore:** deleting asks first and sends the document to the trash, from
+  which it can be restored or removed for good.
+
+### Mind maps
+
+![Mind map with coloured branches, a comment and a link](screenshots/map.png)
+
+A keyboard-driven mind map editor: `Tab` adds a subtopic, `Enter` a sibling, and the arrow keys
+move around.
+
+- **Topics:** text, colour, shape, border and line styles, images, attachments, comments and a web
+  link per topic; branches collapse and expand, and drag and drop reorganises them.
+- **Links between topics:** connect any two topics with a curved connection that has its own colour
+  and end markers.
+- **Focus and presentation:** focus on one branch as if it were the whole map, or present the map
+  topic by topic.
+- **History:** undo and redo, plus a version history that keeps a copy every 2 minutes of editing
+  (the last 50) and restores any of them.
+- **Copy and paste:** `Ctrl+C` / `Ctrl+X` / `Ctrl+V` work between maps and with other programs
+  (a branch becomes an indented list, and an indented list becomes a branch).
+- **Export:** PNG, SVG, PDF and Markdown.
+
+Three layouts, switchable at any time — mind map, org chart and list:
+
+![The same editor in the org chart layout](screenshots/map-org.png)
+
+The outline mode shows the same map as an editable indented list:
+
+![Outline mode](screenshots/outline.png)
+
+### Boards
+
+![Board with hand-drawn shapes, arrows, sticky notes and the style panel](screenshots/board.png)
+
+A whiteboard with a hand-drawn look, for diagrams and sketches.
+
+- **Tools:** rectangle, diamond, ellipse, arrow, line, pencil, text, sticky note, image, eraser,
+  paint bucket, lasso selection and a laser pointer — each with a one-key shortcut.
+- **Style panel:** stroke and background colours, fill, stroke width and style, sloppiness, opacity,
+  text alignment and font, layer order, and a web link per element.
+- **Canvas:** infinite, with pan and zoom; the board reopens exactly where you left it.
+- **Copy and paste:** between boards, and images or text from other programs.
+- **Export:** PNG and SVG.
+
+### Skills
+
+![Skill editor: Markdown on the left, live preview on the right](screenshots/skill.png)
+
+Skills are Markdown files meant to be used as instructions for LLMs — a personal library of
+prompts and procedures.
+
+- **Editor:** Edit, Split and Preview modes; the preview updates as you type and never runs
+  scripts or loads remote images.
+- **Tags:** add tags as chips; they show in the list and are found by the search.
+- **Versions:** on top of the automatic history, "Save version" stores a named version that is
+  never pruned.
+
+Any version can be compared with the current text, line by line, and restored (the current text
+goes to the history first):
+
+![Comparing a saved version with the current text](screenshots/skill-versions.png)
+
+### Automatic backup
+
+![Backup settings with the list of backups in the bucket](screenshots/settings-backup.png)
+
+Backs up the database and the attachments to Wasabi or any other S3-compatible storage, on a
+schedule and only when something changed. Restoring takes two clicks, backs up the current state
+first and is all or nothing. Details in [Automatic backup to Wasabi](#automatic-backup-to-wasabi-or-another-s3).
+
+### LLM API keys
+
+![LLM settings: one card per provider, with the default one highlighted](screenshots/settings-llm.png)
+
+Stores API keys for Anthropic, OpenAI, Google Gemini, DeepSeek, OpenRouter or an OpenAI-compatible
+server, with a default model per provider and one default provider. The keys stay on the server
+— the screen only shows their last characters — and are reserved for future features: nothing in
+the app calls an LLM yet.
+
+### Login and languages
+
+![Login page](screenshots/login.png)
+
+An optional login protects the app (see [Login](#login)). The interface is available in English,
+Portuguese (Brazil), Spanish and Japanese, switchable from the top bar and from the login page.
+
 ## Run with Docker
 
 ```bash
@@ -126,6 +227,9 @@ node tests/e2e.mjs                  # end to end in headless Chrome (~4 min)
 ```
 
 The Node tests need Node 22 or newer; the `e2e` also needs `google-chrome` on the PATH.
+
+The screenshots in this README are generated with fictional data by
+`node tools/screenshots.mjs` (same requirements as the `e2e`).
 
 ## License
 
